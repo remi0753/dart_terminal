@@ -351,6 +351,7 @@ Future<void> _testProcessArgumentVisibility() async {
     ..synchronize(harness.state)
     ..toggleVisibility(window.id, paneId);
   final _ProcessScheduler scheduler = _ProcessScheduler();
+  var canPresent = true;
   final List<Completer<PtyForegroundJobSnapshot?>> requests =
       <Completer<PtyForegroundJobSnapshot?>>[];
   final TerminalContextDockProcessController controller =
@@ -370,6 +371,7 @@ Future<void> _testProcessArgumentVisibility() async {
           requests.add(request);
           return request.future;
         },
+        canPresentWindow: (_) => canPresent,
         scheduleTask: scheduler.schedule,
         monotonicMicros: () => scheduler.nowMicros,
       );
@@ -453,6 +455,51 @@ Future<void> _testProcessArgumentVisibility() async {
     controller.snapshotForWindow(window.id)!.process!.arguments.isEmpty,
     'an in-flight completion respects the current hidden preference',
   );
+  canPresent = false;
+  controller.synchronize();
+  scheduler.elapse(const Duration(seconds: 5));
+  _expect(
+    controller.snapshotForWindow(window.id) == null &&
+        controller.activeOperationCount == 0 &&
+        controller.activeTimerCount == 0 &&
+        requests.length == 4,
+    'focus loss clears hidden process content and stops all observations',
+  );
+  await toggle();
+  canPresent = true;
+  controller.synchronize();
+  scheduler.elapse(TerminalContextDockProcessLimits.foregroundActivationDelay);
+  content = controller.snapshotForWindow(window.id)!;
+  _expect(
+    content.argumentsVisible &&
+        content.process!.status == TerminalContextDockProcessStatus.loading &&
+        content.process!.arguments.isEmpty &&
+        content.process!.identity != initial.identity &&
+        content.process!.identity!.sessionId == initial.identity!.sessionId &&
+        content.process!.identity!.foregroundProcessGroup ==
+            initial.identity!.foregroundProcessGroup &&
+        requests.length == 5,
+    'same job reacquires a new authority epoch without resurrecting retained argv',
+  );
+  await complete(4);
+  final TerminalContextDockProcessSnapshot reacquired = controller
+      .snapshotForWindow(window.id)!
+      .process!;
+  _expect(
+    reacquired.arguments.isNotEmpty &&
+        !reacquired.argumentsHidden &&
+        reacquired.identity != initial.identity &&
+        reacquired.primaryProcess!.processId ==
+            initial.primaryProcess!.processId &&
+        reacquired.primaryProcess!.startTimeSeconds ==
+            initial.primaryProcess!.startTimeSeconds &&
+        reacquired.primaryProcess!.startTimeMicroseconds ==
+            initial.primaryProcess!.startTimeMicroseconds &&
+        reacquired.primaryProcess!.startAbsoluteTime ==
+            initial.primaryProcess!.startAbsoluteTime,
+    'fresh argv can belong to the same OS process despite a new observation epoch',
+  );
+  await toggle();
   dock.toggleVisibility(window.id, paneId);
   controller.synchronize();
   _expect(

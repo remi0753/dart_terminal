@@ -2504,6 +2504,17 @@ Future<void> _runNativeContent(_Options options, _Invocation invocation) async {
         1,
     'native Context Dock omitted keyboard boundary resize and fixed-scale PTY/Metal acceptance',
   );
+  final List<RegExpMatch> processFixtureMatches = RegExp(
+    r'^TERMINAL_PROCESS_FIXTURE_TEST controlled_release=true scheduling_delay_ms=3500 '
+    r'held_ms=([0-9]+) os_identity=true observation_epoch_changed=(true|false) '
+    r'fresh_argv=true elapsed=true focus=true zero_key_writes=true$',
+    multiLine: true,
+  ).allMatches(observation.stdoutText).toList(growable: false);
+  _expect(
+    processFixtureMatches.length == 1 &&
+        int.parse(processFixtureMatches.single.group(1)!) >= 4600,
+    'native process fixture omitted controlled lifetime and slow-scheduling acceptance',
+  );
   _expect(
     RegExp(
               r'^TERMINAL_SESSION_SHUTDOWN pane=[1-4] session=[1-4]:1 '
@@ -2535,6 +2546,8 @@ Future<void> _runNativeContent(_Options options, _Invocation invocation) async {
     'launch_architecture=${options.launchArchitecture ?? 'native'} '
     'services_manifest=true navigator=true process_inspector=true '
     'exact_pty=true sessions=4 '
+    'fixture_held_ms=${processFixtureMatches.single.group(1)} '
+    'observation_epoch_changed=${processFixtureMatches.single.group(2)} '
     'elapsed_ms=${observation.elapsed.inMilliseconds}',
   );
 }

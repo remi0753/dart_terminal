@@ -9298,9 +9298,28 @@ final class TerminalApplication {
           .nativeEditorSnapshotForWindow(initialWindow.id)
           ?.text;
 
+      final Stopwatch processFixtureClock = Stopwatch()..start();
+      TerminalContextDockProcessSnapshot? processFixtureExpected;
+      String processFixtureObservation() {
+        final TerminalContextDockContentSnapshot? content = contextDockProcess
+            .snapshotForWindow(initialWindow.id);
+        return 'elapsed_ms=${processFixtureClock.elapsedMilliseconds} '
+            'active=${application.isActive} visible=${contextDockWindow.isVisible} '
+            'focused=${contextDockWindow.isFocused} '
+            'disposition=${initialPane.processSnapshot().disposition.name} '
+            'mode=${content?.mode.name ?? 'absent'} '
+            'status=${content?.process?.status.name ?? 'absent'} '
+            'arguments_visible=${contextDockProcess.argumentsVisible} '
+            'arguments_present=${content?.process?.arguments.isNotEmpty == true} '
+            'document_marker=${processDocumentText()?.contains('PIPE_READY__') == true} '
+            'same_epoch=${content?.process?.identity == processFixtureExpected?.identity} '
+            'operations=${contextDockProcess.activeOperationCount}';
+      }
+
       initialPane.insertText(
         "/bin/sh -c 'printf \"%s%s\\n\" __DT_PROCESS_ PIPE_READY__; "
-        "sleep 4; printf \"%s%s\\n\" __DT_PROCESS_ PIPE_DONE__' | "
+        r'IFS= read -r dt_fixture_release; test "$dt_fixture_release" = '
+        "__DT_PROCESS_PIPE_RELEASE__ && printf \"%s%s\\n\" __DT_PROCESS_ PIPE_DONE__' | "
         '/bin/cat',
       );
       await initialPane.submit();
@@ -9344,6 +9363,27 @@ final class TerminalApplication {
       );
       final TerminalContextDockContentSnapshot pipelineBefore =
           contextDockProcess.snapshotForWindow(initialWindow.id)!;
+      processFixtureExpected = pipelineBefore.process!;
+      bool isSamePipelineJob(TerminalContextDockProcessSnapshot? current) {
+        final TerminalContextDockProcessSnapshot expected =
+            pipelineBefore.process!;
+        final TerminalContextDockProcessMember? primary =
+            current?.primaryProcess;
+        final TerminalContextDockProcessMember expectedPrimary =
+            expected.primaryProcess!;
+        // A palette focus transition can revoke/reacquire observation authority
+        // and its epoch. Compare OS identity, not that transient authority token.
+        return current?.status == TerminalContextDockProcessStatus.ready &&
+            current?.identity?.sessionId == expected.identity!.sessionId &&
+            current?.identity?.foregroundProcessGroup ==
+                expected.identity!.foregroundProcessGroup &&
+            primary?.processId == expectedPrimary.processId &&
+            primary?.startTimeSeconds == expectedPrimary.startTimeSeconds &&
+            primary?.startTimeMicroseconds ==
+                expectedPrimary.startTimeMicroseconds &&
+            primary?.startAbsoluteTime == expectedPrimary.startAbsoluteTime;
+      }
+
       final int pipelineElapsedBefore =
           pipelineBefore.process!.elapsedMicroseconds;
       final int processSelectionBefore = contextDockPresenter
@@ -9378,6 +9418,9 @@ final class TerminalApplication {
             (writeEnqueuedCounts[initialPaneId] ?? 0) == argumentsWriteBaseline,
         'hiding process argv retained argument text or wrote to the PTY',
       );
+      // Exceed the former four-second job lifetime together with the elapsed
+      // check below. The fixture must survive scheduled/UI latency, not race it.
+      await Future<void>.delayed(const Duration(milliseconds: 3500));
       await palette.open();
       palette
         ..refresh()
@@ -9399,10 +9442,27 @@ final class TerminalApplication {
             argumentsItem.isChecked,
         'command palette did not restore process argument visibility',
       );
-      await waitFor(
-        () => processDocumentText()?.contains('PIPE_READY__') == true,
-        'revealing process argv did not obtain a fresh native document',
-      );
+      try {
+        await waitFor(
+          () =>
+              processDocumentText()?.contains('PIPE_READY__') == true &&
+              isSamePipelineJob(
+                contextDockProcess.snapshotForWindow(initialWindow.id)?.process,
+              ) &&
+              contextDockProcess
+                      .snapshotForWindow(initialWindow.id)
+                      ?.process
+                      ?.arguments
+                      .isNotEmpty ==
+                  true,
+          'revealing process argv did not obtain a fresh native document',
+        );
+      } on Object {
+        stdout.writeln(
+          'TERMINAL_PROCESS_FIXTURE_FAILURE stage=argv ${processFixtureObservation()}',
+        );
+        rethrow;
+      }
       _expectLifecycle(
         !contextDockState
                 .snapshotForWindow(initialWindow.id)!
@@ -9413,17 +9473,23 @@ final class TerminalApplication {
       );
       await Future<void>.delayed(const Duration(milliseconds: 1100));
       reconcile();
-      final TerminalContextDockContentSnapshot pipelineAfter =
-          contextDockProcess.snapshotForWindow(initialWindow.id)!;
+      final TerminalContextDockContentSnapshot? pipelineAfter =
+          contextDockProcess.snapshotForWindow(initialWindow.id);
       _expectLifecycle(
-        pipelineAfter.process!.elapsedMicroseconds > pipelineElapsedBefore &&
+        isSamePipelineJob(pipelineAfter?.process) &&
+            pipelineAfter!.process!.elapsedMicroseconds >
+                pipelineElapsedBefore &&
             contextDockPresenter
                     .nativeEditorSnapshotForWindow(initialWindow.id)!
                     .selection
                     .start ==
                 processSelectionBefore &&
-            contextDockWindow.keyEventRouting == KeyEventRouting.appKitOnly,
-        'Process Inspector elapsed did not advance without disturbing terminal input',
+            application.isActive &&
+            contextDockWindow.isVisible &&
+            contextDockWindow.isFocused &&
+            contextDockWindow.keyEventRouting == KeyEventRouting.appKitOnly &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) == argumentsWriteBaseline,
+        'Process Inspector elapsed did not advance for the same live job without disturbing terminal input: ${processFixtureObservation()}',
       );
       final int processShortcutWriteBaseline =
           writeEnqueuedCounts[initialPaneId] ?? 0;
@@ -9439,6 +9505,15 @@ final class TerminalApplication {
                 processShortcutWriteBaseline,
         'Process Inspector Navigator shortcut changed focus or wrote to the PTY',
       );
+      final int processFixtureHoldMilliseconds =
+          processFixtureClock.elapsedMilliseconds;
+      _expectLifecycle(
+        processFixtureHoldMilliseconds >= 4600 &&
+            initialPane.processSnapshot().disposition ==
+                TerminalPaneProcessDisposition.foregroundProcess,
+        'controlled pipeline did not survive scheduling variation: ${processFixtureObservation()}',
+      );
+      initialPane.sendInput(utf8.encode('__DT_PROCESS_PIPE_RELEASE__\n'));
       await _waitForAsciiMarker(initialSession, '__DT_PROCESS_PIPE_DONE__');
       await waitFor(() {
         contextDockProcess.synchronize();
@@ -9458,6 +9533,13 @@ final class TerminalApplication {
                     ?.contains('Path actions') ==
                 true;
       }, 'finished pipeline did not restore a fresh Directory Navigator');
+      stdout.writeln(
+        'TERMINAL_PROCESS_FIXTURE_TEST controlled_release=true scheduling_delay_ms=3500 '
+        'held_ms=$processFixtureHoldMilliseconds os_identity=true '
+        'observation_epoch_changed=${pipelineAfter!.process!.identity != pipelineBefore.process!.identity} '
+        'fresh_argv=true elapsed=true '
+        'focus=true zero_key_writes=true',
+      );
 
       initialPane.insertText('/bin/cat');
       await initialPane.submit();
