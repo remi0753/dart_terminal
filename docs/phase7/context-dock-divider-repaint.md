@@ -1,6 +1,6 @@
 # Context Dock divider repaint during width changes
 
-- Status: in progress
+- Status: complete
 - Reported: 2026-09-17
 - Environment: macOS / Apple M1 / arm64
 - Starting terminal state: clean main at 2f45a6d
@@ -113,3 +113,35 @@ repaint criterion.
   ABI/event version or terminal-specific native mechanism was added.
 - First ordered subtask complete. Product repeated-width acceptance and fresh
   JIT/AOT bundles remain pending, so the parent item is not yet complete.
+- Product subtask: extend the existing terminal raw-key and Navigator window-event
+  width acceptance from six one-direction moves to 30 bidirectional moves with
+  multiple reversals. Require a fresh accepted Metal frame/exact logical viewport
+  per move, retain existing fixed font/scale/grid/PTY winsize/focus/query/selection/
+  owner/no-key-write checks and fail-closed smoke marker. Native retained pixels
+  establish old-line removal; product acceptance establishes real Dock routing and
+  fixed-scale frame convergence without adding a test-only generic native API.
+
+## Product verification and handoff
+
+- Rebuilt make RUNTIME_ARCH=arm64 runtime-native-content-integration passed both
+  Developer JIT (11539 ms) and Release AOT (10402 ms). Both fail-closed smoke
+  markers require repeated_moves=30; per-move fresh frames and exact viewports
+  passed with existing font/scale/grid/PTY/query/focus/native-owner assertions.
+- dart analyze passed; focused terminal_context_dock_test.dart,
+  terminal_product_hierarchy_actions_test.dart and terminal_application_state_test.dart
+  all exited 0. Dart format of changed files and whole gate format passed.
+- CI=true DART_SUPPRESS_ANALYTICS=true make test passed: PTY/renderer/automation
+  native/Dart suites, generated evidence checks, static analysis, format of
+  348 files and the complete Dart test runner. No retry was needed for this
+  product gate or either rebuilt runtime.
+- Refreshed configuration/keybind/AppKit/compatibility/gap/daily-use evidence;
+  only source-bound AppKit/gap/daily-use hashes changed. Reviewed scoped diff;
+  git diff --check passed. No generated binary or unrelated source change.
+- Native dirty coverage and retained native divider ink prove the repaint
+  defect and fix. Product suites prove real routing/viewport/PTY convergence.
+  A separate manual visual session on the user's original running window was
+  not performed; the supplied screenshot was not modified and the user's app
+  was not restarted. Rebuild/relaunch is needed to use the changed native host.
+- No residual blocker for this divider task. The independently requested
+  process observation fixture stability task remains next and is not marked
+  complete by these successful runs.

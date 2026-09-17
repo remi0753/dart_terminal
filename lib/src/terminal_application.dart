@@ -8743,7 +8743,29 @@ final class TerminalApplication {
           .snapshot();
       final int dockResizeWriteBaseline =
           writeEnqueuedCounts[initialPaneId] ?? 0;
-      for (var index = 0; index < 3; index++) {
+      const List<int> dockWidthOffsets = <int>[
+        1,
+        2,
+        3,
+        2,
+        1,
+        0,
+        1,
+        2,
+        3,
+        2,
+        1,
+        0,
+        1,
+        2,
+        3,
+      ];
+      var previousDockWidthOffset = 0;
+      for (final int offset in dockWidthOffsets) {
+        final bool moveLeft = offset > previousDockWidthOffset;
+        final int frameBeforeMove = initialOwner.surface
+            .snapshot()
+            .acceptedFrameCount;
         final TerminalTextInputRouteResult routed = initialOwner.textRouter
             .route(
               TerminalTextInputKeyEvent(
@@ -8751,28 +8773,46 @@ final class TerminalApplication {
                 generation: initialOwner.textRouter.lastGeneration + 1,
                 monotonicNanoseconds: eventTimestamp++,
                 kind: TerminalTextInputKeyKind.down,
-                keyCode: 123,
+                keyCode: moveLeft ? 123 : 124,
                 modifiers: const ModifierKeys(
                   ModifierKeys.controlBit | ModifierKeys.shiftBit,
                 ),
-                isRepeat: index > 0,
-                characters: '\uF702',
-                charactersIgnoringModifiers: '\uF702',
+                isRepeat: previousDockWidthOffset != 0,
+                characters: moveLeft ? '\uF702' : '\uF703',
+                charactersIgnoringModifiers: moveLeft ? '\uF702' : '\uF703',
               ),
             );
         _expectLifecycle(
           routed.disposition == TerminalTextInputRouteDisposition.rawKey,
-          'terminal Control+Shift+Left did not cross the ordinary raw-key router',
+          'terminal boundary movement did not cross the ordinary raw-key router',
         );
         await waitFor(
-          () =>
-              (contextDockState.snapshotForWindow(initialWindow.id)!.width -
-                      (dockWidthBeforeKeys +
-                          dockFontBefore.cellWidth * (index + 1)))
-                  .abs() <
-              0.000001,
-          'terminal Control+Shift+Left did not move the Dock boundary by one fixed logical cell',
+          () {
+            final TerminalLiveMetalSurfaceSnapshot surface = initialOwner
+                .surface
+                .snapshot();
+            final TerminalGridSize grid = initialOwner.surface.gridSizeFor(
+              logicalWidth: initialOwner.layout!.width,
+              logicalHeight: initialOwner.layout!.height,
+            );
+            return (contextDockState
+                                .snapshotForWindow(initialWindow.id)!
+                                .width -
+                            (dockWidthBeforeKeys +
+                                dockFontBefore.cellWidth * offset))
+                        .abs() <
+                    0.000001 &&
+                surface.acceptedFrameCount > frameBeforeMove &&
+                surface.columns == grid.columns &&
+                surface.rows == grid.rows &&
+                surface.scale16_16 == dockSurfaceBefore.scale16_16 &&
+                surface.viewportWidth ==
+                    (initialOwner.layout!.width * surface.scale16_16 / 65536)
+                        .ceil();
+          },
+          'repeated terminal boundary movement did not converge to a fresh fixed-scale grid/viewport',
         );
+        previousDockWidthOffset = offset;
       }
       await waitFor(
         () {
@@ -8922,25 +8962,37 @@ final class TerminalApplication {
           contextDockState.snapshotForWindow(initialWindow.id)!;
       final TextEditorSnapshot navigatorEditorBeforeResize =
           contextDockPresenter.nativeEditorSnapshotForWindow(initialWindow.id)!;
-      for (var index = 0; index < 3; index++) {
+      for (final int offset in dockWidthOffsets.map((int value) => 3 - value)) {
+        final bool moveLeft = offset > previousDockWidthOffset;
+        final int frameBeforeMove = initialOwner.surface
+            .snapshot()
+            .acceptedFrameCount;
         _injectKeyEventForTesting(
           application,
           contextDockWindow,
-          keyCode: 124,
+          keyCode: moveLeft ? 123 : 124,
           modifiers: ModifierKeys.controlBit | ModifierKeys.shiftBit,
-          characters: '\uF703',
-          charactersIgnoringModifiers: '\uF703',
+          characters: moveLeft ? '\uF702' : '\uF703',
+          charactersIgnoringModifiers: moveLeft ? '\uF702' : '\uF703',
           monotonicNanoseconds: eventTimestamp++,
         );
         await waitFor(
           () =>
               (contextDockState.snapshotForWindow(initialWindow.id)!.width -
-                      (dockWidthBeforeKeys +
-                          dockFontBefore.cellWidth * (2 - index)))
-                  .abs() <
-              0.000001,
-          'Navigator Control+Shift+Right did not move the same Dock boundary',
+                          (dockWidthBeforeKeys +
+                              dockFontBefore.cellWidth * offset))
+                      .abs() <
+                  0.000001 &&
+              initialOwner.surface.snapshot().acceptedFrameCount >
+                  frameBeforeMove &&
+              initialOwner.surface.snapshot().viewportWidth ==
+                  (initialOwner.layout!.width *
+                          dockSurfaceBefore.scale16_16 /
+                          65536)
+                      .ceil(),
+          'repeated Navigator boundary movement did not produce a fresh same-owner viewport',
         );
+        previousDockWidthOffset = offset;
       }
       await waitFor(
         () =>
@@ -8975,7 +9027,7 @@ final class TerminalApplication {
       stdout.writeln(
         'TERMINAL_CONTEXT_DOCK_RESIZE_TEST drag_disabled=true terminal_keys=true '
         'navigator_keys=true fixed_font=true fixed_scale=true viewport=true columns=true '
-        'pty_size=true focus=true zero_key_writes=true',
+        'pty_size=true focus=true zero_key_writes=true repeated_moves=30',
       );
       final TerminalContextDockDirectorySnapshot treeBeforeToggle =
           contextDockDirectory.snapshotForWindow(initialWindow.id)!;

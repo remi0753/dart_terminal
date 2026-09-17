@@ -2498,7 +2498,7 @@ Future<void> _runNativeContent(_Options options, _Invocation invocation) async {
     RegExp(
           r'^TERMINAL_CONTEXT_DOCK_RESIZE_TEST drag_disabled=true terminal_keys=true '
           r'navigator_keys=true fixed_font=true fixed_scale=true viewport=true columns=true '
-          r'pty_size=true focus=true zero_key_writes=true$',
+          r'pty_size=true focus=true zero_key_writes=true repeated_moves=30$',
           multiLine: true,
         ).allMatches(observation.stdoutText).length ==
         1,

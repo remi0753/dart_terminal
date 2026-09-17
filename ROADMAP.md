@@ -1441,12 +1441,12 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （実施時に
   [`docs/phase7/context-dock-boundary-shift-shortcut.md`](docs/phase7/context-dock-boundary-shift-shortcut.md)
   を参照する）
-- [ ] Context Dock幅変更時の二重境界を調査し古い境界の描画残りを解消する
+- [x] Context Dock幅変更時の二重境界を調査し古い境界の描画残りを解消する
   （実施時に
   [`docs/phase7/context-dock-divider-repaint.md`](docs/phase7/context-dock-divider-repaint.md)
   を参照して順に実施する）
   - [x] 汎用splitの描画残り再現、再描画修正、native回帰検証
-  - [ ] Context Dockの連続幅操作と描画・固定倍率の両runtime／全体検証
+  - [x] Context Dockの連続幅操作と描画・固定倍率の両runtime／全体検証
 - [ ] 既存native-contentのprocess argv再表示／elapsed fixtureの非決定性を調査し検証を安定化する
   （実施時に
   [`docs/phase7/native-content-process-fixture-stability.md`](docs/phase7/native-content-process-fixture-stability.md)
