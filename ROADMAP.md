@@ -1437,6 +1437,12 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 
 ### 完了機能の回帰修正
 
+- [ ] Context Dock境界のmouse dragを廃止し、Control+Left／Rightと固定倍率の幅追従へ移行する
+  （実施時に
+  [`docs/phase7/context-dock-keyboard-boundary-resize.md`](docs/phase7/context-dock-keyboard-boundary-resize.md)
+  を参照して順に実施する）
+  - [x] 汎用native split dividerのdrag無効化APIと回帰検証
+  - [ ] Context Dockのkeyboard幅操作、drag廃止、固定font／scaleの再layout、両runtimeと全体検証
 - [x] windowの閉じるボタンで配下の全tab／paneを閉じ、pane Closeと分離する
   （実施時に
   [`docs/phase7/logical-window-close-all-tabs.md`](docs/phase7/logical-window-close-all-tabs.md)
