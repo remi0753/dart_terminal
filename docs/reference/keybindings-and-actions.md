@@ -43,8 +43,8 @@ make RUNTIME_ARCH=arm64 developer-jit-run \
 | `shift+command+right` | `pane.move-divider-right` |
 | `shift+command+up` | `pane.move-divider-up` |
 | `shift+command+down` | `pane.move-divider-down` |
-| `control+left` | `view.move-context-dock-boundary-left` |
-| `control+right` | `view.move-context-dock-boundary-right` |
+| `shift+control+left` | `view.move-context-dock-boundary-left` |
+| `shift+control+right` | `view.move-context-dock-boundary-right` |
 
 ## Physical keys
 

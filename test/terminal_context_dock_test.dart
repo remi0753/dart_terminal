@@ -2080,9 +2080,18 @@ Future<void> _testBoundaryActionKeyRouting() async {
         keyBindings: () => engine,
       );
   const ModifierKeys control = ModifierKeys(ModifierKeys.controlBit);
+  const ModifierKeys controlShift = ModifierKeys(
+    ModifierKeys.controlBit | ModifierKeys.shiftBit,
+  );
+  await keys.handle(window.id, _key(keyCode: 123, modifiers: control));
+  await keys.handle(window.id, _key(keyCode: 124, modifiers: control));
+  _expect(
+    moveCount == 1 && dock.snapshotForWindow(window.id)!.width == 388,
+    'plain Control arrows no longer move the Navigator boundary',
+  );
   final TerminalContextDockKeyResult right = await keys.handle(
     window.id,
-    _key(keyCode: 124, modifiers: control),
+    _key(keyCode: 124, modifiers: controlShift),
   );
   final TerminalContextDockWindowSnapshot snapshot = dock.snapshotForWindow(
     window.id,
@@ -2096,11 +2105,11 @@ Future<void> _testBoundaryActionKeyRouting() async {
         snapshot.pane.selectedResultIndex == 9 &&
         focusCount == focusBaseline &&
         moveCount == 2,
-    'Navigator Control-arrow shares action without query, row, focus, or PTY input mutation',
+    'Navigator Control+Shift arrow shares action without query, row, focus, or PTY input mutation',
   );
   await keys.handle(
     window.id,
-    _key(keyCode: 123, modifiers: control, kind: AppKitKeyEventKind.up),
+    _key(keyCode: 123, modifiers: controlShift, kind: AppKitKeyEventKind.up),
   );
   _expect(moveCount == 2, 'boundary key release must not move again');
   engine = TerminalKeyBindingEngine.standard(
@@ -2109,6 +2118,7 @@ Future<void> _testBoundaryActionKeyRouting() async {
         chord: TerminalKeyBindingChord(
           physicalKey: TerminalPhysicalKey.arrowLeft,
           control: true,
+          shift: true,
         ),
       ),
       TerminalKeyBindingDefinition.applicationAction(
@@ -2120,7 +2130,7 @@ Future<void> _testBoundaryActionKeyRouting() async {
       ),
     ],
   );
-  await keys.handle(window.id, _key(keyCode: 123, modifiers: control));
+  await keys.handle(window.id, _key(keyCode: 123, modifiers: controlShift));
   _expect(moveCount == 2, 'Navigator respects unbound boundary default');
   await keys.handle(window.id, _key(keyCode: 40, modifiers: control));
   _expect(

@@ -169,6 +169,40 @@ void _testStandardAndExactResolution() {
     ),
     'Command+arrow focuses panes and Shift+Command+arrow moves dividers',
   );
+  const List<(TerminalPhysicalKey, TerminalActionId)> dockBindings =
+      <(TerminalPhysicalKey, TerminalActionId)>[
+        (
+          TerminalPhysicalKey.arrowLeft,
+          TerminalActionId.moveContextDockBoundaryLeft,
+        ),
+        (
+          TerminalPhysicalKey.arrowRight,
+          TerminalActionId.moveContextDockBoundaryRight,
+        ),
+      ];
+  _expect(
+    dockBindings.every(
+      ((TerminalPhysicalKey, TerminalActionId) binding) =>
+          engine
+                  .resolve(_event(binding.$1, control: true, shift: true))
+                  .applicationAction ==
+              binding.$2 &&
+          engine.resolve(_event(binding.$1, control: true)).kind ==
+              TerminalKeyBindingResolutionKind.noMatch &&
+          engine
+                  .resolve(
+                    _event(
+                      binding.$1,
+                      control: true,
+                      shift: true,
+                      option: true,
+                    ),
+                  )
+                  .kind ==
+              TerminalKeyBindingResolutionKind.noMatch,
+    ),
+    'Dock boundary defaults require exact Control+Shift arrows, not plain Control arrows',
+  );
   _expect(
     engine
             .resolve(

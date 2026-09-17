@@ -71,11 +71,11 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
 - terminalに重ならない、初期表示true／既定380 pt幅の右側Context DockとDirectory Navigator。
   `context-dock-visible = false`で新しいwindowの初期表示を無効にでき、
   `context-dock-width = 420`のように220–640 ptの幅を指定できる。幅の設定変更は既存windowにも反映する。
-  terminalとの境界はmouse dragでは動かず、Control-Leftで左へ（Dockを広げる）、Control-Rightで右へ（狭める）
+  terminalとの境界はmouse dragでは動かず、Control-Shift-Leftで左へ（Dockを広げる）、Control-Shift-Rightで右へ（狭める）
   1文字幅ずつ動かす。terminal／Navigatorの入力先と検索・選択状態を保ち、上下限で停止する。
   横幅の変化はfont／表示倍率を変えずにviewport・列数・reflow・PTY winsizeへ反映する。
   二つの`view.move-context-dock-boundary-left|right` actionはmenu／paletteと設定可能なkeybindからも使える。
-  macOSの「操作スペースを左／右に移動」が同じControl-arrowを使う場合は、システム側を解除するかkeybindを変更する。
+  macOSの「操作スペースを左／右に移動」が使うControl-arrowとの競合を避け、既定ではShiftも必要とする。
   Directory Navigator／Process Inspectorの背景・文字色・通常フォント・サイズ・余白はfocused terminalと揃え、
   appearance／palette／live opacityへ追従する。境界線は透過しない通常文字色で、背景とのcontrastが不足する場合だけ
   明確に見えるblack／whiteへ切り替える。

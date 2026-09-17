@@ -5,6 +5,10 @@
 - Environment: macOS / Apple M1 / arm64 Developer JIT and Release AOT
 - Starting terminal state: clean main at 919ccf4
 
+Current defaults were superseded by Control+Shift+Left/Right; see
+[shifted-shortcut correction](context-dock-boundary-shift-shortcut.md). The
+Control-arrow entries below describe this original implementation's history.
+
 ## Purpose and background
 
 Remove mouse dragging of the boundary between the terminal and Context Dock.

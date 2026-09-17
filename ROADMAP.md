@@ -1437,6 +1437,14 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 
 ### 完了機能の回帰修正
 
+- [x] Context Dock境界移動の既定キーをControl+Shift+Left／Rightへ変更する
+  （実施時に
+  [`docs/phase7/context-dock-boundary-shift-shortcut.md`](docs/phase7/context-dock-boundary-shift-shortcut.md)
+  を参照する）
+- [ ] 既存native-contentのprocess argv再表示／elapsed fixtureの非決定性を調査し検証を安定化する
+  （実施時に
+  [`docs/phase7/native-content-process-fixture-stability.md`](docs/phase7/native-content-process-fixture-stability.md)
+  を参照する）
 - [x] Context Dock境界のmouse dragを廃止し、Control+Left／Rightと固定倍率の幅追従へ移行する
   （実施時に
   [`docs/phase7/context-dock-keyboard-boundary-resize.md`](docs/phase7/context-dock-keyboard-boundary-resize.md)

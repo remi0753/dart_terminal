@@ -8752,7 +8752,9 @@ final class TerminalApplication {
                 monotonicNanoseconds: eventTimestamp++,
                 kind: TerminalTextInputKeyKind.down,
                 keyCode: 123,
-                modifiers: const ModifierKeys(ModifierKeys.controlBit),
+                modifiers: const ModifierKeys(
+                  ModifierKeys.controlBit | ModifierKeys.shiftBit,
+                ),
                 isRepeat: index > 0,
                 characters: '\uF702',
                 charactersIgnoringModifiers: '\uF702',
@@ -8760,7 +8762,7 @@ final class TerminalApplication {
             );
         _expectLifecycle(
           routed.disposition == TerminalTextInputRouteDisposition.rawKey,
-          'terminal Control+Left did not cross the ordinary raw-key router',
+          'terminal Control+Shift+Left did not cross the ordinary raw-key router',
         );
         await waitFor(
           () =>
@@ -8769,7 +8771,7 @@ final class TerminalApplication {
                           dockFontBefore.cellWidth * (index + 1)))
                   .abs() <
               0.000001,
-          'terminal Control+Left did not move the Dock boundary by one fixed logical cell',
+          'terminal Control+Shift+Left did not move the Dock boundary by one fixed logical cell',
         );
       }
       await waitFor(
@@ -8925,7 +8927,7 @@ final class TerminalApplication {
           application,
           contextDockWindow,
           keyCode: 124,
-          modifiers: ModifierKeys.controlBit,
+          modifiers: ModifierKeys.controlBit | ModifierKeys.shiftBit,
           characters: '\uF703',
           charactersIgnoringModifiers: '\uF703',
           monotonicNanoseconds: eventTimestamp++,
@@ -8937,7 +8939,7 @@ final class TerminalApplication {
                           dockFontBefore.cellWidth * (2 - index)))
                   .abs() <
               0.000001,
-          'Navigator Control+Right did not move the same Dock boundary',
+          'Navigator Control+Shift+Right did not move the same Dock boundary',
         );
       }
       await waitFor(

@@ -417,7 +417,7 @@ Future<void> _testModeAwareAppKitKeyRoute() async {
         keyCode: keyCode,
         characters: '',
         unmodifiedCharacters: '',
-        modifierBits: ModifierKeys.controlBit,
+        modifierBits: ModifierKeys.controlBit | ModifierKeys.shiftBit,
       ),
       pane,
     );
@@ -426,7 +426,7 @@ Future<void> _testModeAwareAppKitKeyRoute() async {
         keyCode: keyCode,
         characters: '',
         unmodifiedCharacters: '',
-        modifierBits: ModifierKeys.controlBit,
+        modifierBits: ModifierKeys.controlBit | ModifierKeys.shiftBit,
         kind: AppKitKeyEventKind.up,
       ),
       pane,
@@ -437,7 +437,7 @@ Future<void> _testModeAwareAppKitKeyRoute() async {
         boundaryActions.first == TerminalActionId.moveContextDockBoundaryLeft &&
         boundaryActions.last == TerminalActionId.moveContextDockBoundaryRight &&
         session.inputWrites.length == boundaryWriteBaseline,
-    'boundary Control-arrows dispatch once and never write Kitty down/release bytes',
+    'boundary Control+Shift arrows dispatch once and never write Kitty down/release bytes',
   );
   session.keyboardModes = const TerminalKeyboardModes(
     applicationCursorKeys: true,

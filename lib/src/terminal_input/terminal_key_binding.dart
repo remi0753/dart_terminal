@@ -459,6 +459,7 @@ final class TerminalKeyBindingEngine {
           chord: TerminalKeyBindingChord(
             physicalKey: TerminalPhysicalKey.arrowLeft,
             control: true,
+            shift: true,
           ),
           applicationAction: TerminalActionId.moveContextDockBoundaryLeft,
         ),
@@ -466,6 +467,7 @@ final class TerminalKeyBindingEngine {
           chord: TerminalKeyBindingChord(
             physicalKey: TerminalPhysicalKey.arrowRight,
             control: true,
+            shift: true,
           ),
           applicationAction: TerminalActionId.moveContextDockBoundaryRight,
         ),
