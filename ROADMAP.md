@@ -1653,6 +1653,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （実施時に
   [`docs/phase5/multiline-paste-confirmation-rendering.md`](docs/phase5/multiline-paste-confirmation-rendering.md)
   を参照する）
+- [x] 未指定のfresh terminal working directoryをprocess cwdではなくユーザーhomeにする
+  （実施時に
+  [`docs/phase5/default-home-working-directory.md`](docs/phase5/default-home-working-directory.md)
+  を参照する）
 - [ ] 既存PTYのcompeting-reaper回帰fixtureの非決定性を調査し、実external-reap検証を安定化する
   （実施時に
   [`docs/phase2/pty-competing-reaper-fixture-determinism.md`](docs/phase2/pty-competing-reaper-fixture-determinism.md)

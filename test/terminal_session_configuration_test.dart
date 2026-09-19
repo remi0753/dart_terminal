@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dart_pty_macos/testing.dart';
 import 'package:dart_terminal/dart_terminal.dart';
 import 'package:dart_terminal/src/terminal_session.dart';
@@ -80,7 +82,33 @@ Future<void> runTerminalSessionConfigurationTests() async {
     await first.dispose();
     await second.dispose();
   }
+  await _testDefaultHomeWorkingDirectory();
   await _testWorkingDirectoryExposure();
+}
+
+Future<void> _testDefaultHomeWorkingDirectory() async {
+  final FakePtyBackend backend = FakePtyBackend();
+  final String userHome = Directory.systemTemp.absolute.path;
+  final TerminalSession session = TerminalSession(
+    id: const TerminalSessionId(paneId: PaneId(30), generation: 1),
+    ptyBackend: backend,
+    environment: <String, String>{'HOME': userHome},
+    onChanged: () {},
+    onTerminated: () {},
+  );
+  try {
+    _expect(
+      session.initialWorkingDirectory == userHome,
+      'session uses HOME when no launch cwd is specified',
+    );
+    await session.start();
+    _expect(
+      backend.commands.single.workingDirectory == userHome,
+      'session passes the HOME default to the PTY command',
+    );
+  } finally {
+    await session.dispose();
+  }
 }
 
 Future<void> _testWorkingDirectoryExposure() async {

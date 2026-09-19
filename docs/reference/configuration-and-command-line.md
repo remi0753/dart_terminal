@@ -22,7 +22,7 @@ Resolution is bounded to 32 files, include depth 8, 1048576 bytes per file, 1638
 
 | Option | Command line | Value syntax | Default | Policy | Repeatability | Description |
 | --- | --- | --- | --- | --- | --- | --- |
-| <code>working-directory</code> | <code>--working-directory=VALUE</code> | <code>&lt;path&gt;</code> | <code>&lt;unset&gt;</code> | new-session | once | Initial command working directory. |
+| <code>working-directory</code> | <code>--working-directory=VALUE</code> | <code>&lt;path&gt;</code> | <code>&lt;unset&gt;</code> | new-session | once | Initial command working directory; unset uses the user home. |
 | <code>shell</code> | <code>--shell=VALUE</code> | <code>&lt;absolute-path&gt;</code> | <code>/bin/zsh</code> | new-session | once | Absolute executable path for new terminal sessions. |
 | <code>shell-integration</code> | <code>--shell-integration=VALUE</code> | <code>detect|none|zsh|bash|fish|nushell</code> | <code>detect</code> | new-session | once | Shell integration policy: detect, none, zsh, bash, fish, or nushell. |
 | <code>theme</code> | <code>--theme=VALUE</code> | <code>system|light|dark</code> | <code>system</code> | new-session | once | Base theme: system, light, or dark. |

@@ -99,6 +99,7 @@ import 'terminal_update_controller.dart';
 import 'terminal_update_feed.dart';
 import 'terminal_view_badge_projection.dart';
 import 'terminal_window_event_coordinator.dart';
+import 'terminal_working_directory.dart';
 
 final String terminalUsage = TerminalConfigurationReference().generateUsage();
 
@@ -215,9 +216,14 @@ final class TerminalOptions {
       environment: selectedEnvironment,
       currentDirectory: selectedCurrentDirectory,
     );
-    final String? initialWorkingDirectory = configuration.snapshot.value(
-      TerminalProductConfigSchema.workingDirectory,
-    );
+    final String initialWorkingDirectory =
+        configuration.snapshot.value(
+          TerminalProductConfigSchema.workingDirectory,
+        ) ??
+        resolveTerminalDefaultWorkingDirectory(
+          environment: selectedEnvironment,
+          processWorkingDirectory: selectedCurrentDirectory,
+        );
     Duration? autoCloseAfter;
     var runtimeResourceStress = false;
     var runtimeShutdownFaultInjection = false;

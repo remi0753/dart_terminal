@@ -26,6 +26,7 @@ import 'terminal_kitty_graphics_controller.dart';
 import 'terminal_osc52_projection.dart';
 import 'terminal_pane.dart';
 import 'terminal_shell_integration.dart';
+import 'terminal_working_directory.dart';
 
 enum TerminalSessionLifecycleStage {
   startRequested,
@@ -209,7 +210,14 @@ final class TerminalSession
          shellLaunchPlan?.environment ?? environment ?? Platform.environment,
        ),
        _workingDirectory = Directory(
-         initialWorkingDirectory ?? Directory.current.path,
+         initialWorkingDirectory ??
+             resolveTerminalDefaultWorkingDirectory(
+               environment:
+                   shellLaunchPlan?.environment ??
+                   environment ??
+                   Platform.environment,
+               processWorkingDirectory: Directory.current.path,
+             ),
        ).absolute.path {
     if (shellLaunchPlan != null &&
         (environment != null ||

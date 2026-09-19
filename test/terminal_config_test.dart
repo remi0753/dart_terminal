@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dart_terminal/dart_terminal.dart';
 import 'package:dart_terminal/src/runtime_lifecycle.dart';
@@ -578,6 +579,31 @@ working-directory = /from-file
           file.effectiveConfiguration,
         ),
     'TerminalOptions starts with recovered typed file configuration',
+  );
+  final String userHome = Directory.systemTemp.absolute.path;
+  final TerminalOptions homeDefault = TerminalOptions.parse(
+    const <String>['--no-config'],
+    environment: <String, String>{'HOME': userHome},
+    currentDirectory: '/',
+    runtimeWorkerCommand: const RuntimeLifecycleWorkerCommand(
+      executable: '/usr/bin/true',
+    ),
+  );
+  _expect(
+    homeDefault.initialWorkingDirectory == userHome,
+    'TerminalOptions uses HOME instead of a LaunchServices process cwd',
+  );
+  final TerminalOptions malformedHome = TerminalOptions.parse(
+    const <String>['--no-config'],
+    environment: const <String, String>{'HOME': 'relative-home'},
+    currentDirectory: '/fallback-cwd',
+    runtimeWorkerCommand: const RuntimeLifecycleWorkerCommand(
+      executable: '/usr/bin/true',
+    ),
+  );
+  _expect(
+    malformedHome.initialWorkingDirectory == '/fallback-cwd',
+    'TerminalOptions keeps an absolute process cwd as the malformed-HOME fallback',
   );
   final TerminalOptions overridden = TerminalOptions.parse(
     const <String>['--config=/config', '--working-directory=/from-cli'],

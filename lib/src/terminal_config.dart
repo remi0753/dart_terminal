@@ -736,7 +736,8 @@ abstract final class TerminalProductConfigSchema {
   static final TerminalConfigOption<String?> workingDirectory =
       TerminalConfigOption<String?>(
         name: 'working-directory',
-        description: 'Initial command working directory.',
+        description:
+            'Initial command working directory; unset uses the user home.',
         valueSyntax: '<path>',
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: null,

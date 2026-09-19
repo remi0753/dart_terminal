@@ -501,6 +501,9 @@ make RUNTIME_ARCH=arm64 developer-jit-run \
 設定はUTF-8の`key = value`形式です。空行と`#`以降のコメントを使用でき、空白や`#`を含む
 値はdouble quoteで囲めます。`include`の相対pathは、それを記述した設定ファイルを基準に
 解決します。include先を先に適用し、include元、command lineの順に上書きします。
+`working-directory`を指定しないfresh terminalは、Finder／Dock／command lineのどこから
+アプリを起動しても、アプリprocessのcwdではなくユーザーのhome directoryから開始します。
+復元sessionと既存paneから作るtab／splitは、それぞれ保存済みまたは継承したcwdを優先します。
 
 ```text
 include = shared.conf
