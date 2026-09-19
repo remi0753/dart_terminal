@@ -1613,7 +1613,8 @@ Future<void> _runClipboardProduct(
   final RegExp acceptance = RegExp(
     r'^TERMINAL_CLIPBOARD_TEST copy=true paste_menu=true '
     r'osc52_denied=true '
-    r'confirmation=true confirmation_visible=true zero_write=true '
+    r'confirmation=true confirmation_visible=true canonical_unchanged=true '
+    r'zero_write=true '
     r'bracketed=true exact=true '
     r'bytes=10485772 chunks=641 max_queue=([1-9][0-9]*) '
     r'planning_yields=2 '
@@ -1629,6 +1630,10 @@ Future<void> _runClipboardProduct(
     observation.stdoutText.contains(
           'TERMINAL_OSC52_POLICY_TEST query_empty=true write_denied=true '
           'clear_denied=true clipboard_callbacks=0 counters=true',
+        ) &&
+        observation.stdoutText.contains(
+          'TERMINAL_MULTILINE_PASTE_VISUAL_TEST '
+          'canonical_unchanged=true zle_prefix_exact=true',
         ) &&
         observation.stdoutText.contains(
           'TERMINAL_CLIPBOARD_COPY_TEST selection=true menu=true exact=true '

@@ -145,6 +145,23 @@ typedef TerminalSessionNativeObserver = void Function(
   TerminalSessionNativeObservation observation,
 );
 
+/// One bounded, content-free product notice presented outside the canonical
+/// terminal grid.
+///
+/// A notice must never be parsed as PTY output: the child shell did not emit
+/// it and therefore cannot account for any cursor movement it would cause.
+final class TerminalSessionPresentationNotice {
+  const TerminalSessionPresentationNotice({
+    required this.text,
+    required this.accessibilityLabel,
+    required this.accessibilityHelp,
+  });
+
+  final String text;
+  final String accessibilityLabel;
+  final String accessibilityHelp;
+}
+
 /// One persistent interactive shell generation owned by a terminal pane.
 final class TerminalSession
     implements TerminalPaneSession, TerminalWindowCloseConfirmationSession {
@@ -288,6 +305,7 @@ final class TerminalSession
   static const int defaultReadHighWaterBytes = defaultReadBatchBytes;
   static const int defaultReadLowWaterBytes = 0;
   static const int defaultReadBatchesPerEventLoopTurn = 2;
+  static const Duration presentationNoticeDuration = Duration(seconds: 10);
   final int readBatchBytes;
   final int writeCapacityBytes;
   final Duration gracefulShutdownTimeout;
@@ -315,6 +333,8 @@ final class TerminalSession
   Future<void>? _terminationFuture;
   Future<void>? _disposeFuture;
   Future<TerminalSessionShutdownResult>? _shutdownFuture;
+  TerminalSessionPresentationNotice? _presentationNotice;
+  Timer? _presentationNoticeTimer;
   PtyExit? _exit;
   Object? _failure;
   TerminalSessionShutdownResult? _shutdownResult;
@@ -373,6 +393,8 @@ final class TerminalSession
   TerminalSessionShutdownResult? get shutdownResult => _shutdownResult;
 
   bool get diagnosticsCaptureEnabled => parserInspector.captureEnabled;
+  TerminalSessionPresentationNotice? get presentationNotice =>
+      _presentationNotice;
 
   void beginDiagnosticsCapture({VtParserInspectionObserver? onEvent}) {
     if (_disposed) throw StateError('terminal session $id is disposed');
@@ -891,8 +913,7 @@ final class TerminalSession
       TerminalClipboardNoticeKind.pasteFailed => '[paste could not be sent]',
     };
     buffer.appendStatusLine(message);
-    _terminalParser.parse(utf8.encode('\r\n$message\r\n'));
-    _notifyChanged();
+    _showPresentationNotice(message);
   }
 
   @override
@@ -903,8 +924,7 @@ final class TerminalSession
       TerminalHyperlinkNoticeKind.unavailable => '[link could not be opened]',
     };
     buffer.appendStatusLine(message);
-    _terminalParser.parse(utf8.encode('\r\n$message\r\n'));
-    _notifyChanged();
+    _showPresentationNotice(message);
   }
 
   static String _pasteConfirmationMessage(TerminalPasteAnalysis? analysis) {
@@ -954,6 +974,9 @@ final class TerminalSession
     terminalScreenSet.setInBandSizeReportingMode(false);
     _desktopSignalProjection?.close();
     _osc52Projection?.close();
+    _presentationNoticeTimer?.cancel();
+    _presentationNoticeTimer = null;
+    _presentationNotice = null;
     _disposed = true;
     await kittyGraphicsController.dispose();
     _cancelPasteWrite();
@@ -1150,6 +1173,7 @@ final class TerminalSession
     if (!_live || _disposed || process == null) {
       return null;
     }
+    _clearPresentationNotice();
     late final PtyWriteResult result;
     try {
       result = process.write(Uint8List.fromList(bytes));
@@ -1180,6 +1204,7 @@ final class TerminalSession
     if (!_live || _disposed || process == null) {
       return null;
     }
+    _clearPresentationNotice();
     late final PtyWriteReceipt receipt;
     try {
       receipt = process.writeTracked(Uint8List.fromList(bytes));
@@ -1334,6 +1359,39 @@ final class TerminalSession
       return;
     }
     buffer.appendOutput(value);
+    _notifyChanged();
+  }
+
+  void _showPresentationNotice(String message) {
+    _presentationNoticeTimer?.cancel();
+    final String visible =
+        message.length >= 2 &&
+            message.codeUnitAt(0) == 0x5b &&
+            message.codeUnitAt(message.length - 1) == 0x5d
+        ? message.substring(1, message.length - 1)
+        : message;
+    final TerminalSessionPresentationNotice notice =
+        TerminalSessionPresentationNotice(
+          text: visible,
+          accessibilityLabel: 'Terminal notice: $visible',
+          accessibilityHelp:
+              'This is a Dart Terminal notice and is not shell output.',
+        );
+    _presentationNotice = notice;
+    _presentationNoticeTimer = Timer(presentationNoticeDuration, () {
+      if (_disposed || !identical(_presentationNotice, notice)) return;
+      _presentationNotice = null;
+      _presentationNoticeTimer = null;
+      _notifyChanged();
+    });
+    _notifyChanged();
+  }
+
+  void _clearPresentationNotice() {
+    if (_presentationNotice == null) return;
+    _presentationNoticeTimer?.cancel();
+    _presentationNoticeTimer = null;
+    _presentationNotice = null;
     _notifyChanged();
   }
 

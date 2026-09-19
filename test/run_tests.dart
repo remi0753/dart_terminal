@@ -139,6 +139,7 @@ import 'terminal_unicode_test.dart';
 import 'terminal_update_controller_test.dart';
 import 'terminal_update_feed_test.dart';
 import 'terminal_update_transaction_test.dart';
+import 'terminal_view_badge_projection_test.dart';
 import 'terminal_viewport_render_model_test.dart';
 import 'terminal_viewport_test.dart';
 import 'terminal_wide_grapheme_test.dart';
@@ -284,6 +285,7 @@ Future<void> main() async {
   await runTerminalReleaseSymbolsTests();
   runTerminalViewportTests();
   runTerminalViewportRenderModelTests();
+  runTerminalViewBadgeProjectionTests();
   runTerminalWideGraphemeTests();
   runVtParserTests();
   runVtParserInspectorTests();
@@ -301,6 +303,7 @@ Future<void> main() async {
   await runRuntimeImageWorkerTests().timeout(const Duration(seconds: 30));
   await runTerminalSessionReplyTests();
   await _testPersistentCommandSession();
+  await _testPresentationNoticePreservesShellCursor();
   await _testBoundedPasteTransport();
   await _testBoundedSessionShutdown();
   await _testTerminalProcessSnapshotClassification();
@@ -2062,6 +2065,60 @@ Future<void> _testPersistentCommandSession() async {
     boundedBackend.processes.single.closeGracePeriods.length == 1,
     'active persistent process is closed exactly once',
   );
+}
+
+Future<void> _testPresentationNoticePreservesShellCursor() async {
+  final FakePtyBackend backend = FakePtyBackend();
+  var changeCount = 0;
+  final TerminalSession session = TerminalSession(
+    id: const TerminalSessionId(paneId: PaneId(10), generation: 1),
+    ptyBackend: backend,
+    onChanged: () => changeCount++,
+    onTerminated: () {},
+  );
+  await session.start();
+  final TerminalScreen screen = session.terminalScreenSet.activeScreen;
+  final int generation = screen.generation;
+  final int cursorRow = screen.cursorRow;
+  final int cursorColumn = screen.cursorColumn;
+  final int writeCount = backend.processes.single.writes.length;
+  final TerminalPasteAnalysis analysis = TerminalPasteCodec.plan(
+    'make first\nmake second',
+    bracketed: true,
+  ).analysis;
+
+  session.showClipboardNotice(
+    TerminalClipboardNotice(
+      TerminalClipboardNoticeKind.pasteConfirmationRequired,
+      analysis: analysis,
+    ),
+  );
+  _expect(
+    screen.generation == generation &&
+        screen.cursorRow == cursorRow &&
+        screen.cursorColumn == cursorColumn &&
+        backend.processes.single.writes.length == writeCount &&
+        session.presentationNotice?.text.contains(
+              'paste requires confirmation',
+            ) ==
+            true &&
+        session.buffer.outputText.contains('paste requires confirmation'),
+    'paste confirmation changes presentation only, without PTY bytes or '
+    'canonical cursor movement',
+  );
+
+  final int changedForNotice = changeCount;
+  session.insertText('x');
+  _expect(
+    session.presentationNotice == null &&
+        screen.generation == generation &&
+        screen.cursorRow == cursorRow &&
+        screen.cursorColumn == cursorColumn &&
+        utf8.decode(backend.processes.single.writes.last) == 'x' &&
+        changeCount > changedForNotice,
+    'the next terminal input clears only the presentation notice',
+  );
+  await session.dispose();
 }
 
 Future<void> _testBoundedPasteTransport() async {

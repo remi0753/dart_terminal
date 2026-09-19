@@ -97,6 +97,7 @@ import 'terminal_tab_presentation.dart';
 import 'terminal_terminfo_environment.dart';
 import 'terminal_update_controller.dart';
 import 'terminal_update_feed.dart';
+import 'terminal_view_badge_projection.dart';
 import 'terminal_window_event_coordinator.dart';
 
 final String terminalUsage = TerminalConfigurationReference().generateUsage();
@@ -1356,6 +1357,12 @@ final class TerminalApplication {
           final TerminalLiveMetalSurface? surface = metalSurface;
           if (surface != null && !surface.isDisposed) {
             surface.notifyScreenChanged();
+          }
+          if (!createdContentView.isDisposed) {
+            createdContentView.badge = terminalViewBadge(
+              secureInputBadge: null,
+              notice: terminalSession?.presentationNotice,
+            );
           }
           if (!createdWindow.isClosed && !createdWindow.isDisposed) {
             final TerminalTabPresentationResolver? resolver =
@@ -3528,9 +3535,8 @@ final class TerminalApplication {
         isLive: pane.isLive,
         terminalEchoEnabled: process.terminalEchoEnabled,
         setIndicator: (TerminalSecureKeyboardEntryIndicator indicator) {
-          owner.view.badge = appKitSecureInputBadge(
-            indicator,
-            localization: localization,
+          owner.updateSecureInputBadge(
+            appKitSecureInputBadge(indicator, localization: localization),
           );
         },
       );
@@ -17950,6 +17956,7 @@ keybind = command+right=pane.focus-left
     const String exactMarker = '__DT_CLIPBOARD_EXACT__';
     const String mismatchMarker = '__DT_CLIPBOARD_MISMATCH__';
     await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 1);
+    await _exerciseMultilinePasteVisualRegression(session, pane);
     await _exerciseOsc52DefaultDeny(session, pane, clipboard);
     await _exerciseClipboardCopySelection(
       application,
@@ -18004,16 +18011,24 @@ keybind = command+right=pane.focus-left
     }
     await Future<void>.delayed(const Duration(milliseconds: 100));
     final bool confirmationVisible =
+        session.presentationNotice?.text.contains(
+              'paste requires confirmation',
+            ) ==
+            true &&
+        surface.view.badge?.text.contains('paste requires confirmation') ==
+            true;
+    final bool canonicalScreenUnchanged =
         _findAscii(
           session.terminalScreenSet.activeScreen,
           'paste requires confirmation',
-        ) !=
+        ) ==
         null;
     final bool zeroWrite =
         observation.confirmationCount == 1 &&
         observation.writesAtFirstConfirmation == writeBaseline &&
         observation.nativeWriteEnqueuedCount == writeBaseline &&
         confirmationVisible &&
+        canonicalScreenUnchanged &&
         !pane.pasteInProgress;
     _expectLifecycle(
       observation.failure == null && zeroWrite,
@@ -18022,7 +18037,9 @@ keybind = command+right=pane.focus-left
       'writes_at_confirmation=${observation.writesAtFirstConfirmation} '
       'baseline=$writeBaseline '
       'writes_now=${observation.nativeWriteEnqueuedCount} '
-      'visible=$confirmationVisible paste_active=${pane.pasteInProgress} '
+      'visible=$confirmationVisible '
+      'canonical_unchanged=$canonicalScreenUnchanged '
+      'paste_active=${pane.pasteInProgress} '
       'planning_yields=${observation.planningYieldCount}',
     );
 
@@ -18115,6 +18132,7 @@ keybind = command+right=pane.focus-left
       'TERMINAL_CLIPBOARD_TEST copy=true paste_menu=true '
       'osc52_denied=true '
       'confirmation=true confirmation_visible=$confirmationVisible '
+      'canonical_unchanged=$canonicalScreenUnchanged '
       'zero_write=$zeroWrite bracketed=true exact=$exact '
       'bytes=${completedTransfer.encodedBytes} '
       'chunks=${completedTransfer.completedChunks} '
@@ -18127,6 +18145,60 @@ keybind = command+right=pane.focus-left
       'clipboard test could not begin deterministic pane close',
     );
     window.close();
+  }
+
+  static Future<void> _exerciseMultilinePasteVisualRegression(
+    TerminalSession session,
+    TerminalPane pane,
+  ) async {
+    const String prompt = '__DT_DISPLAY_PROMPT__ ';
+    const String body = 'printf __DT_PASTE_VISUAL__ \\\ncontinued';
+    final TerminalPastePlan plan = TerminalPasteCodec.plan(
+      body,
+      bracketed: session.bracketedPasteMode,
+    );
+    _expectLifecycle(
+      plan.analysis.bracketed && plan.analysis.logicalNewlineCount == 1,
+      'multiline visual fixture did not use bracketed Paste',
+    );
+    final TerminalScreen screen = session.terminalScreenSet.activeScreen;
+    final int generation = screen.generation;
+    final int cursorRow = screen.cursorRow;
+    final int cursorColumn = screen.cursorColumn;
+    session.showClipboardNotice(
+      TerminalClipboardNotice(
+        TerminalClipboardNoticeKind.pasteConfirmationRequired,
+        analysis: plan.analysis,
+      ),
+    );
+    final bool canonicalUnchanged =
+        screen.generation == generation &&
+        screen.cursorRow == cursorRow &&
+        screen.cursorColumn == cursorColumn;
+    final TerminalPasteTransferResult result = await pane.paste(plan);
+    final Stopwatch deadline = Stopwatch()..start();
+    while (deadline.elapsed < const Duration(seconds: 5) &&
+        _findAscii(screen, '${prompt}printf __DT_PASTE_VISUAL__') == null) {
+      _expectLifecycle(
+        session.isLive,
+        'multiline visual fixture shell exited before zle redraw',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    final bool exactPrefix =
+        _findAscii(screen, '${prompt}printf __DT_PASTE_VISUAL__') != null;
+    _expectLifecycle(
+      canonicalUnchanged && result.isCompleted && exactPrefix,
+      'multiline Paste confirmation desynchronized the zsh cursor: '
+      'canonical_unchanged=$canonicalUnchanged '
+      'transfer=${result.disposition.name} exact_prefix=$exactPrefix',
+    );
+    pane.interrupt();
+    await _waitForTerminalDisplayPrompt(session, minimumOccurrences: 2);
+    stdout.writeln(
+      'TERMINAL_MULTILINE_PASTE_VISUAL_TEST canonical_unchanged=true '
+      'zle_prefix_exact=true',
+    );
   }
 
   static Future<void> _exerciseOsc52DefaultDeny(
@@ -22425,6 +22497,7 @@ final class _TerminalHierarchyProductPane {
   int _servicesSelectionGeneration = -1;
   int _servicesViewportGeneration = -1;
   bool _servicesRequestorLive = false;
+  ViewBadge? _secureInputBadge;
 
   TerminalPaneLayoutRect? get contentLayout {
     final TerminalPaneLayoutRect? rectangle = layout;
@@ -22447,6 +22520,20 @@ final class _TerminalHierarchyProductPane {
 
   void notifyScreenChanged() {
     if (!surface.isDisposed) surface.notifyScreenChanged();
+    _synchronizeViewBadge();
+  }
+
+  void updateSecureInputBadge(ViewBadge? badge) {
+    _secureInputBadge = badge;
+    _synchronizeViewBadge();
+  }
+
+  void _synchronizeViewBadge() {
+    if (view.isDisposed) return;
+    view.badge = terminalViewBadge(
+      secureInputBadge: _secureInputBadge,
+      notice: session.presentationNotice,
+    );
   }
 
   void updateBackingScale(double backingScaleFactor) {

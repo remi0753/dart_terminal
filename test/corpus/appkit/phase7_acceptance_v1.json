@@ -55,7 +55,7 @@
       "sources": [
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "6ff0c757f9bae123a9ae0c3f583367ba3b0f3692f6f8109e8766de49141fd69e"
+          "sha256": "40703495b96801227747239b9e80b623572cc96a46eb90ed0eff830172aaf9fd"
         },
         {
           "path": "lib/src/terminal_renderer/terminal_screen_metal_compositor.dart",
@@ -211,11 +211,11 @@
         },
         {
           "path": "lib/src/terminal_session.dart",
-          "sha256": "b5f7e0009d6fe26d93e1376ac09fe8ede12aa617f2dce53233fb175c70f4fdcd"
+          "sha256": "8af419521fc3a922b049ba9583ce2d8051a40da0d41a1ef86b5057f2904290ef"
         },
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "6ff0c757f9bae123a9ae0c3f583367ba3b0f3692f6f8109e8766de49141fd69e"
+          "sha256": "40703495b96801227747239b9e80b623572cc96a46eb90ed0eff830172aaf9fd"
         }
       ],
       "unit_tests": [

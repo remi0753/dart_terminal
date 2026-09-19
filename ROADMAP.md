@@ -1649,6 +1649,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] generic manifest／builderへbounded `.icns` icon contractを追加する
   - [x] iconset／`.icns`を生成し、product manifestとbundle auditへ統合する
   - [x] Developer JIT／Release AOT／Universal配布物でInfo.plistと実iconを検証する
+- [x] 複数行Paste確認後に先頭文字が重複して見える表示上のカーソルずれを解消する
+  （実施時に
+  [`docs/phase5/multiline-paste-confirmation-rendering.md`](docs/phase5/multiline-paste-confirmation-rendering.md)
+  を参照する）
 - [ ] 既存PTYのcompeting-reaper回帰fixtureの非決定性を調査し、実external-reap検証を安定化する
   （実施時に
   [`docs/phase2/pty-competing-reaper-fixture-determinism.md`](docs/phase2/pty-competing-reaper-fixture-determinism.md)
