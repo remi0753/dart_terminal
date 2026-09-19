@@ -39,6 +39,7 @@ enum TerminalActionMessageId {
   togglePaneZoom,
   equalizeSplits,
   toggleContextDock,
+  refreshDirectoryNavigator,
   moveContextDockBoundaryLeft,
   moveContextDockBoundaryRight,
   toggleHiddenFiles,
@@ -789,6 +790,10 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _englishActions =
           'Toggle Context Dock',
           <String>['show', 'hide', 'sidebar', 'navigator'],
         ),
+        TerminalActionMessageId.refreshDirectoryNavigator: _action(
+          'Refresh Directory Navigator',
+          <String>['refresh', 'reload', 'files', 'folders'],
+        ),
         TerminalActionMessageId.toggleHiddenFiles: _action(
           'Toggle Hidden Files and Folders',
           <String>['dotfile', 'directory', 'navigator', 'visibility'],
@@ -983,6 +988,10 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _japaneseActions =
       TerminalActionMessageId.toggleContextDock: _action(
         'コンテキストDockの表示を切り替え',
         <String>['表示', '非表示', 'サイドバー', 'ナビゲータ'],
+      ),
+      TerminalActionMessageId.refreshDirectoryNavigator: _action(
+        'ディレクトリナビゲータを更新',
+        <String>['更新', '再読み込み', 'ファイル', 'フォルダ'],
       ),
       TerminalActionMessageId.toggleHiddenFiles: _action(
         '隠しファイルとフォルダの表示を切り替え',

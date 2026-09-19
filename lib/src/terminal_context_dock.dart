@@ -659,6 +659,14 @@ final class _TerminalContextDockPaneState {
 typedef TerminalContextDockFocusRequester = void Function(
   TerminalContextDockFocusRequest request,
 );
+typedef TerminalContextDockDirectoryRefreshAvailability = bool Function(
+  TerminalWindowId windowId,
+  PaneId paneId,
+);
+typedef TerminalContextDockDirectoryRefreshRequester = bool Function(
+  TerminalWindowId windowId,
+  PaneId paneId,
+);
 
 /// Binds shared application actions to the Context Dock state authority.
 final class TerminalContextDockActionCoordinator {
@@ -669,6 +677,8 @@ final class TerminalContextDockActionCoordinator {
     required TerminalContextDockFocusRequester focusTerminal,
     bool Function()? canFocusNavigator,
     bool Function()? shouldConsumeNavigatorRequest,
+    TerminalContextDockDirectoryRefreshAvailability? canRefreshDirectory,
+    TerminalContextDockDirectoryRefreshRequester? refreshDirectory,
     bool Function(TerminalContextDockBoundaryDirection direction)?
     canMoveBoundary,
     bool Function(TerminalContextDockBoundaryDirection direction)? moveBoundary,
@@ -678,6 +688,8 @@ final class TerminalContextDockActionCoordinator {
        _canFocusNavigator = canFocusNavigator ?? _alwaysTrue,
        _shouldConsumeNavigatorRequest =
            shouldConsumeNavigatorRequest ?? _alwaysFalse,
+       _canRefreshDirectory = canRefreshDirectory,
+       _refreshDirectory = refreshDirectory,
        _canMoveBoundary = canMoveBoundary,
        _moveBoundary = moveBoundary,
        _onChanged = onChanged {
@@ -690,6 +702,8 @@ final class TerminalContextDockActionCoordinator {
   final TerminalContextDockFocusRequester _focusTerminal;
   final bool Function() _canFocusNavigator;
   final bool Function() _shouldConsumeNavigatorRequest;
+  final TerminalContextDockDirectoryRefreshAvailability? _canRefreshDirectory;
+  final TerminalContextDockDirectoryRefreshRequester? _refreshDirectory;
   final bool Function(TerminalContextDockBoundaryDirection direction)?
   _canMoveBoundary;
   final bool Function(TerminalContextDockBoundaryDirection direction)?
@@ -725,6 +739,11 @@ final class TerminalContextDockActionCoordinator {
           id: TerminalActionId.toggleContextDock,
           isAvailable: _canToggle,
           handler: _toggle,
+        ),
+        TerminalActionRegistration(
+          id: TerminalActionId.refreshDirectoryNavigator,
+          isAvailable: _canRefresh,
+          handler: _refresh,
         ),
         TerminalActionRegistration(
           id: TerminalActionId.toggleHiddenFiles,
@@ -770,6 +789,25 @@ final class TerminalContextDockActionCoordinator {
   }
 
   bool _canToggle() => _activeTarget() != null;
+
+  bool _canRefresh() {
+    if (applicationState.mutationInProgress || _refreshDirectory == null) {
+      return false;
+    }
+    final _TerminalContextDockTarget? target = _activeTarget();
+    if (target == null) return false;
+    final TerminalContextDockWindowSnapshot? dock = dockState.snapshotForWindow(
+      target.windowId,
+    );
+    if (dock == null || !dock.isVisible || dock.targetPaneId != target.paneId) {
+      return false;
+    }
+    try {
+      return _canRefreshDirectory?.call(target.windowId, target.paneId) ?? true;
+    } on Object {
+      return false;
+    }
+  }
 
   bool _canMove(TerminalContextDockBoundaryDirection direction) =>
       !applicationState.mutationInProgress &&
@@ -876,6 +914,16 @@ final class TerminalContextDockActionCoordinator {
     synchronize();
     final _TerminalContextDockTarget target = _requireActiveTarget();
     dockState.toggleHiddenEntries(target.windowId, target.paneId);
+    _onChanged?.call();
+  }
+
+  void _refresh() {
+    synchronize();
+    final _TerminalContextDockTarget target = _requireActiveTarget();
+    if (!_canRefresh() ||
+        _refreshDirectory?.call(target.windowId, target.paneId) != true) {
+      throw StateError('Directory Navigator refresh is unavailable');
+    }
     _onChanged?.call();
   }
 

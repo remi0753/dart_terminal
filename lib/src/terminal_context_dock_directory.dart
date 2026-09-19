@@ -228,6 +228,34 @@ final class TerminalContextDockDirectoryController {
     return _project(window);
   }
 
+  bool canRefreshWindow(TerminalWindowId windowId, PaneId paneId) {
+    if (_isDisposed || applicationState.isDisposed || dockState.isDisposed) {
+      return false;
+    }
+    final TerminalContextDockWindowSnapshot? dock = dockState.snapshotForWindow(
+      windowId,
+    );
+    final _TerminalContextDockDirectoryWindowState? window = _windows[windowId];
+    return dock != null &&
+        dock.isVisible &&
+        dock.targetPaneId == paneId &&
+        window != null &&
+        window.paneId == paneId &&
+        window.resolution?.isAvailable == true &&
+        _readCanObservePane(paneId);
+  }
+
+  bool refreshWindow(TerminalWindowId windowId, PaneId paneId) {
+    if (!canRefreshWindow(windowId, paneId)) return false;
+    final _TerminalContextDockDirectoryWindowState? before = _windows[windowId];
+    synchronize(refreshPaneIds: <PaneId>{paneId});
+    final _TerminalContextDockDirectoryWindowState? after = _windows[windowId];
+    return after != null &&
+        !identical(before, after) &&
+        after.paneId == paneId &&
+        after.resolution?.isAvailable == true;
+  }
+
   TerminalContextDockPathSelection? selectedPathForWindow(
     TerminalWindowId windowId,
   ) {

@@ -77,6 +77,13 @@ pane、path、dispositionが同一なら既存のdirectory snapshotを再利用�
 - terminal activityはProcess controllerの同期を先に予約している。長時間process中は既存の
   `canObserveDirectoryPane`がDirectory走査を停止し、短時間commandはProcess Inspectorを点滅させずに
   activity refreshだけを行う。
+- 手動操作は`view.refresh-directory-navigator`というstable actionにした。既定shortcutは追加せず、
+  View menuとCommand Paletteへ表示し、任意の非予約chordを`keybind`から割り当てられる。
+- actionは可視かつlocalで観測可能なDirectory Navigator snapshotがある時だけ有効になる。
+  Dock非表示、remote、Process Inspector／privacy suspension、controller disposalではfail closedとし、
+  terminal／Navigatorのinput owner、mode、query、selectionを変更しない。
+- action catalogは47件になった。生成keybind/action referenceとREADME／feature matrixの件数・
+  Directory Navigator操作説明を同時に更新した。
 
 ## 検証記録
 
@@ -92,3 +99,20 @@ pane、path、dispositionが同一なら既存のdirectory snapshotを再利用�
 - 初回検証ではMarkdownを`dart format`へ誤って渡してparse errorになった。Dart sourceだけへ
   対象を修正した。sandbox内の初回testは`~/.dart-tool`と`~/.cache/clang`へ書けず失敗し、
   同一testを通常開発環境権限で再実行して成功した。
+
+### 手動refresh action
+
+- `dart format`（変更したDart source／test）: 成功。
+- `DART_SUPPRESS_ANALYTICS=true dart analyze`: 成功、`No issues found!`。
+- `DART_SUPPRESS_ANALYTICS=true dart run test/terminal_action_registry_test.dart`: 成功。
+- `DART_SUPPRESS_ANALYTICS=true dart run test/terminal_context_dock_test.dart`: 成功。
+  visible/local availability、active window/pane dispatch、query／Navigator focus保持、hidden／remote／
+  privacy fail-closed、実snapshot再取得を確認した。
+- `DART_SUPPRESS_ANALYTICS=true dart run test/terminal_localization_test.dart`: 成功。
+- `DART_SUPPRESS_ANALYTICS=true dart run test/terminal_native_hierarchy_test.dart`: 成功。
+- `make keybind-action-reference`: 成功。47 actionの生成referenceを更新した。
+- `make keybind-action-reference-check`: 成功、`application_actions=47`。
+- `make terminal-localization-check`: 成功、16 source／4 resource family／21 paired key。
+- `git diff --check`: 成功。
+- sandbox内の`dart format`はsource format自体を完了後、telemetry sessionのmtime更新だけを拒否された。
+  source差分と後続のanalyze／testsでformat・構文を確認した。

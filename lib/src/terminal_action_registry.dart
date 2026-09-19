@@ -33,6 +33,7 @@ enum TerminalActionId {
   togglePaneZoom('pane.toggle-zoom'),
   equalizeSplits('pane.equalize-splits'),
   toggleContextDock('view.toggle-context-dock'),
+  refreshDirectoryNavigator('view.refresh-directory-navigator'),
   moveContextDockBoundaryLeft('view.move-context-dock-boundary-left'),
   moveContextDockBoundaryRight('view.move-context-dock-boundary-right'),
   toggleHiddenFiles('view.toggle-hidden-files'),
@@ -419,6 +420,11 @@ final class TerminalActionCatalog {
         ),
       ),
       action(
+        TerminalActionId.refreshDirectoryNavigator,
+        TerminalActionMenu.view,
+        restoresTerminalFocusAfterInvocation: false,
+      ),
+      action(
         TerminalActionId.toggleHiddenFiles,
         TerminalActionMenu.view,
         shortcut: const TerminalActionShortcut(
@@ -570,6 +576,8 @@ TerminalActionMessageId _actionMessageId(TerminalActionId id) => switch (id) {
   TerminalActionId.equalizeSplits => TerminalActionMessageId.equalizeSplits,
   TerminalActionId.toggleContextDock =>
     TerminalActionMessageId.toggleContextDock,
+  TerminalActionId.refreshDirectoryNavigator =>
+    TerminalActionMessageId.refreshDirectoryNavigator,
   TerminalActionId.moveContextDockBoundaryLeft =>
     TerminalActionMessageId.moveContextDockBoundaryLeft,
   TerminalActionId.moveContextDockBoundaryRight =>

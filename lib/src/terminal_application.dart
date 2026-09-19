@@ -4976,6 +4976,8 @@ final class TerminalApplication {
             focusTerminal: createdDockPresenter.focusTerminal,
             canMoveBoundary: createdDockPresenter.canMoveBoundary,
             moveBoundary: createdDockPresenter.moveBoundary,
+            canRefreshDirectory: createdDockDirectory.canRefreshWindow,
+            refreshDirectory: createdDockDirectory.refreshWindow,
             shouldConsumeNavigatorRequest: () =>
                 createdDockPresenter.shouldConsumeNavigatorRequest,
             canFocusNavigator: () {

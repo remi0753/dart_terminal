@@ -48,7 +48,7 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   immutable keybind engine、file/include/CLIのrepeatable typed keybind設定、AppKit menu
   shortcut優先の競合境界。全key/action/default/reserved shortcutは
   [生成リファレンス](docs/reference/keybindings-and-actions.md)から確認できる
-- 46個のstable application actionを共有するbounded searchable registry、動的な
+- 47個のstable application actionを共有するbounded searchable registry、動的な
   availability/exactly-once dispatch、Application/File/Edit/Shell/View/Windowの
   native menu。Shift-Command-Pのnative command paletteはquery/selectionを独立所有し、
   dispatch完了後のavailabilityを再同期してterminal first responderを復元し、入力をPTYへ
@@ -94,7 +94,10 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   current subtreeをbounded探索して必要なancestorだけをlazy展開し、一致rowへ選択を移す。Shift-Command-MのMoveはquery入力を止めて
   tree navigationだけを所有する。SearchとGo Toのqueryはpaneごとに独立して保持する。
   EscapeでNavigator modeとqueryを保ったままterminalへ戻り、Dockの表示は`Mode: Terminal`へ切り替わる。
-  矢印/Page/Command+矢印の操作中はPTY write 0を保つ
+  terminal activity後は同じworking directoryも再取得し、開いたsubtreeを維持したまま
+  fileの追加・削除・metadata変更を反映する。Viewメニュー／Command Paletteの
+  `Refresh Directory Navigator`（`view.refresh-directory-navigator`）から手動更新でき、
+  任意の非予約chordを`keybind`で割り当てられる。矢印/Page/Command+矢印とrefresh中はPTY write 0を保つ
 - NavigatorのCommand-Cは選択したabsolute pathだけをcopyし、Option-Returnは既存paste
   admissionでshell literalにquoteした1 pathを改行なしで挿入してterminalへ戻る。自動cdや
   command実行はせず、stale/remote/alternate screen/foreground process/manual secure inputは

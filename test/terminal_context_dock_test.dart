@@ -1241,6 +1241,35 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
         snapshot.rows.first.isExpanded,
     'a later terminal activity refresh removes stale entries without collapsing the tree',
   );
+  files.includeCreatedRootFile = true;
+  final int manualRefreshGeneration = snapshot.generation;
+  _expect(
+    controller.canRefreshWindow(window.id, firstPane) &&
+        controller.refreshWindow(window.id, firstPane),
+    'an available Directory Navigator accepts an explicit refresh',
+  );
+  await _waitUntil(
+    () =>
+        controller.snapshotForWindow(window.id)!.generation !=
+            manualRefreshGeneration &&
+        controller.activeOperationCount == 0,
+  );
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
+    snapshot.rows.any(
+          (TerminalContextDockDirectoryRow row) =>
+              row.entry.path == '/root/created.txt',
+        ) &&
+        snapshot.rows.first.isExpanded,
+    'explicit refresh reloads the same cwd without collapsing its subtree',
+  );
+  files.includeCreatedRootFile = false;
+  _expect(
+    controller.refreshWindow(window.id, firstPane),
+    'a second explicit refresh can restore the shared fixture',
+  );
+  await _waitUntil(() => controller.activeOperationCount == 0);
+  snapshot = controller.snapshotForWindow(window.id)!;
   _expect(
     controller.handleTreeIntent(
           window.id,
@@ -1525,6 +1554,8 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
         snapshot.workingDirectory == null &&
         snapshot.rows.isEmpty &&
         controller.activeOperationCount == 0 &&
+        !controller.canRefreshWindow(window.id, secondPane.id) &&
+        !controller.refreshWindow(window.id, secondPane.id) &&
         resolutionCount == resolutionBaseline,
     'protected input cancels work and exposes neither cwd nor retained rows',
   );
@@ -1537,7 +1568,8 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
   snapshot = controller.snapshotForWindow(window.id)!;
   _expect(
     snapshot.status == TerminalContextDockDirectoryStatus.remoteUnavailable &&
-        snapshot.rows.isEmpty,
+        snapshot.rows.isEmpty &&
+        !controller.canRefreshWindow(window.id, secondPane.id),
     'remote authority never falls back to the local launch directory',
   );
 
@@ -1554,7 +1586,8 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
   controller.synchronize();
   _expect(
     controller.activeOperationCount == 0 &&
-        controller.snapshotForWindow(window.id) == null,
+        controller.snapshotForWindow(window.id) == null &&
+        !controller.refreshWindow(window.id, secondPane.id),
     'hiding the Dock cancels and releases its filesystem operation',
   );
   files.releaseSlowList.complete();
@@ -1753,6 +1786,10 @@ Future<void> _testActionFocusOwnershipAndAvailability() async {
   var failNavigatorFocus = false;
   var failTerminalFocus = false;
   var changed = 0;
+  var canRefreshDirectory = true;
+  var refreshCount = 0;
+  TerminalWindowId? refreshedWindowId;
+  PaneId? refreshedPaneId;
   var mutateDuringProjection = false;
   final TerminalContextDockActionCoordinator coordinator =
       TerminalContextDockActionCoordinator(
@@ -1771,6 +1808,13 @@ Future<void> _testActionFocusOwnershipAndAvailability() async {
           terminalFocus.add(request);
         },
         canFocusNavigator: () => canFocusNavigator,
+        canRefreshDirectory: (_, _) => canRefreshDirectory,
+        refreshDirectory: (TerminalWindowId windowId, PaneId paneId) {
+          refreshCount++;
+          refreshedWindowId = windowId;
+          refreshedPaneId = paneId;
+          return true;
+        },
         onChanged: () {
           changed++;
           if (mutateDuringProjection) {
@@ -1792,6 +1836,9 @@ Future<void> _testActionFocusOwnershipAndAvailability() async {
             .isEnabled &&
         dispatcher.snapshot(TerminalActionId.toggleHiddenFiles).isEnabled &&
         dispatcher.snapshot(TerminalActionId.toggleContextDock).isEnabled &&
+        !dispatcher
+            .snapshot(TerminalActionId.refreshDirectoryNavigator)
+            .isEnabled &&
         !dispatcher.snapshot(TerminalActionId.focusTerminal).isEnabled,
     'only valid initial Context Dock actions are available',
   );
@@ -1818,13 +1865,24 @@ Future<void> _testActionFocusOwnershipAndAvailability() async {
     'search refreshes a benign projection generation before transferring '
     'input exactly once',
   );
+  await _expectExecuted(dispatcher, TerminalActionId.refreshDirectoryNavigator);
+  _expect(
+    refreshCount == 1 &&
+        refreshedWindowId == window.id &&
+        refreshedPaneId == paneId &&
+        navigatorFocus.length == 1 &&
+        terminalFocus.isEmpty,
+    'manual refresh targets the visible Dock without moving input focus',
+  );
   dock.setQuery(window.id, 'retained', requireNavigatorInput: true);
+  await _expectExecuted(dispatcher, TerminalActionId.refreshDirectoryNavigator);
   await _expectExecuted(dispatcher, TerminalActionId.toggleHiddenFiles);
   snapshot = dock.snapshotForWindow(window.id)!;
   _expect(
     snapshot.pane.showHiddenEntries &&
         snapshot.navigatorOwnsInput &&
         snapshot.pane.query == 'retained' &&
+        refreshCount == 2 &&
         navigatorFocus.length == 1 &&
         terminalFocus.isEmpty,
     'hidden-entry toggle preserves Navigator ownership and its retained query',
@@ -1873,7 +1931,13 @@ Future<void> _testActionFocusOwnershipAndAvailability() async {
   );
   await _expectExecuted(dispatcher, TerminalActionId.toggleContextDock);
   _expect(
-    !dock.snapshotForWindow(window.id)!.isVisible,
+    !dock.snapshotForWindow(window.id)!.isVisible &&
+        !dispatcher
+            .snapshot(TerminalActionId.refreshDirectoryNavigator)
+            .isEnabled &&
+        (await dispatcher.dispatch(TerminalActionId.refreshDirectoryNavigator))
+                .disposition ==
+            TerminalActionDispatchDisposition.unavailable,
     'toggle hides a terminal-owned Dock',
   );
   await _expectExecuted(dispatcher, TerminalActionId.toggleContextDock);
@@ -1884,11 +1948,15 @@ Future<void> _testActionFocusOwnershipAndAvailability() async {
   );
 
   canFocusNavigator = false;
+  canRefreshDirectory = false;
   _expect(
     !dispatcher.snapshot(TerminalActionId.searchFilesAndFolders).isEnabled &&
         !dispatcher.snapshot(TerminalActionId.goToFileOrFolder).isEnabled &&
         !dispatcher
             .snapshot(TerminalActionId.moveInDirectoryNavigator)
+            .isEnabled &&
+        !dispatcher
+            .snapshot(TerminalActionId.refreshDirectoryNavigator)
             .isEnabled &&
         (await dispatcher.dispatch(TerminalActionId.searchFilesAndFolders))
                 .disposition ==
@@ -1896,6 +1964,7 @@ Future<void> _testActionFocusOwnershipAndAvailability() async {
     'navigator admission failure disables search without changing ownership',
   );
   canFocusNavigator = true;
+  canRefreshDirectory = true;
   failNavigatorFocus = true;
   _expect(
     (await dispatcher.dispatch(TerminalActionId.searchFilesAndFolders))
@@ -1909,6 +1978,9 @@ Future<void> _testActionFocusOwnershipAndAvailability() async {
   _expect(
     !dispatcher.snapshot(TerminalActionId.toggleContextDock).isEnabled &&
         !dispatcher.snapshot(TerminalActionId.toggleHiddenFiles).isEnabled &&
+        !dispatcher
+            .snapshot(TerminalActionId.refreshDirectoryNavigator)
+            .isEnabled &&
         changed >= 5,
     'disposed coordinator fails every retained registration closed',
   );

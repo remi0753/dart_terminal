@@ -148,6 +148,7 @@ void _testStableStandardCatalog() {
             .join(',') ==
         <TerminalActionId>[
           TerminalActionId.toggleContextDock,
+          TerminalActionId.refreshDirectoryNavigator,
           TerminalActionId.toggleHiddenFiles,
           TerminalActionId.moveContextDockBoundaryLeft,
           TerminalActionId.moveContextDockBoundaryRight,
@@ -208,6 +209,13 @@ void _testStableStandardCatalog() {
                 .shortcut!
                 .identity ==
             'shift+option+c' &&
+        catalog
+                .actionForId(TerminalActionId.refreshDirectoryNavigator)!
+                .shortcut ==
+            null &&
+        !catalog
+            .actionForId(TerminalActionId.refreshDirectoryNavigator)!
+            .restoresTerminalFocusAfterInvocation &&
         TerminalActionCatalog.standard(
               localization: TerminalLocalization.japanese,
             ).actionForId(TerminalActionId.focusTerminal)!.title ==
@@ -215,7 +223,11 @@ void _testStableStandardCatalog() {
         TerminalActionCatalog.standard(
               localization: TerminalLocalization.japanese,
             ).actionForId(TerminalActionId.toggleHiddenFiles)!.title ==
-            '隠しファイルとフォルダの表示を切り替え',
+            '隠しファイルとフォルダの表示を切り替え' &&
+        TerminalActionCatalog.standard(
+              localization: TerminalLocalization.japanese,
+            ).actionForId(TerminalActionId.refreshDirectoryNavigator)!.title ==
+            'ディレクトリナビゲータを更新',
     'Context Dock actions own reviewed focus and distinct shortcuts',
   );
   _expect(

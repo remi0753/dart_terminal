@@ -92,6 +92,7 @@ Every ID below can be a target on a non-reserved chord. Availability is evaluate
 | `pane.split-right` | Split Pane Right | shell | `command+d` |
 | `pane.split-down` | Split Pane Down | shell | `shift+command+d` |
 | `view.toggle-context-dock` | Toggle Context Dock | view | `shift+option+c` |
+| `view.refresh-directory-navigator` | Refresh Directory Navigator | view | — |
 | `view.toggle-hidden-files` | Toggle Hidden Files and Folders | view | `shift+command+h` |
 | `view.move-context-dock-boundary-left` | Move Context Dock Boundary Left | view | — |
 | `view.move-context-dock-boundary-right` | Move Context Dock Boundary Right | view | — |
