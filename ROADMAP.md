@@ -1622,6 +1622,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （実施時に
   [`docs/phase11/codesign-entitlements-xml-extraction.md`](docs/phase11/codesign-entitlements-xml-extraction.md)
   を参照する）
+- [x] 現行notarytoolの非wait submit JSONを厳密検証し、公証待機へ進める
+  （実施時に
+  [`docs/phase11/notarytool-submit-evidence-compatibility.md`](docs/phase11/notarytool-submit-evidence-compatibility.md)
+  を参照する）
 - [ ] 既存PTYのcompeting-reaper回帰fixtureの非決定性を調査し、実external-reap検証を安定化する
   （実施時に
   [`docs/phase2/pty-competing-reaper-fixture-determinism.md`](docs/phase2/pty-competing-reaper-fixture-determinism.md)
