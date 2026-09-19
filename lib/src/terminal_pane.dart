@@ -369,6 +369,7 @@ final class TerminalPaneOwner {
     required TerminalPaneSessionFactory sessionFactory,
     required void Function() onChanged,
     required void Function() onExitRequested,
+    void Function(PaneId paneId)? onCommandSubmitted,
     TerminalPaneLifecycleObserver? lifecycleObserver,
     TerminalPaneExitObserver? exitObserver,
   }) {
@@ -416,6 +417,9 @@ final class TerminalPaneOwner {
       session: session,
       onChanged: onChanged,
       onExitRequested: onExitRequested,
+      onCommandSubmitted: onCommandSubmitted == null
+          ? null
+          : () => onCommandSubmitted(paneId),
       lifecycleObserver: lifecycleObserver,
       exitObserver: exitObserver,
     );
@@ -499,11 +503,13 @@ final class TerminalPane {
     required TerminalPaneSession session,
     required void Function() onChanged,
     required void Function() onExitRequested,
+    required void Function()? onCommandSubmitted,
     required TerminalPaneLifecycleObserver? lifecycleObserver,
     required TerminalPaneExitObserver? exitObserver,
   }) : _session = session,
        _onChanged = onChanged,
        _onExitRequested = onExitRequested,
+       _onCommandSubmitted = onCommandSubmitted,
        _lifecycleObserver = lifecycleObserver,
        _exitObserver = exitObserver;
 
@@ -512,6 +518,7 @@ final class TerminalPane {
   final TerminalPaneSession _session;
   final void Function() _onChanged;
   final void Function() _onExitRequested;
+  final void Function()? _onCommandSubmitted;
   final TerminalPaneLifecycleObserver? _lifecycleObserver;
   final TerminalPaneExitObserver? _exitObserver;
 
@@ -570,6 +577,9 @@ final class TerminalPane {
 
   void insertText(String value) {
     _recordInteraction();
+    if (_containsCommandTerminator(value.codeUnits)) {
+      _onCommandSubmitted?.call();
+    }
     _session.insertText(value);
   }
 
@@ -615,6 +625,7 @@ final class TerminalPane {
 
   Future<void> submit() {
     _recordInteraction();
+    _onCommandSubmitted?.call();
     return _session.submit();
   }
 
@@ -651,13 +662,22 @@ final class TerminalPane {
       return;
     }
     _recordInteraction();
+    if (_containsCommandTerminator(bytes)) {
+      _onCommandSubmitted?.call();
+    }
     _session.sendInput(Uint8List.fromList(bytes));
   }
 
   Future<TerminalPasteTransferResult> paste(TerminalPastePlan plan) {
     _recordInteraction();
+    if (!plan.analysis.bracketed && plan.analysis.logicalNewlineCount > 0) {
+      _onCommandSubmitted?.call();
+    }
     return _session.paste(plan);
   }
+
+  static bool _containsCommandTerminator(Iterable<int> bytes) =>
+      bytes.any((int byte) => byte == 0x0a || byte == 0x0d);
 
   void showClipboardNotice(TerminalClipboardNotice notice) {
     _session.showClipboardNotice(notice);

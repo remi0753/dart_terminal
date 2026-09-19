@@ -1182,11 +1182,23 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
   final int refreshGeneration = snapshot.generation;
   final int rootListCount = files.listCount('/root');
   final int childListCount = files.listCount('/root/folder');
+  controller.scheduleSynchronize(changedPaneId: firstPane);
+  await Future<void>.delayed(
+    TerminalContextDockDirectoryLimits.terminalChangeDebounce +
+        const Duration(milliseconds: 25),
+  );
+  _expect(
+    controller.snapshotForWindow(window.id)!.generation == refreshGeneration &&
+        files.listCount('/root') == rootListCount &&
+        files.listCount('/root/folder') == childListCount,
+    'idle terminal changes do not re-resolve or reload Directory Navigator',
+  );
   files
     ..includeCreatedRootFile = true
     ..includeCreatedChildFile = true
     ..nestedFileSize = 11;
   controller
+    ..noteCommandSubmitted(firstPane)
     ..scheduleSynchronize(changedPaneId: firstPane)
     ..scheduleSynchronize(changedPaneId: firstPane);
   await _waitUntil(
@@ -1224,6 +1236,7 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
     ..includeCreatedRootFile = false
     ..includeCreatedChildFile = false
     ..nestedFileSize = 7;
+  controller.noteCommandSubmitted(firstPane);
   controller.scheduleSynchronize(changedPaneId: firstPane);
   await _waitUntil(
     () =>
@@ -1282,6 +1295,7 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
   );
   final int deferredRefreshGeneration = snapshot.generation;
   files.includeCreatedRootFile = true;
+  controller.noteCommandSubmitted(firstPane);
   controller.scheduleSynchronize(changedPaneId: firstPane);
   await Future<void>.delayed(
     TerminalContextDockDirectoryLimits.terminalChangeDebounce +

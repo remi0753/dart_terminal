@@ -203,6 +203,7 @@ final class TerminalContextDockDirectoryController {
   _windows = <TerminalWindowId, _TerminalContextDockDirectoryWindowState>{};
   final Map<PaneId, Set<String>> _expandedByPane = <PaneId, Set<String>>{};
   final List<String> _recentRoots = <String>[];
+  final Set<PaneId> _commandRefreshPaneIds = <PaneId>{};
   final Set<PaneId> _pendingRefreshPaneIds = <PaneId>{};
   final Set<PaneId> _deferredRefreshPaneIds = <PaneId>{};
   int _generation = 0;
@@ -282,12 +283,27 @@ final class TerminalContextDockDirectoryController {
     );
   }
 
-  /// Coalesces high-frequency terminal activity into one cwd observation and
-  /// refreshes the visible snapshot owned by the pane that changed.
+  /// Arms one automatic refresh for the next quiescent activity/completion of
+  /// a command submitted to [paneId]. Repeated submissions before completion
+  /// still produce one bounded refresh of the final filesystem state.
+  void noteCommandSubmitted(PaneId paneId) {
+    if (_isDisposed) return;
+    _commandRefreshPaneIds.add(paneId);
+  }
+
+  /// Debounces activity only for panes with a submitted command. Cursor blink,
+  /// redraw, and other idle session changes therefore never start filesystem
+  /// work. Restarting the timer waits for the command's output burst to settle.
   void scheduleSynchronize({PaneId? changedPaneId}) {
     if (_isDisposed) return;
-    if (changedPaneId != null) _pendingRefreshPaneIds.add(changedPaneId);
-    if (_scheduledSynchronization != null) return;
+    if (changedPaneId != null) {
+      if (!_commandRefreshPaneIds.contains(changedPaneId)) return;
+      _pendingRefreshPaneIds.add(changedPaneId);
+      _scheduledSynchronization?.cancel();
+      _scheduledSynchronization = null;
+    } else if (_scheduledSynchronization != null) {
+      return;
+    }
     _scheduledSynchronization = Timer(
       TerminalContextDockDirectoryLimits.terminalChangeDebounce,
       () {
@@ -324,6 +340,12 @@ final class TerminalContextDockDirectoryController {
       _expandedByPane.removeWhere(
         (PaneId paneId, Set<String> _) => !livePaneIds.contains(paneId),
       );
+      _commandRefreshPaneIds.removeWhere(
+        (PaneId paneId) => !livePaneIds.contains(paneId),
+      );
+      _pendingRefreshPaneIds.removeWhere(
+        (PaneId paneId) => !livePaneIds.contains(paneId),
+      );
       _deferredRefreshPaneIds.removeWhere(
         (PaneId paneId) => !livePaneIds.contains(paneId),
       );
@@ -350,6 +372,8 @@ final class TerminalContextDockDirectoryController {
             .snapshotForWindow(logicalWindow.id);
         if (dock == null || !dock.isVisible) {
           if (dock != null) {
+            _commandRefreshPaneIds.remove(dock.targetPaneId);
+            _pendingRefreshPaneIds.remove(dock.targetPaneId);
             _deferredRefreshPaneIds.remove(dock.targetPaneId);
           }
           _windows.remove(logicalWindow.id)?.cancel();
@@ -370,6 +394,9 @@ final class TerminalContextDockDirectoryController {
             ++_generation,
           );
         } on Object {
+          if (refreshPaneIds.contains(dock.targetPaneId)) {
+            _commandRefreshPaneIds.remove(dock.targetPaneId);
+          }
           _replaceUnavailable(
             logicalWindow.id,
             dock.targetPaneId,
@@ -395,6 +422,7 @@ final class TerminalContextDockDirectoryController {
             resolution.isAvailable &&
             (applyIncomingRefresh || applyDeferredRefresh);
         if (applyIncomingRefresh || applyDeferredRefresh) {
+          _commandRefreshPaneIds.remove(dock.targetPaneId);
           _deferredRefreshPaneIds.remove(dock.targetPaneId);
         }
         if (retained != null &&
@@ -538,6 +566,7 @@ final class TerminalContextDockDirectoryController {
     _isDisposed = true;
     _scheduledSynchronization?.cancel();
     _scheduledSynchronization = null;
+    _commandRefreshPaneIds.clear();
     _pendingRefreshPaneIds.clear();
     _deferredRefreshPaneIds.clear();
     _clearWindows();

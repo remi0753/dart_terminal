@@ -685,6 +685,7 @@ final class TerminalPaneConfiguration {
     required this.sessionFactory,
     required this.onChanged,
     required this.onExitRequested,
+    this.onCommandSubmitted,
     this.lifecycleObserver,
     this.exitObserver,
   });
@@ -692,6 +693,7 @@ final class TerminalPaneConfiguration {
   final TerminalPaneSessionFactory sessionFactory;
   final void Function() onChanged;
   final void Function() onExitRequested;
+  final void Function(PaneId paneId)? onCommandSubmitted;
   final TerminalPaneLifecycleObserver? lifecycleObserver;
   final TerminalPaneExitObserver? exitObserver;
 }
@@ -1418,6 +1420,7 @@ final class TerminalApplicationState {
         sessionFactory: configuration.sessionFactory,
         onChanged: configuration.onChanged,
         onExitRequested: configuration.onExitRequested,
+        onCommandSubmitted: configuration.onCommandSubmitted,
         lifecycleObserver: configuration.lifecycleObserver,
         exitObserver: configuration.exitObserver,
       );

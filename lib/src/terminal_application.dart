@@ -3119,6 +3119,10 @@ final class TerminalApplication {
           if (palette != null && !palette.isDisposed) palette.refresh();
           diagnosticsPresenter?.refresh();
         },
+        onCommandSubmitted: (PaneId id) {
+          contextDockProcessController?.scheduleSynchronize();
+          contextDockDirectoryController?.noteCommandSubmitted(id);
+        },
         onExitRequested: () {
           final PaneId? id = paneId;
           if (id == null || state.paneForId(id) == null) return;

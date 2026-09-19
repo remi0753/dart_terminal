@@ -383,6 +383,7 @@ Future<void> _testControlDAppKitKeyRoute() async {
 Future<void> _testModeAwareAppKitKeyRoute() async {
   final TerminalPaneOwner owner = TerminalPaneOwner();
   late final _FakePaneSession session;
+  var commandSubmissions = 0;
   final TerminalPane pane = owner.createPane(
     sessionFactory:
         (
@@ -399,6 +400,10 @@ Future<void> _testModeAwareAppKitKeyRoute() async {
         },
     onChanged: () {},
     onExitRequested: () {},
+    onCommandSubmitted: (PaneId paneId) {
+      _expect(paneId.value > 0, 'command observer receives an owning pane');
+      commandSubmissions++;
+    },
   );
   await pane.start();
   final List<TerminalActionId> boundaryActions = <TerminalActionId>[];
@@ -745,6 +750,21 @@ Future<void> _testModeAwareAppKitKeyRoute() async {
     ),
     'pane input rejects writes beyond the per-key-event bound',
     expectedType: RangeError,
+  );
+  final TerminalKeyRouteResult returnRoute = TerminalKeyEventRouter()
+      .handleKeyDown(
+        _appKitKeyEvent(
+          keyCode: 36,
+          characters: '\r',
+          unmodifiedCharacters: '\r',
+        ),
+        pane,
+      );
+  pane.sendInput(Uint8List.fromList(const <int>[0x78]));
+  _expect(
+    returnRoute.disposition == TerminalKeyRouteDisposition.encoded &&
+        commandSubmissions == 1,
+    'Return arms one command refresh while ordinary terminal input does not',
   );
   await owner.shutdown();
 }
