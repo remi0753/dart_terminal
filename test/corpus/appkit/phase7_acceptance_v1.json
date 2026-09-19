@@ -10,7 +10,7 @@
       "sources": [
         {
           "path": "lib/src/terminal_application_state.dart",
-          "sha256": "fbb57d91f61ecf625208d2db32f9976e956af692c8b0b78e89a253634e65e983"
+          "sha256": "85ed0f0e8e0e4d81e02e69240e2772d8d2c01140ea926ee3c036f23b04705b00"
         },
         {
           "path": "lib/src/terminal_restoration.dart",
@@ -55,7 +55,7 @@
       "sources": [
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "c44ad4b4c7f450621f9e63aa38e702303cebcf89f5319168f400eecbf2b39e4b"
+          "sha256": "db549633f3bc830b1c66b1054e02fea2eabc20aa7823b7e11769eb7093c7f0b8"
         },
         {
           "path": "lib/src/terminal_renderer/terminal_screen_metal_compositor.dart",
@@ -152,7 +152,7 @@
         },
         {
           "path": "lib/src/terminal_pane.dart",
-          "sha256": "4778ff1a320e1fe65411d4c9971b800c168ba9aba66859b561f6e882e8ff18cc"
+          "sha256": "3e0ac6ffb06342f6158c0d37763f8bf03c397d71b71f5d97cb5b7097dc27881a"
         },
         {
           "path": "lib/src/terminal_native_hierarchy.dart",
@@ -215,7 +215,7 @@
         },
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "c44ad4b4c7f450621f9e63aa38e702303cebcf89f5319168f400eecbf2b39e4b"
+          "sha256": "db549633f3bc830b1c66b1054e02fea2eabc20aa7823b7e11769eb7093c7f0b8"
         }
       ],
       "unit_tests": [
@@ -256,7 +256,7 @@
         },
         {
           "path": "lib/src/terminal_context_dock_directory.dart",
-          "sha256": "d46adb90c779eeb950bcebbd7086485bcfb0b9c048a6c3577d3bd3cbbce1f553"
+          "sha256": "6c32280325df0fc07d18cf22823afd094ad334753b98ad7a3967ee570974f0fc"
         },
         {
           "path": "lib/src/terminal_directory_snapshot.dart",
@@ -275,7 +275,7 @@
         {
           "path": "test/terminal_context_dock_test.dart",
           "entrypoint": "runTerminalContextDockTests",
-          "sha256": "2926a66de55f733412fb40b00bdc3d83036b236531815465862de9766fa20c66"
+          "sha256": "1c33778d44a185bb6867822251343ce0abd6205069e512e83e9ec92a9a4ae5f1"
         },
         {
           "path": "test/terminal_directory_snapshot_test.dart",

@@ -3111,7 +3111,6 @@ final class TerminalApplication {
           contextDockDirectoryController?.scheduleSynchronize(
             changedPaneId: id,
           );
-          contextDockPresenter?.refreshAppearance();
           appleScriptSession?.scheduleReconcile();
           final TerminalAppKitMenuProjection? menu = menuProjection;
           if (menu != null && !menu.isDisposed) menu.refresh();

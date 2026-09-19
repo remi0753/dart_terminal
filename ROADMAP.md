@@ -1616,7 +1616,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   [`docs/phase7/context-dock-command-refresh-stability.md`](docs/phase7/context-dock-command-refresh-stability.md)
   を参照して順に実施する）
   - [x] terminalのcommand送信を起点にrefreshを一回だけ予約し、idle中の再取得を停止する
-  - [ ] 旧snapshotを表示したまま再取得結果を差し替え、tree／Searchの空表示を防ぐ
+  - [x] 旧snapshotを表示したまま再取得結果を差し替え、tree／Searchの空表示を防ぐ
   - [ ] unit testと実PTYのDeveloper JIT／Release AOTで一回更新と非ちらつきを受け入れる
 - [ ] 既存PTYのcompeting-reaper回帰fixtureの非決定性を調査し、実external-reap検証を安定化する
   （実施時に

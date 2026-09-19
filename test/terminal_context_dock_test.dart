@@ -1100,6 +1100,7 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
   bool remote = false;
   bool canObserve = true;
   var resolutionCount = 0;
+  var projectionChangeCount = 0;
   final TerminalContextDockDirectoryController controller =
       TerminalContextDockDirectoryController(
         applicationState: harness.state,
@@ -1134,6 +1135,7 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
           );
         },
         canObservePane: (_) => canObserve,
+        onChanged: () => projectionChangeCount++,
       );
 
   controller.synchronize();
@@ -1197,10 +1199,28 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
     ..includeCreatedRootFile = true
     ..includeCreatedChildFile = true
     ..nestedFileSize = 11;
+  final Future<void> refreshRootStarted = files.pauseNextRootList();
+  final int refreshChangeBaseline = projectionChangeCount;
   controller
     ..noteCommandSubmitted(firstPane)
     ..scheduleSynchronize(changedPaneId: firstPane)
     ..scheduleSynchronize(changedPaneId: firstPane);
+  await refreshRootStarted;
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
+    snapshot.generation == refreshGeneration &&
+        snapshot.status == TerminalContextDockDirectoryStatus.ready &&
+        !snapshot.rows.any(
+          (TerminalContextDockDirectoryRow row) =>
+              row.entry.path == '/root/created.txt' ||
+              row.entry.path == '/root/folder/created-child.txt',
+        ) &&
+        snapshot.rows.first.isExpanded &&
+        !snapshot.rows.first.isLoadingChildren &&
+        projectionChangeCount == refreshChangeBaseline,
+    'automatic refresh retains the complete previous tree without publishing a loading frame',
+  );
+  files.releasePausedRootList();
   await _waitUntil(
     () =>
         controller.snapshotForWindow(window.id)!.generation !=
@@ -1228,8 +1248,9 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
             11 &&
         snapshot.rows.first.isExpanded &&
         files.listCount('/root') == rootListCount + 1 &&
-        files.listCount('/root/folder') == childListCount + 1,
-    'coalesced terminal activity refreshes the same cwd and expanded subtree once',
+        files.listCount('/root/folder') == childListCount + 1 &&
+        projectionChangeCount == refreshChangeBaseline + 1,
+    'coalesced terminal activity atomically publishes the refreshed tree once',
   );
   final int removalGeneration = snapshot.generation;
   files
@@ -1385,6 +1406,42 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
           },
         ),
     'non-empty query progressively replaces tree rows with merged search rows',
+  );
+  final int searchRefreshGeneration = snapshot.generation;
+  final List<String> searchRefreshPaths = snapshot.rows
+      .map((TerminalContextDockDirectoryRow row) => row.entry.path)
+      .toList(growable: false);
+  final int searchRefreshChangeBaseline = projectionChangeCount;
+  _expect(
+    controller.refreshWindow(window.id, firstPane),
+    'Search accepts a manual atomic refresh',
+  );
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
+    snapshot.generation == searchRefreshGeneration &&
+        snapshot.rows
+                .map((TerminalContextDockDirectoryRow row) => row.entry.path)
+                .join('\n') ==
+            searchRefreshPaths.join('\n') &&
+        projectionChangeCount == searchRefreshChangeBaseline &&
+        controller.activeOperationCount > 0,
+    'Search keeps its previous results and publishes no intermediate refresh frame',
+  );
+  await _waitUntil(
+    () =>
+        controller.snapshotForWindow(window.id)!.generation !=
+            searchRefreshGeneration &&
+        controller.activeOperationCount == 0,
+  );
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
+    snapshot.isSearch &&
+        snapshot.rows
+                .map((TerminalContextDockDirectoryRow row) => row.entry.path)
+                .join('\n') ==
+            searchRefreshPaths.join('\n') &&
+        projectionChangeCount == searchRefreshChangeBaseline + 1,
+    'Search swaps one complete refreshed result set into the retained projection',
   );
   final int externalResult = snapshot.rows.indexWhere(
     (TerminalContextDockDirectoryRow row) =>
@@ -1674,11 +1731,30 @@ final class _ContextDockDirectoryFileSystem
   final Completer<void> slowListStarted = Completer<void>();
   final Completer<void> releaseSlowList = Completer<void>();
   final Map<String, int> _listCounts = <String, int>{};
+  Completer<void>? _pausedRootListStarted;
+  Completer<void>? _releasePausedRootList;
   bool includeCreatedRootFile = false;
   bool includeCreatedChildFile = false;
   int nestedFileSize = 7;
 
   int listCount(String rootPath) => _listCounts[rootPath] ?? 0;
+
+  Future<void> pauseNextRootList() {
+    if (_pausedRootListStarted != null || _releasePausedRootList != null) {
+      throw StateError('a root list is already paused');
+    }
+    _pausedRootListStarted = Completer<void>();
+    _releasePausedRootList = Completer<void>();
+    return _pausedRootListStarted!.future;
+  }
+
+  void releasePausedRootList() {
+    final Completer<void>? release = _releasePausedRootList;
+    if (release == null || release.isCompleted) {
+      throw StateError('no root list is paused');
+    }
+    release.complete();
+  }
 
   @override
   Stream<TerminalDirectoryFileSystemEntry> list(String rootPath) async* {
@@ -1689,6 +1765,14 @@ final class _ContextDockDirectoryFileSystem
       return;
     }
     if (rootPath == '/root') {
+      final Completer<void>? started = _pausedRootListStarted;
+      final Completer<void>? release = _releasePausedRootList;
+      if (started != null && release != null) {
+        if (!started.isCompleted) started.complete();
+        await release.future;
+        _pausedRootListStarted = null;
+        _releasePausedRootList = null;
+      }
       yield const TerminalDirectoryFileSystemEntry(
         name: 'readme.md',
         path: '/root/readme.md',

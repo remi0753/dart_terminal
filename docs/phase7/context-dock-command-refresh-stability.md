@@ -89,6 +89,16 @@ Directory controllerへ渡している。通知にはcommand outputだけでな�
   適用した時にtokenをconsumeし、Process Inspector復帰通知が後から届いても再取得しない。
 - Navigator input中に自動更新を保留した場合はtokenも保持し、Terminalへ戻った時の一回のrefreshでconsumeする。
   pane close／Dock非表示ではtokenを破棄し、後の無関係な操作へ持ち越さない。
+- 同一cwd refreshはlive window stateを空のstateへ置き換えず、専用のstaging batchへroot、全展開済み
+  subtree、現在のSearchを読み込む。batch中のprogressは表示snapshotへ投影せず、全operation完了時に
+  一つのgenerationとしてroot／child／Searchをまとめてcommitする。失敗したpathは直前のsnapshotを保持する。
+- staging中は旧treeのstatus、rows、展開、metadata、Search結果、selectionをそのまま投影する。
+  child operationも通常の`isLoadingChildren`へ含めないため、既存folder行へ一時的なLoading suffixを出さない。
+  manual refreshも同じatomic batchを使う。
+- terminal session変更時の一般的なappearance refreshは削除した。palette／theme／opacityの実変更には
+  専用callbackとconfiguration reload経路が既にあるため、idle screen通知からpresentationを触る必要はない。
+  hierarchy再投影でdocumentが同一の場合は、選択行highlightも現在値と比較し、同じnative highlightを
+  再設定しない。これにより同一documentの再描画要求を出さない。
 
 ## 検証記録
 
@@ -102,4 +112,19 @@ Directory controllerへ渡している。通知にはcommand outputだけでな�
   一回へまとめること、次commandは別の一回として更新すること、Navigator ownership中の保留を確認した。
 - `TerminalKeyEventRouter`からReturnを送った時だけpane command observerが一回呼ばれ、通常入力では
   呼ばれない回帰testを全test entryへ追加した。全gateは最終subtaskで実行する。
+- `git diff --check`: 成功。
+
+### snapshot保持付き差し替え
+
+- `dart format lib/src/terminal_application.dart lib/src/terminal_context_dock_directory.dart
+  test/terminal_context_dock_test.dart`: 成功、変更なし。
+- `DART_SUPPRESS_ANALYTICS=true dart analyze`: 成功、`No issues found!`。
+- `DART_SUPPRESS_ANALYTICS=true dart run test/terminal_context_dock_test.dart`: 成功。
+  delayed root list中に旧generation／ready status／全rows／展開済みchildが残り、Loading suffixと
+  projection notificationが発生しないこと、rootとchild完了後にnotification一回だけで新snapshotへ
+  切り替わることを確認した。Searchのmanual refreshも旧resultを保持し、完了時に一回だけ差し替える。
+- `make phase7-appkit-acceptance`: 成功。変更source／test hashを持つ受け入れ証跡を更新した。
+- `make phase7-appkit-acceptance-check`: 成功。
+- `DART_SUPPRESS_ANALYTICS=true dart run test/phase7_appkit_acceptance_test.dart`: 成功、
+  `PHASE7_APPKIT_ACCEPTANCE_PASS criteria=5 source_refs=20 unit_tests=16 integration_tests=5 ui_assertions=11`。
 - `git diff --check`: 成功。

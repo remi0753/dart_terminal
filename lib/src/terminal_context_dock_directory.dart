@@ -217,6 +217,7 @@ final class TerminalContextDockDirectoryController {
     (int count, _TerminalContextDockDirectoryWindowState window) =>
         count +
         window.operations.length +
+        (window.refresh?.activeOperationCount ?? 0) +
         (window.searchOperation == null ? 0 : 1) +
         (window.goToOperation == null ? 0 : 1),
   );
@@ -249,11 +250,13 @@ final class TerminalContextDockDirectoryController {
 
   bool refreshWindow(TerminalWindowId windowId, PaneId paneId) {
     if (!canRefreshWindow(windowId, paneId)) return false;
-    final _TerminalContextDockDirectoryWindowState? before = _windows[windowId];
+    final _TerminalContextDockDirectoryRefresh? before =
+        _windows[windowId]?.refresh;
     synchronize(refreshPaneIds: <PaneId>{paneId});
     final _TerminalContextDockDirectoryWindowState? after = _windows[windowId];
     return after != null &&
-        !identical(before, after) &&
+        after.refresh != null &&
+        !identical(before, after.refresh) &&
         after.paneId == paneId &&
         after.resolution?.isAvailable == true;
   }
@@ -425,12 +428,14 @@ final class TerminalContextDockDirectoryController {
           _commandRefreshPaneIds.remove(dock.targetPaneId);
           _deferredRefreshPaneIds.remove(dock.targetPaneId);
         }
-        if (retained != null &&
-            retained.matches(dock, resolution) &&
-            !refreshAvailableSnapshot) {
+        if (retained != null && retained.matches(dock, resolution)) {
           retained.resolution = resolution;
           _synchronizeHiddenVisibility(retained, dock.pane.showHiddenEntries);
           if (resolution.isAvailable) _recordRecentRoot(resolution.path!);
+          if (refreshAvailableSnapshot) {
+            _startRefresh(retained, dock);
+            continue;
+          }
           _ensureExpandedLoads(retained);
           _ensureSearch(retained, dock);
           _publishResultCount(retained);
@@ -712,6 +717,207 @@ final class TerminalContextDockDirectoryController {
         },
       ),
     );
+  }
+
+  /// Reloads one available projection without exposing an intermediate empty
+  /// generation. Root, expanded children, and an active Search are staged and
+  /// committed together after every owned operation finishes.
+  void _startRefresh(
+    _TerminalContextDockDirectoryWindowState window,
+    TerminalContextDockWindowSnapshot dock,
+  ) {
+    final String? root = window.resolution?.path;
+    if (root == null) return;
+    window.cancelRefresh();
+    for (final TerminalDirectorySnapshotOperation operation
+        in window.operations.values) {
+      operation.cancel();
+    }
+    window.operations.clear();
+    window.searchOperation?.cancel();
+    window
+      ..searchOperation = null
+      ..searchGeneration = null;
+
+    final _TerminalContextDockDirectoryRefresh refresh =
+        _TerminalContextDockDirectoryRefresh(
+          generation: ++_generation,
+          rootPath: root,
+        );
+    window.refresh = refresh;
+    _startRefreshLoad(window, refresh, root);
+    final Set<String> expanded = _expandedByPane[window.paneId] ?? const {};
+    for (final String path in expanded) {
+      if (!_isWithinRoot(path, root)) continue;
+      if (!window.showHiddenEntries && _hasHiddenPathComponent(path, root)) {
+        continue;
+      }
+      _startRefreshLoad(window, refresh, path);
+    }
+    final String queryText = dock.pane.searchQuery;
+    if (dock.pane.navigatorMode == TerminalContextDockNavigatorMode.search &&
+        queryText.isNotEmpty &&
+        !TerminalFileSearchQuery.parse(queryText).isEmpty) {
+      _startRefreshSearch(window, refresh, queryText);
+    }
+    _commitRefreshIfComplete(window, refresh);
+  }
+
+  void _startRefreshLoad(
+    _TerminalContextDockDirectoryWindowState window,
+    _TerminalContextDockDirectoryRefresh refresh,
+    String path,
+  ) {
+    if (_isDisposed || refresh.operations.containsKey(path)) return;
+    final bool isRoot = path == refresh.rootPath;
+    late final TerminalDirectorySnapshotOperation operation;
+    try {
+      operation = _snapshotService.start(
+        TerminalDirectorySnapshotRequest(
+          rootPath: path,
+          generation: refresh.generation,
+          maximumEntries: isRoot
+              ? TerminalContextDockDirectoryLimits.maximumRootEntries
+              : TerminalContextDockDirectoryLimits.maximumChildEntries,
+          maximumTotalPathUtf8Bytes: isRoot
+              ? TerminalContextDockDirectoryLimits.maximumRootPathBytes
+              : TerminalContextDockDirectoryLimits.maximumChildPathBytes,
+        ),
+      );
+    } on Object {
+      return;
+    }
+    refresh.operations[path] = operation;
+    unawaited(
+      operation.result.then<void>(
+        (TerminalDirectorySnapshot result) {
+          if (!_acceptsRefresh(window, refresh) ||
+              result.generation != refresh.generation ||
+              !identical(refresh.operations[path], operation)) {
+            return;
+          }
+          refresh.operations.remove(path);
+          if (result.disposition !=
+              TerminalDirectorySnapshotDisposition.cancelled) {
+            refresh.snapshots[path] = result;
+          }
+          _commitRefreshIfComplete(window, refresh);
+        },
+        onError: (Object _, StackTrace _) {
+          if (!_acceptsRefresh(window, refresh) ||
+              !identical(refresh.operations[path], operation)) {
+            return;
+          }
+          refresh.operations.remove(path);
+          _commitRefreshIfComplete(window, refresh);
+        },
+      ),
+    );
+  }
+
+  void _startRefreshSearch(
+    _TerminalContextDockDirectoryWindowState window,
+    _TerminalContextDockDirectoryRefresh refresh,
+    String queryText,
+  ) {
+    final TerminalFileSearchQuery query = TerminalFileSearchQuery.parse(
+      queryText,
+    );
+    if (query.isEmpty) return;
+    late final TerminalFileSearchOperation operation;
+    try {
+      operation = _searchService.start(
+        TerminalFileSearchRequest(
+          query: query,
+          currentRoot: refresh.rootPath,
+          generation: refresh.generation,
+          recentRoots: _recentRoots,
+          explicitRoots: _explicitSearchRoots(),
+        ),
+        onProgress: (TerminalFileSearchSnapshot snapshot) {
+          if (_acceptsRefresh(window, refresh) &&
+              identical(refresh.searchOperation, operation) &&
+              snapshot.generation == refresh.generation) {
+            refresh.searchSnapshot = snapshot;
+          }
+        },
+      );
+    } on Object {
+      return;
+    }
+    refresh
+      ..searchQuery = queryText
+      ..searchOperation = operation;
+    unawaited(
+      operation.result.then<void>(
+        (TerminalFileSearchSnapshot snapshot) {
+          if (!_acceptsRefresh(window, refresh) ||
+              !identical(refresh.searchOperation, operation) ||
+              snapshot.generation != refresh.generation) {
+            return;
+          }
+          refresh
+            ..searchOperation = null
+            ..searchSnapshot = snapshot;
+          _commitRefreshIfComplete(window, refresh);
+        },
+        onError: (Object _, StackTrace _) {
+          if (!_acceptsRefresh(window, refresh) ||
+              !identical(refresh.searchOperation, operation)) {
+            return;
+          }
+          refresh.searchOperation = null;
+          _commitRefreshIfComplete(window, refresh);
+        },
+      ),
+    );
+  }
+
+  bool _acceptsRefresh(
+    _TerminalContextDockDirectoryWindowState window,
+    _TerminalContextDockDirectoryRefresh refresh,
+  ) =>
+      !_isDisposed &&
+      identical(_windows[window.windowId], window) &&
+      identical(window.refresh, refresh) &&
+      !refresh.cancelled;
+
+  void _commitRefreshIfComplete(
+    _TerminalContextDockDirectoryWindowState window,
+    _TerminalContextDockDirectoryRefresh refresh,
+  ) {
+    if (!_acceptsRefresh(window, refresh) ||
+        refresh.activeOperationCount != 0) {
+      return;
+    }
+    window.refresh = null;
+    final TerminalDirectorySnapshot? root = refresh.snapshots[refresh.rootPath];
+    if (root != null) window.rootSnapshot = root;
+    final Set<String> expanded = _expandedByPane[window.paneId] ?? const {};
+    for (final MapEntry<String, TerminalDirectorySnapshot> entry
+        in refresh.snapshots.entries) {
+      if (entry.key != refresh.rootPath && expanded.contains(entry.key)) {
+        window.childSnapshots[entry.key] = entry.value;
+      }
+    }
+    final TerminalContextDockWindowSnapshot? dock = dockState.snapshotForWindow(
+      window.windowId,
+    );
+    if (refresh.searchQuery != null &&
+        refresh.searchSnapshot != null &&
+        dock?.targetPaneId == window.paneId &&
+        dock?.pane.navigatorMode == TerminalContextDockNavigatorMode.search &&
+        dock?.pane.searchQuery == refresh.searchQuery) {
+      window
+        ..searchQuery = refresh.searchQuery
+        ..searchSnapshot = refresh.searchSnapshot;
+    } else if (dock != null) {
+      _ensureSearch(window, dock);
+    }
+    window.generation = refresh.generation;
+    _ensureExpandedLoads(window);
+    if (dock != null) _ensureGoTo(window, dock);
+    _publishAndNotify(window);
   }
 
   void _ensureExpandedLoads(_TerminalContextDockDirectoryWindowState window) {
@@ -1405,11 +1611,12 @@ final class _TerminalContextDockDirectoryWindowState {
 
   final TerminalWindowId windowId;
   final PaneId paneId;
-  final int generation;
+  int generation;
   TerminalWorkingDirectoryResolution? resolution;
   bool showHiddenEntries;
   final bool privacyRestricted;
   TerminalDirectorySnapshot? rootSnapshot;
+  _TerminalContextDockDirectoryRefresh? refresh;
   final Map<String, TerminalDirectorySnapshot> childSnapshots =
       <String, TerminalDirectorySnapshot>{};
   final Map<String, TerminalDirectorySnapshotOperation> operations =
@@ -1433,6 +1640,7 @@ final class _TerminalContextDockDirectoryWindowState {
       resolution?.path == next.path;
 
   void cancel() {
+    cancelRefresh();
     cancelSearch();
     cancelGoTo();
     pendingReveal = null;
@@ -1444,6 +1652,11 @@ final class _TerminalContextDockDirectoryWindowState {
     operations.clear();
     childSnapshots.clear();
     rootSnapshot = null;
+  }
+
+  void cancelRefresh() {
+    refresh?.cancel();
+    refresh = null;
   }
 
   void cancelSearch() {
@@ -1462,6 +1675,41 @@ final class _TerminalContextDockDirectoryWindowState {
     if (pendingReveal?.expectedMode == TerminalContextDockNavigatorMode.goTo) {
       pendingReveal = null;
     }
+  }
+}
+
+final class _TerminalContextDockDirectoryRefresh {
+  _TerminalContextDockDirectoryRefresh({
+    required this.generation,
+    required this.rootPath,
+  });
+
+  final int generation;
+  final String rootPath;
+  final Map<String, TerminalDirectorySnapshotOperation> operations =
+      <String, TerminalDirectorySnapshotOperation>{};
+  final Map<String, TerminalDirectorySnapshot> snapshots =
+      <String, TerminalDirectorySnapshot>{};
+  String? searchQuery;
+  TerminalFileSearchOperation? searchOperation;
+  TerminalFileSearchSnapshot? searchSnapshot;
+  bool cancelled = false;
+
+  int get activeOperationCount =>
+      operations.length + (searchOperation == null ? 0 : 1);
+
+  void cancel() {
+    if (cancelled) return;
+    cancelled = true;
+    for (final TerminalDirectorySnapshotOperation operation
+        in operations.values) {
+      operation.cancel();
+    }
+    operations.clear();
+    searchOperation?.cancel();
+    searchOperation = null;
+    snapshots.clear();
+    searchSnapshot = null;
   }
 }
 
@@ -1929,19 +2177,20 @@ final class TerminalContextDockDirectoryPresenter {
       );
     }
     final int? selectedLine = document.selectedLineStart;
-    resources.editor.setLineHighlight(
-      selectedLine == null
-          ? null
-          : TextEditorLineHighlight(
-              location: selectedLine,
-              color: TextViewColor.sRgb(
-                red: 0.22,
-                green: 0.45,
-                blue: 0.82,
-                alpha: 0.28,
-              ),
+    final TextEditorLineHighlight? lineHighlight = selectedLine == null
+        ? null
+        : TextEditorLineHighlight(
+            location: selectedLine,
+            color: TextViewColor.sRgb(
+              red: 0.22,
+              green: 0.45,
+              blue: 0.82,
+              alpha: 0.28,
             ),
-    );
+          );
+    if (resources.editor.lineHighlight != lineHighlight) {
+      resources.editor.setLineHighlight(lineHighlight);
+    }
     if (showsDirectory &&
         resources.document?.selectedResultIndex !=
             document.selectedResultIndex &&
