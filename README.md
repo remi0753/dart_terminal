@@ -94,7 +94,9 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   current subtreeをbounded探索して必要なancestorだけをlazy展開し、一致rowへ選択を移す。Shift-Command-MのMoveはquery入力を止めて
   tree navigationだけを所有する。SearchとGo Toのqueryはpaneごとに独立して保持する。
   EscapeでNavigator modeとqueryを保ったままterminalへ戻り、Dockの表示は`Mode: Terminal`へ切り替わる。
-  terminal activity後は同じworking directoryも再取得し、開いたsubtreeを維持したまま
+  terminalへcommandを送信した後は、最後のoutput burstまたはforeground process終了を起点に
+  同じworking directoryを一回だけ再取得する。idle中はfilesystemを走査せず、再取得中も直前の
+  tree／Searchを表示し、rootと開いたsubtreeを含む結果が揃った時に一度で差し替えて
   fileの追加・削除・metadata変更を反映する。Viewメニュー／Command Paletteの
   `Refresh Directory Navigator`（`view.refresh-directory-navigator`）から手動更新でき、
   任意の非予約chordを`keybind`で割り当てられる。矢印/Page/Command+矢印とrefresh中はPTY write 0を保つ

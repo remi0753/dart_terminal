@@ -1182,6 +1182,7 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
     'expanded folder loads hidden and visible children while retaining metadata',
   );
   final int refreshGeneration = snapshot.generation;
+  final int refreshCommitBaseline = controller.refreshCommitCount;
   final int rootListCount = files.listCount('/root');
   final int childListCount = files.listCount('/root/folder');
   controller.scheduleSynchronize(changedPaneId: firstPane);
@@ -1249,6 +1250,7 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
         snapshot.rows.first.isExpanded &&
         files.listCount('/root') == rootListCount + 1 &&
         files.listCount('/root/folder') == childListCount + 1 &&
+        controller.refreshCommitCount == refreshCommitBaseline + 1 &&
         projectionChangeCount == refreshChangeBaseline + 1,
     'coalesced terminal activity atomically publishes the refreshed tree once',
   );
@@ -1258,7 +1260,10 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
     ..includeCreatedChildFile = false
     ..nestedFileSize = 7;
   controller.noteCommandSubmitted(firstPane);
-  controller.scheduleSynchronize(changedPaneId: firstPane);
+  await Future<void>.delayed(
+    TerminalContextDockDirectoryLimits.processCompletionDebounce +
+        const Duration(milliseconds: 25),
+  );
   await _waitUntil(
     () =>
         controller.snapshotForWindow(window.id)!.generation !=
@@ -1273,7 +1278,7 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
               row.entry.path.endsWith('/created-child.txt'),
         ) &&
         snapshot.rows.first.isExpanded,
-    'a later terminal activity refresh removes stale entries without collapsing the tree',
+    'a submitted command with no later screen activity still refreshes once without collapsing the tree',
   );
   files.includeCreatedRootFile = true;
   final int manualRefreshGeneration = snapshot.generation;

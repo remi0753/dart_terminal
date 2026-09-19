@@ -4647,8 +4647,8 @@ final class TerminalApplication {
               for (final PaneId resumed in observable.difference(
                 directoryObservableProcessPaneIds,
               )) {
-                contextDockDirectoryController?.scheduleSynchronize(
-                  changedPaneId: resumed,
+                contextDockDirectoryController?.scheduleCommandCompletion(
+                  resumed,
                 );
               }
               directoryObservableProcessPaneIds
@@ -8749,9 +8749,30 @@ final class TerminalApplication {
                   row.entry.path == hiddenFixtureDirectory.path,
             );
       }, 'Context Dock toggle did not project the real plain-sh cwd tree');
+      await Future<void>.delayed(
+        TerminalContextDockProcessLimits.processStatePollInterval +
+            TerminalContextDockDirectoryLimits.terminalChangeDebounce,
+      );
+      final int idleRefreshGeneration = contextDockDirectory
+          .snapshotForWindow(initialWindow.id)!
+          .generation;
+      final int idleRefreshCommitCount =
+          contextDockDirectory.refreshCommitCount;
+      await Future<void>.delayed(
+        TerminalContextDockProcessLimits.processStatePollInterval +
+            TerminalContextDockDirectoryLimits.terminalChangeDebounce,
+      );
+      _expectLifecycle(
+        contextDockDirectory.snapshotForWindow(initialWindow.id)!.generation ==
+                idleRefreshGeneration &&
+            contextDockDirectory.refreshCommitCount == idleRefreshCommitCount,
+        'idle terminal/process polling unexpectedly refreshed Directory Navigator',
+      );
       final int automaticRefreshGeneration = contextDockDirectory
           .snapshotForWindow(initialWindow.id)!
           .generation;
+      final int automaticRefreshCommitCount =
+          contextDockDirectory.refreshCommitCount;
       initialPane.insertText(
         "touch command-created.txt; "
         "printf '\\r\\n__DT_NAV_REFRESH_READY__\\r\\n'",
@@ -8769,10 +8790,30 @@ final class TerminalApplication {
                   row.entry.path == commandCreatedFile.path,
             );
       }, 'terminal command completion did not refresh the same-cwd tree');
+      final int automaticRefreshCompletedGeneration = contextDockDirectory
+          .snapshotForWindow(initialWindow.id)!
+          .generation;
+      await Future<void>.delayed(
+        TerminalContextDockProcessLimits.processStatePollInterval +
+            TerminalContextDockDirectoryLimits.terminalChangeDebounce,
+      );
+      _expectLifecycle(
+        contextDockDirectory.refreshCommitCount ==
+                automaticRefreshCommitCount + 1 &&
+            contextDockDirectory
+                    .snapshotForWindow(initialWindow.id)!
+                    .generation ==
+                automaticRefreshCompletedGeneration &&
+            contextDockDirectory.snapshotForWindow(initialWindow.id)!.status !=
+                TerminalContextDockDirectoryStatus.loading,
+        'one command did not produce exactly one atomic Directory Navigator refresh',
+      );
 
       final int silentRefreshGeneration = contextDockDirectory
           .snapshotForWindow(initialWindow.id)!
           .generation;
+      final int silentRefreshCommitCount =
+          contextDockDirectory.refreshCommitCount;
       initialPane.insertText(
         "PS1=''; sleep 1; touch silent-command-created.txt",
       );
@@ -8790,12 +8831,38 @@ final class TerminalApplication {
                   row.entry.path == silentCommandCreatedFile.path,
             );
       }, 'silent command completion did not refresh the same-cwd tree');
+      final int silentRefreshCompletedGeneration = contextDockDirectory
+          .snapshotForWindow(initialWindow.id)!
+          .generation;
+      await Future<void>.delayed(
+        TerminalContextDockProcessLimits.processStatePollInterval +
+            TerminalContextDockDirectoryLimits.terminalChangeDebounce,
+      );
+      _expectLifecycle(
+        contextDockDirectory.refreshCommitCount ==
+                silentRefreshCommitCount + 1 &&
+            contextDockDirectory
+                    .snapshotForWindow(initialWindow.id)!
+                    .generation ==
+                silentRefreshCompletedGeneration &&
+            contextDockDirectory.snapshotForWindow(initialWindow.id)!.status !=
+                TerminalContextDockDirectoryStatus.loading,
+        'silent command completion did not publish one atomic refresh: '
+        'before=$silentRefreshCommitCount '
+        'after=${contextDockDirectory.refreshCommitCount} '
+        'generation_before=$silentRefreshGeneration '
+        'generation_after=${contextDockDirectory.snapshotForWindow(initialWindow.id)!.generation} '
+        'settled_generation=$silentRefreshCompletedGeneration '
+        'status=${contextDockDirectory.snapshotForWindow(initialWindow.id)!.status.name}',
+      );
 
       final int manualRefreshWriteBaseline =
           writeEnqueuedCounts[initialPaneId] ?? 0;
       final int manualRefreshGeneration = contextDockDirectory
           .snapshotForWindow(initialWindow.id)!
           .generation;
+      final int manualRefreshCommitCount =
+          contextDockDirectory.refreshCommitCount;
       manualRefreshFile.writeAsStringSync('manual');
       _expectLifecycle(
         dispatcher
@@ -8826,6 +8893,10 @@ final class TerminalApplication {
             (writeEnqueuedCounts[initialPaneId] ?? 0) ==
                 manualRefreshWriteBaseline;
       }, 'manual refresh did not update the tree with zero PTY writes');
+      _expectLifecycle(
+        contextDockDirectory.refreshCommitCount == manualRefreshCommitCount + 1,
+        'manual refresh did not publish exactly one atomic snapshot',
+      );
       void expectContextDockAppearance() {
         final TerminalContextDockAppearance? appearance = contextDockPresenter
             .nativeAppearanceForWindow(initialWindow.id);
@@ -9803,6 +9874,12 @@ final class TerminalApplication {
       );
       contextDockProcess.synchronize();
       reconcile();
+      await waitFor(
+        () => dispatcher
+            .snapshot(TerminalActionId.searchFilesAndFolders)
+            .isEnabled,
+        'Navigator action did not recover after command-completion settling',
+      );
       await dispatch(TerminalActionId.searchFilesAndFolders);
       await waitFor(
         () => contextDockState
@@ -10177,6 +10254,8 @@ final class TerminalApplication {
         'navigator_tree=true navigator_search=true navigator_copy=true '
         'navigator_insert=true navigator_zero_write=true '
         'navigator_auto_refresh=true navigator_manual_refresh=true '
+        'navigator_idle_stable=true navigator_refresh_once=true '
+        'navigator_atomic_refresh=true '
         'navigator_privacy=true navigator_accessibility=true '
         'process_inspector=true process_pipeline=true process_input=true '
         'process_shell_owned=true process_short=true process_elapsed=true '

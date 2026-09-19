@@ -26,6 +26,7 @@ abstract final class TerminalContextDockDirectoryLimits {
   static const double minimumNavigatorHeight = 120;
   static const double minimumDetailsHeight = 140;
   static const Duration terminalChangeDebounce = Duration(milliseconds: 75);
+  static const Duration processCompletionDebounce = Duration(milliseconds: 575);
 }
 
 typedef TerminalContextDockWorkingDirectoryResolver =
@@ -204,14 +205,18 @@ final class TerminalContextDockDirectoryController {
   final Map<PaneId, Set<String>> _expandedByPane = <PaneId, Set<String>>{};
   final List<String> _recentRoots = <String>[];
   final Set<PaneId> _commandRefreshPaneIds = <PaneId>{};
+  final Set<PaneId> _processSuspendedRefreshPaneIds = <PaneId>{};
   final Set<PaneId> _pendingRefreshPaneIds = <PaneId>{};
   final Set<PaneId> _deferredRefreshPaneIds = <PaneId>{};
   int _generation = 0;
+  int _refreshCommitCount = 0;
   Timer? _scheduledSynchronization;
+  bool _scheduledProcessCompletion = false;
   bool _synchronizing = false;
   bool _isDisposed = false;
 
   bool get isDisposed => _isDisposed;
+  int get refreshCommitCount => _refreshCommitCount;
   int get activeOperationCount => _windows.values.fold<int>(
     0,
     (int count, _TerminalContextDockDirectoryWindowState window) =>
@@ -292,35 +297,77 @@ final class TerminalContextDockDirectoryController {
   void noteCommandSubmitted(PaneId paneId) {
     if (_isDisposed) return;
     _commandRefreshPaneIds.add(paneId);
+    // A very short command can finish between process polls and produce no
+    // screen output (for example, a silent builtin under an empty prompt).
+    // Keep a bounded fallback so that command still receives its one refresh.
+    _scheduleSynchronize(
+      changedPaneId: paneId,
+      delay: TerminalContextDockDirectoryLimits.processCompletionDebounce,
+      confirmsProcessCompletion: true,
+    );
   }
 
   /// Debounces activity only for panes with a submitted command. Cursor blink,
   /// redraw, and other idle session changes therefore never start filesystem
   /// work. Restarting the timer waits for the command's output burst to settle.
   void scheduleSynchronize({PaneId? changedPaneId}) {
+    _scheduleSynchronize(
+      changedPaneId: changedPaneId,
+      delay: TerminalContextDockDirectoryLimits.terminalChangeDebounce,
+      confirmsProcessCompletion: false,
+    );
+  }
+
+  /// Process observation can briefly return to idle before the following poll
+  /// confirms the final shell state. Waits two complete process polls plus the
+  /// ordinary output debounce before consuming the command refresh token.
+  void scheduleCommandCompletion(PaneId paneId) {
+    _scheduleSynchronize(
+      changedPaneId: paneId,
+      delay: TerminalContextDockDirectoryLimits.processCompletionDebounce,
+      confirmsProcessCompletion: true,
+    );
+  }
+
+  void _scheduleSynchronize({
+    required PaneId? changedPaneId,
+    required Duration delay,
+    required bool confirmsProcessCompletion,
+  }) {
     if (_isDisposed) return;
     if (changedPaneId != null) {
       if (!_commandRefreshPaneIds.contains(changedPaneId)) return;
       _pendingRefreshPaneIds.add(changedPaneId);
+      if (_processSuspendedRefreshPaneIds.contains(changedPaneId) &&
+          !confirmsProcessCompletion &&
+          _scheduledSynchronization != null &&
+          _scheduledProcessCompletion) {
+        return;
+      }
       _scheduledSynchronization?.cancel();
       _scheduledSynchronization = null;
     } else if (_scheduledSynchronization != null) {
       return;
     }
-    _scheduledSynchronization = Timer(
-      TerminalContextDockDirectoryLimits.terminalChangeDebounce,
-      () {
-        _scheduledSynchronization = null;
-        final Set<PaneId> refreshPaneIds = Set<PaneId>.of(
-          _pendingRefreshPaneIds,
-        );
-        _pendingRefreshPaneIds.clear();
-        synchronize(
-          refreshPaneIds: refreshPaneIds,
-          deferRefreshWhileNavigatorOwnsInput: true,
-        );
-      },
-    );
+    final Duration effectiveDelay =
+        changedPaneId != null &&
+            _processSuspendedRefreshPaneIds.contains(changedPaneId)
+        ? TerminalContextDockDirectoryLimits.processCompletionDebounce
+        : delay;
+    _scheduledProcessCompletion =
+        confirmsProcessCompletion ||
+        (changedPaneId != null &&
+            _processSuspendedRefreshPaneIds.contains(changedPaneId));
+    _scheduledSynchronization = Timer(effectiveDelay, () {
+      _scheduledSynchronization = null;
+      _scheduledProcessCompletion = false;
+      final Set<PaneId> refreshPaneIds = Set<PaneId>.of(_pendingRefreshPaneIds);
+      _pendingRefreshPaneIds.clear();
+      synchronize(
+        refreshPaneIds: refreshPaneIds,
+        deferRefreshWhileNavigatorOwnsInput: true,
+      );
+    });
   }
 
   /// Re-resolves cwd on terminal output/focus changes and cancels stale work.
@@ -344,6 +391,9 @@ final class TerminalContextDockDirectoryController {
         (PaneId paneId, Set<String> _) => !livePaneIds.contains(paneId),
       );
       _commandRefreshPaneIds.removeWhere(
+        (PaneId paneId) => !livePaneIds.contains(paneId),
+      );
+      _processSuspendedRefreshPaneIds.removeWhere(
         (PaneId paneId) => !livePaneIds.contains(paneId),
       );
       _pendingRefreshPaneIds.removeWhere(
@@ -376,6 +426,7 @@ final class TerminalContextDockDirectoryController {
         if (dock == null || !dock.isVisible) {
           if (dock != null) {
             _commandRefreshPaneIds.remove(dock.targetPaneId);
+            _processSuspendedRefreshPaneIds.remove(dock.targetPaneId);
             _pendingRefreshPaneIds.remove(dock.targetPaneId);
             _deferredRefreshPaneIds.remove(dock.targetPaneId);
           }
@@ -383,11 +434,27 @@ final class TerminalContextDockDirectoryController {
           continue;
         }
         if (!_readCanObservePane(dock.targetPaneId)) {
+          if (_commandRefreshPaneIds.contains(dock.targetPaneId)) {
+            _processSuspendedRefreshPaneIds.add(dock.targetPaneId);
+          }
           _replacePrivacyUnavailable(
             logicalWindow.id,
             dock.targetPaneId,
             dock.pane.showHiddenEntries,
           );
+          continue;
+        }
+        final _TerminalContextDockDirectoryWindowState? suspended =
+            _windows[logicalWindow.id];
+        if (suspended?.paneId == dock.targetPaneId &&
+            suspended?.privacyRestricted == true &&
+            _processSuspendedRefreshPaneIds.contains(dock.targetPaneId) &&
+            !refreshPaneIds.contains(dock.targetPaneId) &&
+            !_deferredRefreshPaneIds.contains(dock.targetPaneId)) {
+          // A general hierarchy reconcile may observe one transient idle
+          // sample before the command-completion debounce has established a
+          // stable shell. Keep the content-free privacy projection and let the
+          // owned completion timer perform the single fresh load.
           continue;
         }
         TerminalWorkingDirectoryResolution? resolution;
@@ -399,6 +466,7 @@ final class TerminalContextDockDirectoryController {
         } on Object {
           if (refreshPaneIds.contains(dock.targetPaneId)) {
             _commandRefreshPaneIds.remove(dock.targetPaneId);
+            _processSuspendedRefreshPaneIds.remove(dock.targetPaneId);
           }
           _replaceUnavailable(
             logicalWindow.id,
@@ -425,8 +493,11 @@ final class TerminalContextDockDirectoryController {
             resolution.isAvailable &&
             (applyIncomingRefresh || applyDeferredRefresh);
         if (applyIncomingRefresh || applyDeferredRefresh) {
-          _commandRefreshPaneIds.remove(dock.targetPaneId);
           _deferredRefreshPaneIds.remove(dock.targetPaneId);
+          if (!resolution.isAvailable) {
+            _commandRefreshPaneIds.remove(dock.targetPaneId);
+            _processSuspendedRefreshPaneIds.remove(dock.targetPaneId);
+          }
         }
         if (retained != null && retained.matches(dock, resolution)) {
           retained.resolution = resolution;
@@ -454,8 +525,12 @@ final class TerminalContextDockDirectoryController {
         _windows[logicalWindow.id] = next;
         if (resolution.isAvailable) {
           _recordRecentRoot(resolution.path!);
-          _startLoad(next, resolution.path!, isRoot: true);
-          _ensureSearch(next, dock);
+          if (refreshAvailableSnapshot) {
+            _startRefresh(next, dock);
+          } else {
+            _startLoad(next, resolution.path!, isRoot: true);
+            _ensureSearch(next, dock);
+          }
         }
         _publishResultCount(next);
         _ensureGoTo(next, dock);
@@ -571,7 +646,9 @@ final class TerminalContextDockDirectoryController {
     _isDisposed = true;
     _scheduledSynchronization?.cancel();
     _scheduledSynchronization = null;
+    _scheduledProcessCompletion = false;
     _commandRefreshPaneIds.clear();
+    _processSuspendedRefreshPaneIds.clear();
     _pendingRefreshPaneIds.clear();
     _deferredRefreshPaneIds.clear();
     _clearWindows();
@@ -915,6 +992,9 @@ final class TerminalContextDockDirectoryController {
       _ensureSearch(window, dock);
     }
     window.generation = refresh.generation;
+    _commandRefreshPaneIds.remove(window.paneId);
+    _processSuspendedRefreshPaneIds.remove(window.paneId);
+    _refreshCommitCount++;
     _ensureExpandedLoads(window);
     if (dock != null) _ensureGoTo(window, dock);
     _publishAndNotify(window);

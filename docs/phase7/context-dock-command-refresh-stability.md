@@ -99,6 +99,16 @@ Directory controllerへ渡している。通知にはcommand outputだけでな�
   専用callbackとconfiguration reload経路が既にあるため、idle screen通知からpresentationを触る必要はない。
   hierarchy再投影でdocumentが同一の場合は、選択行highlightも現在値と比較し、同じnative highlightを
   再設定しない。これにより同一documentの再描画要求を出さない。
+- command送信直後に575 msのfallbackを予約する。これは250 msのprocess poll二回分と通常の75 ms
+  output debounceを合わせた値で、画面出力もforeground transitionも観測できない短いsilent commandを
+  取りこぼさない。実際のoutput通知はこのtimerを通常debounceへ置き換え、foregroundを観測した場合は
+  privacy projectionを維持したままprocess復帰後の一回へ引き継ぐ。
+- foreground PGID中は既存のSEC-05境界どおりDirectory snapshotを破棄する。process復帰直後の一時的な
+  idle sampleで一般reconcileが先にlistを開始しないよう、command-completion timerが所有するrefreshまで
+  content-free projectionを維持する。tokenはrefresh開始時ではなくatomic commit時にconsumeするため、
+  foreground検出でcancelされたbatchが後続refreshを失わせない。
+- process復帰用timerを予約した後のcursor／screen通知は、そのtimerを延長しない。これにより継続する
+  idle通知がcompletion refreshを飢餓させず、command一回につきatomic commitも一回に限定される。
 
 ## 検証記録
 
@@ -128,3 +138,35 @@ Directory controllerへ渡している。通知にはcommand outputだけでな�
 - `DART_SUPPRESS_ANALYTICS=true dart run test/phase7_appkit_acceptance_test.dart`: 成功、
   `PHASE7_APPKIT_ACCEPTANCE_PASS criteria=5 source_refs=20 unit_tests=16 integration_tests=5 ui_assertions=11`。
 - `git diff --check`: 成功。
+
+### 製品受け入れ
+
+- `CI=true DART_SUPPRESS_ANALYTICS=true dart format ...`: 成功、変更なし。
+- `CI=true DART_SUPPRESS_ANALYTICS=true dart analyze`: 成功、`No issues found!`。
+- `DART_SUPPRESS_ANALYTICS=true dart run test/terminal_context_dock_test.dart`: 成功。tokenなしのidle通知では
+  generation／list回数／commit countが不変、重複activityはatomic commit一回、遅延list中は旧tree／Searchを
+  維持、画面出力のないcommandも575 ms fallbackで一回更新することを確認した。
+- `make RUNTIME_ARCH=arm64 developer-jit-native-content`: 成功、
+  `RUNTIME_NATIVE_CONTENT_INTEGRATION_PASS ... elapsed_ms=16018`。idle安定、短いcommand、silent command、
+  manual refreshの各commit数と非loading projectionを実PTYで受け入れた。
+- `make RUNTIME_ARCH=arm64 release-aot-native-content`: 成功、
+  `RUNTIME_NATIVE_CONTENT_INTEGRATION_PASS ... elapsed_ms=15034`。Developer JITと同じ条件を受け入れた。
+- `make phase7-appkit-acceptance`、`make terminal-compatibility-regression-coverage`、
+  `make ghostty-p0-p1-gap-inventory`、`make release-candidate-daily-use-matrix`: すべて成功し、変更source hashを
+  持つ生成証跡を更新した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: 成功、`dart_terminal tests passed`。
+- `git diff --check`: 成功。
+
+### 失敗した試行と切り分け
+
+- process実行中も旧Directory snapshotを保持する案は、foreground PGID変更時にretained snapshotを破棄する
+  SEC-05 privacy契約に反するため不採用とした。process中はcontent-freeとし、復帰後だけ新snapshotを公開する。
+- process復帰後325 msで更新する試行は、次のpollで再びforegroundと判定されるtransitionを吸収できなかった。
+  二回のprocess pollとoutput debounceを待つ575 msへ変更した。
+- 575 ms timerを全screen通知でrestartする試行は、Release AOTで継続通知によりrefreshが実行されない状態に
+  なった。process-completion timerの所有元を記録し、一般通知では延長しないようにした。
+- 最終Developer JITの初回は既存Process Inspector fixtureがnative window focusを失い、argv document待機で
+  非決定的に失敗した。Directory refresh判定へ到達する前の失敗で、同一binaryの再実行は上記のとおり成功した。
+- Release AOTの途中試行ではECHO-off fixture終了直後にNavigator action availabilityを即時評価して失敗した。
+  process completion settling後にactionが復帰することを明示的に待つ受け入れへ修正し、その後のJIT／AOTと
+  全gateが成功した。
