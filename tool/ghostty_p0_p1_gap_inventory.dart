@@ -127,7 +127,7 @@ const Map<String, List<String>> _rowGapIds = <String, List<String>>{
   'QA-02': <String>['ghostty-differential-activation', 'hilite-mouse'],
   'REL-01': <String>['physical-duration-reliability'],
   'DIST-01': <String>['intel-native-handoff'],
-  'DIST-02': <String>['apple-service-acceptance'],
+  'DIST-02': <String>['clean-machine-distribution-acceptance'],
 };
 
 const List<_Gap> _gaps = <_Gap>[
@@ -168,13 +168,13 @@ const List<_Gap> _gaps = <_Gap>[
     reason: 'Exact x86_64 and Universal build, audit, and Rosetta evidence passes; only an Intel-host run is deferred.',
   ),
   _Gap(
-    id: 'apple-service-acceptance',
+    id: 'clean-machine-distribution-acceptance',
     kind: 'approved-external-follow-up',
     priority: 'P1',
     rowIds: <String>['DIST-02'],
     owner: 'docs/phase11/developer-id-notarization.md',
     productActionable: false,
-    reason: 'Credential-independent distribution gates pass; positive signing and notarization needs external authority.',
+    reason: 'Developer ID signing, Apple notarization, stapling, Gatekeeper, and local product audit pass; no-rebuild clean-machine launch remains external.',
   ),
 ];
 

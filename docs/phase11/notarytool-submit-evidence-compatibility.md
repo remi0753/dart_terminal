@@ -79,3 +79,6 @@ publisherはsubmit JSONにUUIDと`status`を必須としていた。しかし`su
 - service処理中に同一payloadを重複送信しない判断を採用した。このため本タスクではresponse parserの
   修正と全ローカルgateを完了とし、実公証Accepted、staple、Gatekeeper、clean-machine受け入れは
   既存の後続ROADMAP項目を未完了のまま維持する。credentialや秘密値は記録していない。
+- 2026-09-19: 後続の実tool variant修正後、実配布は公証Accepted、issue 0、staple、
+  Gatekeeper、最終product auditまで成功した。ここで記録した初回timeoutは当時の事実として残し、
+  現在の未完了範囲はclean-machine no-rebuild受け入れだけである。

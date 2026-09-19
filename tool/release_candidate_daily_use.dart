@@ -684,7 +684,7 @@ ReleaseCandidateDailyUseResult validateReleaseCandidateDailyUseMatrixSource(
     'ghostty-differential-activation',
     'physical-duration-reliability',
     'intel-native-handoff',
-    'apple-service-acceptance',
+    'clean-machine-distribution-acceptance',
   ];
   _expect(
     limitations.length == limitationIds.length,

@@ -1428,7 +1428,8 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 終了条件:
 
 - Developer ID／hardened runtime／公証の配布機構とfail-closed gateが揃う。
-  実credential／Apple serviceを使う正の受け入れは低優先follow-upとして追跡する。
+  実credential／Apple serviceを使うlocal正受け入れも完了し、clean-machine no-rebuildだけを
+  低優先follow-upとして追跡する。
 - release benchmark が下記予算と relative parity gate を満たす。
 - blocker/crash/data-loss/security bug が 0。
 - known limitation が文書化され、silent misbehavior がない。
@@ -1626,6 +1627,20 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （実施時に
   [`docs/phase11/notarytool-submit-evidence-compatibility.md`](docs/phase11/notarytool-submit-evidence-compatibility.md)
   を参照する）
+- [x] notarytool 1.1.3のsubmit／Accepted log応答variantを厳密に受理する
+  （実施時に
+  [`docs/phase11/notarytool-submit-message-variant.md`](docs/phase11/notarytool-submit-message-variant.md)
+  を参照する）
+  - [x] 句点なしupload成功messageをUUID／exact pathと組にして受理する
+  - [x] Accepted logの`issues: null`をissue 0として正規化する
+    （実施時に
+    [`docs/phase11/notarytool-log-null-issues.md`](docs/phase11/notarytool-log-null-issues.md)
+    を参照する）
+  - [x] 実配布でwait、log、staple、Gatekeeper、最終監査を受け入れる
+  - [x] distribution gap証跡をApple service受け入れからclean-machine no-rebuildへ更新する
+    （実施時に
+    [`docs/phase11/developer-id-evidence-transition.md`](docs/phase11/developer-id-evidence-transition.md)
+    を参照する）
 - [ ] 既存PTYのcompeting-reaper回帰fixtureの非決定性を調査し、実external-reap検証を安定化する
   （実施時に
   [`docs/phase2/pty-competing-reaper-fixture-determinism.md`](docs/phase2/pty-competing-reaper-fixture-determinism.md)
@@ -1634,7 +1649,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （主要ゴール達成後に実施し、
   [`docs/phase1/universal-runtime-matrix.md`](docs/phase1/universal-runtime-matrix.md)
   を実施時に参照する）
-- [ ] 実Developer ID署名、公証、staple／Gatekeeper／clean-machine no-rebuild受け入れ
+- [ ] 公証済みDeveloper ID配布物のclean-machine no-rebuild受け入れ
   （credential準備後に実施し、
   [`docs/phase11/developer-id-notarization.md`](docs/phase11/developer-id-notarization.md)
   を実施時に参照する）
@@ -1731,7 +1746,8 @@ audit、Intel-native の追加証跡は上記の主要ゴール後 follow-up で
 - parser/image/clipboard の security limit と fuzz gate が通る。
 - VoiceOver、Full Keyboard Access、Secure Input の checklist が通る。
 - Developer ID／hardened runtime／公証の配布機構とfail-closed gateが通る。
-  実credential／Apple serviceを使うfresh install/updateは主要ゴール後follow-upとする。
+  実credential／Apple serviceを使うlocal正受け入れも通り、fresh clean-machine install/updateは
+  主要ゴール後follow-upとする。
 - relative performance gate とbounded soak代替gateが通る。実時間72-hour soakは
   主要ゴール後follow-upとして追跡する。
 - crash/data loss/security blocker が 0 で、known limitations が公開されている。

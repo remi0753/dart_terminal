@@ -55,7 +55,7 @@
     },
     {
       "path": "compatibility/ghostty_p0_p1_gap_inventory.json",
-      "sha256": "afd79d66a9b0cb1d7b9f409b96839a85860111ba41193b2f34262900cbf63b2f"
+      "sha256": "d15fc3591f6e9a6c1168327642f557a538ffa2e1d6a910e42a9a6a4677e04d26"
     },
     {
       "path": "benchmark/evidence/product-performance-regression-macos-arm64-m1.json",
@@ -115,7 +115,7 @@
     },
     {
       "path": "tool/release_candidate_daily_use.dart",
-      "sha256": "4b36fc9b47aaa1393d740fa6027661de77737a892793d06687491f70ebe0b6fa"
+      "sha256": "dd9c9ecae36b508453052928e7362507823468faf19714dc344ce87c2c9ac479"
     },
     {
       "path": "test/release_candidate_daily_use_test.dart",
@@ -469,7 +469,7 @@
       "claimed_as_pass": false
     },
     {
-      "id": "apple-service-acceptance",
+      "id": "clean-machine-distribution-acceptance",
       "kind": "approved-external-follow-up",
       "owner": "docs/phase11/developer-id-notarization.md",
       "release_blocker": false,

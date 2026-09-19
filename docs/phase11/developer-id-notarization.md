@@ -363,3 +363,15 @@ external-service acceptance follow-up does not claim that acceptance occurred.
   analysis, distribution policy negatives, security stress, and root tests.
   `git diff --check` passed. No duration-based soak was run or required for
   this documentation/acceptance-boundary change.
+- 2026-09-19: the user supplied a valid Developer ID Application identity,
+  matching Team ID, and Keychain-backed `notarytool` profile. The real
+  `make release-distribution-verify` flow signed all nine code images and the
+  outer application with hardened runtime and secure timestamps, preserved the
+  exact empty entitlement set, and received an Accepted Apple notarization log
+  with format version 1 and zero issues.
+- The same run stapled and validated the ticket, revalidated the signature,
+  passed Gatekeeper as a Notarized Developer ID application, atomically
+  published the app, ZIP, and bounded manifest, and passed the final product
+  audit with nine code images. Credentials and raw ticket contents were not
+  recorded. Only no-rebuild transfer and launch on a separate clean machine
+  remain in the low-priority acceptance follow-up.

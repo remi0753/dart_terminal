@@ -1331,9 +1331,10 @@ code/name containing `terminal` may be added to `dart_appkit`.
 - Updating the pinned Ghostty revision merely because upstream has moved.
 - Live network capture, unbounded differential fuzzing, or real-time 24/72-hour
   and 30-day campaigns.
-- Real Developer ID credentials, Apple notarization service acceptance, and an
-  Intel-native host run; those are already-approved follow-ups and cannot mask
-  a product correctness gap.
+- Clean-machine no-rebuild distribution acceptance and an Intel-native host
+  run; those are already-approved follow-ups and cannot mask a product
+  correctness gap. Developer ID signing and Apple notarization were later
+  accepted locally outside this aggregate.
 - Product-specific changes or naming in `dart_appkit`.
 
 ## Dependencies
