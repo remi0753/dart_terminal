@@ -1604,6 +1604,13 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
 
 ### 主要ゴール後の低優先 follow-up
 
+- [ ] Directory Navigatorを各コマンド完了後と手動操作で更新する
+  （実施時に
+  [`docs/phase7/context-dock-directory-refresh.md`](docs/phase7/context-dock-directory-refresh.md)
+  を参照して順に実施する）
+  - [x] 同一working directoryのsnapshotをterminal activity後に再取得し、展開状態を保持する
+  - [ ] 手動refresh actionをmenu／Command Palette／keybind経路へ追加する
+  - [ ] 実terminal commandによる自動更新をDeveloper JIT／Release AOTで受け入れる
 - [ ] 既存PTYのcompeting-reaper回帰fixtureの非決定性を調査し、実external-reap検証を安定化する
   （実施時に
   [`docs/phase2/pty-competing-reaper-fixture-determinism.md`](docs/phase2/pty-competing-reaper-fixture-determinism.md)

@@ -1179,6 +1179,68 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
             7,
     'expanded folder loads hidden and visible children while retaining metadata',
   );
+  final int refreshGeneration = snapshot.generation;
+  final int rootListCount = files.listCount('/root');
+  final int childListCount = files.listCount('/root/folder');
+  files
+    ..includeCreatedRootFile = true
+    ..includeCreatedChildFile = true
+    ..nestedFileSize = 11;
+  controller
+    ..scheduleSynchronize(changedPaneId: firstPane)
+    ..scheduleSynchronize(changedPaneId: firstPane);
+  await _waitUntil(
+    () =>
+        controller.snapshotForWindow(window.id)!.generation !=
+            refreshGeneration &&
+        controller.activeOperationCount == 0,
+  );
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
+    snapshot.rows.any(
+          (TerminalContextDockDirectoryRow row) =>
+              row.entry.path == '/root/created.txt',
+        ) &&
+        snapshot.rows.any(
+          (TerminalContextDockDirectoryRow row) =>
+              row.entry.path == '/root/folder/created-child.txt',
+        ) &&
+        snapshot.rows
+                .firstWhere(
+                  (TerminalContextDockDirectoryRow row) =>
+                      row.entry.path == '/root/folder/nested.txt',
+                )
+                .entry
+                .metadata
+                .size ==
+            11 &&
+        snapshot.rows.first.isExpanded &&
+        files.listCount('/root') == rootListCount + 1 &&
+        files.listCount('/root/folder') == childListCount + 1,
+    'coalesced terminal activity refreshes the same cwd and expanded subtree once',
+  );
+  final int removalGeneration = snapshot.generation;
+  files
+    ..includeCreatedRootFile = false
+    ..includeCreatedChildFile = false
+    ..nestedFileSize = 7;
+  controller.scheduleSynchronize(changedPaneId: firstPane);
+  await _waitUntil(
+    () =>
+        controller.snapshotForWindow(window.id)!.generation !=
+            removalGeneration &&
+        controller.activeOperationCount == 0,
+  );
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
+    !snapshot.rows.any(
+          (TerminalContextDockDirectoryRow row) =>
+              row.entry.path.endsWith('/created.txt') ||
+              row.entry.path.endsWith('/created-child.txt'),
+        ) &&
+        snapshot.rows.first.isExpanded,
+    'a later terminal activity refresh removes stale entries without collapsing the tree',
+  );
   _expect(
     controller.handleTreeIntent(
           window.id,
@@ -1515,9 +1577,16 @@ final class _ContextDockDirectoryFileSystem
     implements TerminalDirectoryFileSystem {
   final Completer<void> slowListStarted = Completer<void>();
   final Completer<void> releaseSlowList = Completer<void>();
+  final Map<String, int> _listCounts = <String, int>{};
+  bool includeCreatedRootFile = false;
+  bool includeCreatedChildFile = false;
+  int nestedFileSize = 7;
+
+  int listCount(String rootPath) => _listCounts[rootPath] ?? 0;
 
   @override
   Stream<TerminalDirectoryFileSystemEntry> list(String rootPath) async* {
+    _listCounts.update(rootPath, (int count) => count + 1, ifAbsent: () => 1);
     if (rootPath == '/slow') {
       slowListStarted.complete();
       await releaseSlowList.future;
@@ -1539,6 +1608,13 @@ final class _ContextDockDirectoryFileSystem
         path: '/root/folder',
         kind: TerminalDirectoryEntryKind.directory,
       );
+      if (includeCreatedRootFile) {
+        yield const TerminalDirectoryFileSystemEntry(
+          name: 'created.txt',
+          path: '/root/created.txt',
+          kind: TerminalDirectoryEntryKind.file,
+        );
+      }
       return;
     }
     if (rootPath == '/root/folder') {
@@ -1557,6 +1633,13 @@ final class _ContextDockDirectoryFileSystem
         path: '/root/folder/nested.txt',
         kind: TerminalDirectoryEntryKind.file,
       );
+      if (includeCreatedChildFile) {
+        yield const TerminalDirectoryFileSystemEntry(
+          name: 'created-child.txt',
+          path: '/root/folder/created-child.txt',
+          kind: TerminalDirectoryEntryKind.file,
+        );
+      }
       return;
     }
     if (rootPath == '/root/folder/.secret') {
@@ -1589,7 +1672,7 @@ final class _ContextDockDirectoryFileSystem
     TerminalDirectoryFileSystemEntry entry,
   ) async => TerminalDirectoryFileSystemMetadata(
     mode: entry.kind == TerminalDirectoryEntryKind.directory ? 0x1ed : 0x1a4,
-    size: entry.name == 'nested.txt' ? 7 : 3,
+    size: entry.name == 'nested.txt' ? nestedFileSize : 3,
     modifiedMicrosecondsSinceEpoch: 1,
   );
 }

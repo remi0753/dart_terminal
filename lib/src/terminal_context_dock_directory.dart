@@ -203,6 +203,7 @@ final class TerminalContextDockDirectoryController {
   _windows = <TerminalWindowId, _TerminalContextDockDirectoryWindowState>{};
   final Map<PaneId, Set<String>> _expandedByPane = <PaneId, Set<String>>{};
   final List<String> _recentRoots = <String>[];
+  final Set<PaneId> _pendingRefreshPaneIds = <PaneId>{};
   int _generation = 0;
   Timer? _scheduledSynchronization;
   bool _synchronizing = false;
@@ -252,20 +253,27 @@ final class TerminalContextDockDirectoryController {
     );
   }
 
-  /// Coalesces high-frequency terminal output into one cwd observation.
-  void scheduleSynchronize() {
-    if (_isDisposed || _scheduledSynchronization != null) return;
+  /// Coalesces high-frequency terminal activity into one cwd observation and
+  /// refreshes the visible snapshot owned by the pane that changed.
+  void scheduleSynchronize({PaneId? changedPaneId}) {
+    if (_isDisposed) return;
+    if (changedPaneId != null) _pendingRefreshPaneIds.add(changedPaneId);
+    if (_scheduledSynchronization != null) return;
     _scheduledSynchronization = Timer(
       TerminalContextDockDirectoryLimits.terminalChangeDebounce,
       () {
         _scheduledSynchronization = null;
-        synchronize();
+        final Set<PaneId> refreshPaneIds = Set<PaneId>.of(
+          _pendingRefreshPaneIds,
+        );
+        _pendingRefreshPaneIds.clear();
+        synchronize(refreshPaneIds: refreshPaneIds);
       },
     );
   }
 
   /// Re-resolves cwd on terminal output/focus changes and cancels stale work.
-  void synchronize() {
+  void synchronize({Set<PaneId> refreshPaneIds = const <PaneId>{}}) {
     if (_isDisposed || _synchronizing) return;
     _synchronizing = true;
     try {
@@ -330,7 +338,12 @@ final class TerminalContextDockDirectoryController {
         }
         final _TerminalContextDockDirectoryWindowState? retained =
             _windows[logicalWindow.id];
-        if (retained != null && retained.matches(dock, resolution)) {
+        final bool refreshAvailableSnapshot =
+            resolution.isAvailable &&
+            refreshPaneIds.contains(dock.targetPaneId);
+        if (retained != null &&
+            retained.matches(dock, resolution) &&
+            !refreshAvailableSnapshot) {
           retained.resolution = resolution;
           _synchronizeHiddenVisibility(retained, dock.pane.showHiddenEntries);
           if (resolution.isAvailable) _recordRecentRoot(resolution.path!);
@@ -469,6 +482,7 @@ final class TerminalContextDockDirectoryController {
     _isDisposed = true;
     _scheduledSynchronization?.cancel();
     _scheduledSynchronization = null;
+    _pendingRefreshPaneIds.clear();
     _clearWindows();
     _expandedByPane.clear();
     _recentRoots.clear();

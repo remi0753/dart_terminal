@@ -3107,7 +3107,9 @@ final class TerminalApplication {
             nativeHierarchy.refreshPresentation();
           }
           contextDockProcessController?.scheduleSynchronize();
-          contextDockDirectoryController?.scheduleSynchronize();
+          contextDockDirectoryController?.scheduleSynchronize(
+            changedPaneId: id,
+          );
           contextDockPresenter?.refreshAppearance();
           appleScriptSession?.scheduleReconcile();
           final TerminalAppKitMenuProjection? menu = menuProjection;
