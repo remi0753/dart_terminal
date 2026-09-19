@@ -83,7 +83,7 @@
     },
     {
       "path": "tool/terminal_distribution_policy.dart",
-      "sha256": "0d2a5c10ddbe2a8a595dff49cd146fd43a8965fe9e344303bd4f898f147036b2"
+      "sha256": "10599a4f60ec6855f36e192b0e993ca29440902b5d3449a955837fff7e9eed80"
     },
     {
       "path": "tool/product_performance_regression_gate.dart",

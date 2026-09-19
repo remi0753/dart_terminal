@@ -19,6 +19,16 @@ const List<String> terminalDistributionCodePaths = <String>[
   'Contents/Resources/application.aot',
 ];
 
+List<String> terminalDistributionEntitlementsDisplayArguments(
+  String applicationPath,
+) => List<String>.unmodifiable(<String>[
+  '--display',
+  '--entitlements',
+  '-',
+  '--xml',
+  applicationPath,
+]);
+
 final class TerminalDistributionPolicyException implements Exception {
   const TerminalDistributionPolicyException(this.message);
 
@@ -376,7 +386,7 @@ Future<void> _auditDistribution({
   }
   final ProcessResult signedEntitlements = await _run(
     '/usr/bin/codesign',
-    <String>['--display', '--entitlements', '-', application.path],
+    terminalDistributionEntitlementsDisplayArguments(application.path),
   );
   _expect(
     (signedEntitlements.stdout as String).trim().isNotEmpty,

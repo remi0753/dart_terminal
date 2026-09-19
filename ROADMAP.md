@@ -1618,6 +1618,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] terminalのcommand送信を起点にrefreshを一回だけ予約し、idle中の再取得を停止する
   - [x] 旧snapshotを表示したまま再取得結果を差し替え、tree／Searchの空表示を防ぐ
   - [x] unit testと実PTYのDeveloper JIT／Release AOTで一回更新と非ちらつきを受け入れる
+- [x] Developer ID配布のentitlementsをXMLで抽出し、現行codesignのplist正規化を通す
+  （実施時に
+  [`docs/phase11/codesign-entitlements-xml-extraction.md`](docs/phase11/codesign-entitlements-xml-extraction.md)
+  を参照する）
 - [ ] 既存PTYのcompeting-reaper回帰fixtureの非決定性を調査し、実external-reap検証を安定化する
   （実施時に
   [`docs/phase2/pty-competing-reaper-fixture-determinism.md`](docs/phase2/pty-competing-reaper-fixture-determinism.md)

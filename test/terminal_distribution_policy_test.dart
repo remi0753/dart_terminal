@@ -93,6 +93,15 @@ Map<String, Object?> _clone(Map<String, Object?> value) =>
 String _hex(String value) => List<String>.filled(64, value).join();
 
 void main() {
+  _test('signed entitlement extraction requests an XML property list', () {
+    final List<String> arguments =
+        terminalDistributionEntitlementsDisplayArguments('/Example.app');
+    if (arguments.join(' ') !=
+        '--display --entitlements - --xml /Example.app') {
+      throw StateError('codesign entitlement display is not XML: $arguments');
+    }
+  });
+
   _test('exact empty-entitlement preflight passes', () {
     TerminalDistributionPolicy.validatePreflight(
       sourceManifest: _source(),
