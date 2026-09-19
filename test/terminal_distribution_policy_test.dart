@@ -30,10 +30,22 @@ Map<String, Object?> _source() => <String, Object?>{
   'bundleIdentifier': terminalDistributionBundleIdentifier,
   'architectures': const <String>['arm64', 'x86_64'],
   'codePaths': terminalDistributionCodePaths,
+  'resourceFiles': <Object?>[
+    <String, Object?>{
+      'path': terminalDistributionIconPath,
+      'bytes': 1024,
+      'sha256': _hex('e'),
+    },
+  ],
   'applicationContract': <String, Object?>{
     'runtimeMode': 'release-aot',
     'bundleIdentifier': terminalDistributionBundleIdentifier,
     'executable': 'dart_terminal',
+    'icon': <String, Object?>{
+      'source': 'resources/DartTerminal.icns',
+      'bundleName': 'DartTerminal.icns',
+      'bytes': 1024,
+    },
     'dartHelpers': <Object?>[
       <String, Object?>{
         'name': 'dart_terminal_runtime_worker',
@@ -162,11 +174,14 @@ void main() {
         'nativeAssets',
         'nativeCapabilities',
         'appIntents',
+        'icon',
       ]) {
         final Map<String, Object?> source = _clone(_source());
         final Map<String, Object?> contract =
             source['applicationContract']! as Map<String, Object?>;
-        contract[key] = key == 'appIntents' ? <String, Object?>{} : <Object?>[];
+        contract[key] = key == 'appIntents' || key == 'icon'
+            ? <String, Object?>{}
+            : <Object?>[];
         _expectThrows(
           () => TerminalDistributionPolicy.validatePreflight(
             sourceManifest: source,
@@ -176,6 +191,35 @@ void main() {
       }
     },
   );
+
+  _test('application icon resource evidence drift fails closed', () {
+    for (final Object? resources in <Object?>[
+      <Object?>[],
+      <Object?>[
+        <String, Object?>{
+          'path': terminalDistributionIconPath,
+          'bytes': 7,
+          'sha256': _hex('e'),
+        },
+      ],
+      <Object?>[
+        <String, Object?>{
+          'path': terminalDistributionIconPath,
+          'bytes': 1024,
+          'sha256': 'bad',
+        },
+      ],
+    ]) {
+      final Map<String, Object?> source = _clone(_source());
+      source['resourceFiles'] = resources;
+      _expectThrows(
+        () => TerminalDistributionPolicy.validatePreflight(
+          sourceManifest: source,
+          entitlements: const <String, Object?>{},
+        ),
+      );
+    }
+  });
 
   _test('exact accepted distribution evidence passes', () {
     TerminalDistributionPolicy.validateDistributionEvidence(

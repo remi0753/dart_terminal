@@ -206,6 +206,8 @@ Future<void> main() async {
     final List<Object?> helpers = manifest['dartHelpers']! as List<Object?>;
     final Map<String, Object?> appIntents =
         manifest['appIntents']! as Map<String, Object?>;
+    final Map<String, Object?> applicationIcon =
+        manifest['icon']! as Map<String, Object?>;
     _expect(
       (assets.single! as Map<String, Object?>)['package'] == 'dart_pty_macos',
       'PTY package is not declared as a native asset',
@@ -234,6 +236,39 @@ Future<void> main() async {
             },
           ),
       'terminal native capability declarations do not match',
+    );
+    _expect(
+      applicationIcon.length == 1 &&
+          applicationIcon['path'] == 'resources/DartTerminal.icns',
+      'terminal application icon declaration does not match',
+    );
+    final List<int> iconMaster = await File('resources/DartTerminalIcon.png')
+        .readAsBytes();
+    final List<int> applicationIconBytes = await File(
+      'resources/DartTerminal.icns',
+    ).readAsBytes();
+    _expect(
+      iconMaster.length > 24 &&
+          _sameBytes(iconMaster.sublist(0, 8), const <int>[
+            0x89,
+            0x50,
+            0x4e,
+            0x47,
+            0x0d,
+            0x0a,
+            0x1a,
+            0x0a,
+          ]) &&
+          _uint32BigEndian(iconMaster, 16) == 1024 &&
+          _uint32BigEndian(iconMaster, 20) == 1024 &&
+          applicationIconBytes.length <= 16 * 1024 * 1024 &&
+          _sameBytes(applicationIconBytes.sublist(0, 4), const <int>[
+            0x69,
+            0x63,
+            0x6e,
+            0x73,
+          ]),
+      'terminal icon master or ICNS asset is invalid',
     );
     final Map<String, Object?> scriptingDefinition =
         manifest['scriptingDefinition']! as Map<String, Object?>;
@@ -333,6 +368,12 @@ bool _sameBytes(List<int> left, List<int> right) {
   }
   return true;
 }
+
+int _uint32BigEndian(List<int> bytes, int offset) =>
+    bytes[offset] << 24 |
+    bytes[offset + 1] << 16 |
+    bytes[offset + 2] << 8 |
+    bytes[offset + 3];
 
 bool _exactEntries(Map<String, Object?> actual, Map<String, Object> expected) {
   if (actual.length != expected.length) return false;

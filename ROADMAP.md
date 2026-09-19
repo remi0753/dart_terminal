@@ -1641,6 +1641,14 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
     （実施時に
     [`docs/phase11/developer-id-evidence-transition.md`](docs/phase11/developer-id-evidence-transition.md)
     を参照する）
+- [x] TerminalとContext Dockを表すmacOS application iconを生成し全bundleへ反映する
+  （実施時に
+  [`docs/phase11/application-icon.md`](docs/phase11/application-icon.md)
+  を参照して順に実施する）
+  - [x] 1024 px原画を生成し、小サイズでも判別できる構図を受け入れる
+  - [x] generic manifest／builderへbounded `.icns` icon contractを追加する
+  - [x] iconset／`.icns`を生成し、product manifestとbundle auditへ統合する
+  - [x] Developer JIT／Release AOT／Universal配布物でInfo.plistと実iconを検証する
 - [ ] 既存PTYのcompeting-reaper回帰fixtureの非決定性を調査し、実external-reap検証を安定化する
   （実施時に
   [`docs/phase2/pty-competing-reaper-fixture-determinism.md`](docs/phase2/pty-competing-reaper-fixture-determinism.md)

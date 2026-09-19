@@ -18,6 +18,9 @@
       "menuItem": "New Dart Terminal Window Here"
     }
   ],
+  "icon": {
+    "path": "resources/DartTerminal.icns"
+  },
   "scriptingDefinition": {
     "path": "resources/DartTerminal.sdef"
   },

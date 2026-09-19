@@ -92,6 +92,7 @@ Future<void> main(List<String> arguments) async {
       for (final String key in const <String>[
         'runner',
         'services',
+        'icon',
         'scriptingDefinition',
         'appIntents',
         'dartHelpers',
@@ -160,6 +161,8 @@ Future<void> main(List<String> arguments) async {
     );
     final Map<String, Object?> scriptingDefinition =
         manifest['scriptingDefinition']! as Map<String, Object?>;
+    final Map<String, Object?> applicationIcon =
+        manifest['icon']! as Map<String, Object?>;
     final Map<String, Object?> appIntents =
         manifest['appIntents']! as Map<String, Object?>;
     _expect(helpers.length == 1, 'Dart helper manifest mismatch');
@@ -203,6 +206,14 @@ Future<void> main(List<String> arguments) async {
             },
           ),
       'terminal capability manifest mismatch',
+    );
+    _expect(
+      applicationIcon.length == 3 &&
+          applicationIcon['source'] == 'resources/DartTerminal.icns' &&
+          applicationIcon['bundleName'] == 'DartTerminal.icns' &&
+          applicationIcon['bytes'] is int &&
+          (applicationIcon['bytes']! as int) > 0,
+      'terminal application icon build manifest mismatch',
     );
     _expect(
       scriptingDefinition.length == 3 &&
@@ -257,6 +268,7 @@ Future<void> main(List<String> arguments) async {
         '$contents/Frameworks/libdart_terminal_applescript_macos.dylib';
     final String appIntentsImage =
         '$contents/Frameworks/libdart_terminal_app_intents_macos.dylib';
+    final String applicationIconPath = '$resources/DartTerminal.icns';
     final String scriptingDictionary = '$resources/DartTerminal.sdef';
     final String appIntentsMetadata = '$resources/Metadata.appintents';
     final String appIntentsActions = '$appIntentsMetadata/extract.actionsdata';
@@ -354,6 +366,7 @@ Future<void> main(List<String> arguments) async {
       renderer,
       appleScript,
       appIntentsImage,
+      applicationIconPath,
       scriptingDictionary,
       appIntentsActions,
       appIntentsVersion,
@@ -379,6 +392,14 @@ Future<void> main(List<String> arguments) async {
       _sameBytes(bundledSdef, reviewedSdef) &&
           bundledSdef.length == scriptingDefinition['bytes'],
       'bundled scripting definition differs from its reviewed source',
+    );
+    final List<int> bundledIcon = await File(applicationIconPath).readAsBytes();
+    final List<int> reviewedIcon = await File('resources/DartTerminal.icns')
+        .readAsBytes();
+    _expect(
+      _sameBytes(bundledIcon, reviewedIcon) &&
+          bundledIcon.length == applicationIcon['bytes'],
+      'bundled application icon differs from its reviewed source',
     );
     for (final String relativePath in localizedResources) {
       _expect(
@@ -468,9 +489,10 @@ Future<void> main(List<String> arguments) async {
         jsonDecode(plistResult.stdout as String) as Map<String, Object?>;
     _expect(
       infoPlist['CFBundleDisplayName'] == 'Dart Terminal' &&
+          infoPlist['CFBundleIconFile'] == 'DartTerminal.icns' &&
           infoPlist['NSAppleScriptEnabled'] == true &&
           infoPlist['OSAScriptingDefinition'] == 'DartTerminal.sdef',
-      'localized display name or Cocoa Scripting Info.plist declaration mismatch',
+      'display name, icon, or Cocoa Scripting Info.plist declaration mismatch',
     );
     _expect(
       terminalDifferentialSha256(await File(terminfo).readAsBytes()) ==

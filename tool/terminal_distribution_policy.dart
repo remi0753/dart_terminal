@@ -7,6 +7,8 @@ const String terminalDistributionBundleIdentifier = 'dev.dart-terminal';
 const String terminalDistributionApplicationName = 'DartTerminal.app';
 const String terminalDistributionArchiveName = 'DartTerminal.zip';
 const String terminalDistributionManifestName = 'distribution-manifest.json';
+const String terminalDistributionIconPath =
+    'Contents/Resources/DartTerminal.icns';
 const List<String> terminalDistributionCodePaths = <String>[
   'Contents/Frameworks/libdart_engine_aot_shared.dylib',
   'Contents/Frameworks/libdart_pty_macos.dylib',
@@ -111,6 +113,31 @@ final class TerminalDistributionPolicy {
           appIntents['library'] == 'libdart_terminal_app_intents_macos.dylib' &&
           appIntents['targetTriple'] == r'$ARCH-apple-macos14.0',
       'source App Intents contract is invalid',
+    );
+    final Object? icon = contract['icon'];
+    _expect(
+      icon is Map<String, Object?> &&
+          icon.length == 3 &&
+          icon['source'] == 'resources/DartTerminal.icns' &&
+          icon['bundleName'] == 'DartTerminal.icns' &&
+          icon['bytes'] is int &&
+          (icon['bytes']! as int) > 0,
+      'source application icon contract is invalid',
+    );
+    final Map<String, Object?> iconContract = icon! as Map<String, Object?>;
+    final List<Map<String, Object?>> iconResources =
+        _maps(sourceManifest['resourceFiles'])
+            .where(
+              (Map<String, Object?> value) =>
+                  value['path'] == terminalDistributionIconPath,
+            )
+            .toList();
+    _expect(
+      iconResources.length == 1 &&
+          iconResources.single.length == 3 &&
+          iconResources.single['bytes'] == iconContract['bytes'] &&
+          _sha256(iconResources.single['sha256']),
+      'source application icon resource evidence is invalid',
     );
   }
 
@@ -354,6 +381,16 @@ Future<void> _auditDistribution({
       'signed code differs from evidence: $path',
     );
   }
+  final File sourceIcon = File('${source.path}/$terminalDistributionIconPath');
+  final File distributedIcon = File(
+    '${application.path}/$terminalDistributionIconPath',
+  );
+  _expect(
+    await sourceIcon.exists() &&
+        await distributedIcon.exists() &&
+        await _fileSha256(sourceIcon) == await _fileSha256(distributedIcon),
+    'distributed application icon differs from the reviewed source',
+  );
   final String requirement =
       'anchor apple generic and certificate leaf[field.1.2.840.113635.100.6.1.13] exists '
       'and certificate leaf[subject.OU] = "$teamIdentifier"';

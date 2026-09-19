@@ -343,6 +343,26 @@ Future<_Invocation> _loadInvocation(_Options options) async {
       'runtime build manifest Service $index differs from the declaration',
     );
   }
+  final Object? iconValue = applicationContract['icon'];
+  _expect(
+    iconValue is Map<String, Object?> &&
+        iconValue.length == 3 &&
+        iconValue['source'] == 'resources/DartTerminal.icns' &&
+        iconValue['bundleName'] == 'DartTerminal.icns' &&
+        iconValue['bytes'] is int &&
+        (iconValue['bytes']! as int) > 0,
+    'runtime build manifest omitted the exact application icon contract',
+  );
+  final Map<String, Object?> icon = iconValue! as Map<String, Object?>;
+  final File applicationIcon = File(
+    '$contentsPath/Resources/DartTerminal.icns',
+  );
+  _expect(
+    await applicationIcon.exists() &&
+        await applicationIcon.length() == icon['bytes'] &&
+        await _plistValue(plistPath, 'CFBundleIconFile') == 'DartTerminal.icns',
+    'bundle icon resource or Info.plist declaration differs',
+  );
   final Object? plistServicesValue = await _plistJsonValue(
     plistPath,
     'NSServices',

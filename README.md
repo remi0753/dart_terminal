@@ -27,6 +27,9 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
 ## 現在できること
 
 - AppKit のネイティブウィンドウを Dart から表示
+- terminal surfaceと右側Context Dock／Directory Navigatorを一つのシルエットで表す
+  専用macOS application iconを、Developer JIT、Release AOT、Universal、配布bundleへ
+  同じ`.icns` bytesで組み込む
 - AppKitのphysical key、produced/unmodified text、7種のmodifier、press/repeat/releaseを分離し、
   menu優先後にfirst responderのtext-input clientから1回だけterminalへ配送するrouting
 - 実`NSTextInputClient`のmarked text、UTF-16 selection/replacement metadata、commit、

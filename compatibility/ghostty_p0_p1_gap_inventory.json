@@ -4,7 +4,7 @@
   "status": "closed-no-actionable-p0-p1",
   "matrix": {
     "path": "FEATURE_MATRIX.md",
-    "sha256": "fb75d01cdcab0b43c18fb47e3b6cc864e4e59fef27a814ee55136dda6f581d30",
+    "sha256": "2ec5b4c9b39ee66ea2995fa61d8b951638c86247732d32256fe65ef0ca5d42d8",
     "pinned_ghostty_revision": "d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
     "pinned_archive_sha256": "3111538f70b1a7fed43646395906724db9ef92eb85d66410c5bce2067ad2b7d2"
   },
@@ -52,7 +52,7 @@
     },
     {
       "path": "compatibility/regression_coverage_report.json",
-      "sha256": "63871d937a6267c338ccfc3a360453329dd761002f3b9ba4888065e318acba6a"
+      "sha256": "a0c4ad9443d0b81abf7e1f0960f9639b8841f1732379a1936734983b637565dc"
     },
     {
       "path": "benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json",
@@ -228,7 +228,7 @@
     },
     {
       "path": "tool/runtime_integration_smoke.dart",
-      "sha256": "34d22767f42605437c1ad95eaf8a957a7a446e90a222ece914571dd883b963ac"
+      "sha256": "0b4aae520571d24d41bd2743d9698511501478a559e5e47112f873dbda0fbbd3"
     }
   ],
   "totals": {
@@ -1275,7 +1275,7 @@
       "phase": "1/11",
       "acceptance_sha256": "a249c7cce26c55cd7e592fe38016092f6dd7b496cfd158eb101110ea1b3fd3f9",
       "pinned_evidence_sha256": "df390ba38b1e7a8b9fe8fa6f31c1156e627ce1b8b5af2f38b80a177b8968a113",
-      "current_sha256": "7460fa7291abca15d92f09c4fe1beeddb235d8a394124ef953fda0a0966671d0",
+      "current_sha256": "3b6f0685d706b6d87869459d7df71c5a3cb71646bc5ebc8de0013cd118d21a79",
       "classification": "accepted-external-follow-up",
       "gap_ids": [
         "intel-native-handoff"
