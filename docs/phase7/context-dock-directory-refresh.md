@@ -84,6 +84,12 @@ pane、path、dispositionが同一なら既存のdirectory snapshotを再利用�
   terminal／Navigatorのinput owner、mode、query、selectionを変更しない。
 - action catalogは47件になった。生成keybind/action referenceとREADME／feature matrixの件数・
   Directory Navigator操作説明を同時に更新した。
+- terminal outputがない長時間commandでも更新するため、Process controllerがDirectory Navigatorを
+  再び観測可能にしたpaneを検出し、そのpaneだけへrefreshを予約する。foreground中のrich metadata
+  更新では予約せず、foreground／shell-ownedからidle shellへ戻るtransitionだけを補完経路にする。
+- 自動refresh timerの到着時にNavigatorがinputを所有していた場合、tree／Search／Go To操作を
+  loading stateで中断しないようpane単位で保留する。Escape等でterminal ownershipへ戻った次の
+  synchronizeで適用する。明示的なmanual refreshはユーザー操作なのでNavigator ownership中も即時実行する。
 
 ## 検証記録
 
@@ -116,3 +122,30 @@ pane、path、dispositionが同一なら既存のdirectory snapshotを再利用�
 - `git diff --check`: 成功。
 - sandbox内の`dart format`はsource format自体を完了後、telemetry sessionのmtime更新だけを拒否された。
   source差分と後続のanalyze／testsでformat・構文を確認した。
+
+### 実PTY／AppKit製品受け入れと全gate
+
+- native-content scenarioへ次を追加した。
+  - plain interactive `/bin/sh`の同一cwdで`touch command-created.txt`を実行し、controllerを直接呼ばず
+    treeに現れること。
+  - `PS1=''`かつ出力なしの`sleep 1; touch silent-command-created.txt`がidle shellへ戻った後、
+    Process transition経路でtreeに現れること。
+  - terminal外で作成した`manual-refresh.txt`が`view.refresh-directory-navigator` dispatch後に現れ、
+    terminal ownershipとPTY write countが変わらないこと。
+- 最終sourceの`make RUNTIME_ARCH=arm64 developer-jit-native-content`: 成功。
+  `RUNTIME_NATIVE_CONTENT_INTEGRATION_PASS`、`elapsed_ms=13530`、4 session clean。
+- 最終sourceの`make RUNTIME_ARCH=arm64 release-aot-native-content`: 成功。
+  `RUNTIME_NATIVE_CONTENT_INTEGRATION_PASS`、`elapsed_ms=12940`、4 session clean。
+- 両runtimeの途中runで、refresh timerがNavigatorのfolder toggle／Search Returnと競合し、
+  一時的な空rowsまたはpending reveal消失を生じることを確認した。自動refreshのNavigator ownership中
+  deferを追加し、unit testと両runtime再実行で解消した。acceptanceの非空list前提も明示的にguardした。
+- `make phase7-appkit-acceptance`、`make terminal-compatibility-regression-coverage`、
+  `make ghostty-p0-p1-gap-inventory`、`make release-candidate-daily-use-matrix`で、変更source／test hashを持つ
+  生成証跡を最終sourceに合わせて更新した。
+- 最終`CI=true DART_SUPPRESS_ANALYTICS=true make test`: 成功、`dart_terminal tests passed`。
+  format 348 files変更なし、全体analyze `No issues found!`、47 action reference、localization、privacy、
+  AppKit、compatibility、differential、application、release-candidate、distributionを完走した。
+- 全gateの途中で、生成前のcoverage／gap inventory／daily-use matrixが順にstaleとして正しく拒否された。
+  各正規generatorで更新した。また既存ROADMAP項目のPTY competing-reaper fixtureが1回`No element`で
+  非決定的に失敗したが、`make dpty-dart-test`単独と後続の複数full gateでは成功した。今回の変更で
+  既存follow-upを完了扱いにはしていない。

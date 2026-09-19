@@ -1271,6 +1271,55 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
   await _waitUntil(() => controller.activeOperationCount == 0);
   snapshot = controller.snapshotForWindow(window.id)!;
   _expect(
+    dock.confirmNavigatorInput(
+      dock.requestNavigatorFocus(
+        window.id,
+        firstPane,
+        TerminalContextDockNavigatorMode.move,
+      ),
+    ),
+    'Move mode can own input before an automatic refresh arrives',
+  );
+  final int deferredRefreshGeneration = snapshot.generation;
+  files.includeCreatedRootFile = true;
+  controller.scheduleSynchronize(changedPaneId: firstPane);
+  await Future<void>.delayed(
+    TerminalContextDockDirectoryLimits.terminalChangeDebounce +
+        const Duration(milliseconds: 25),
+  );
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
+    snapshot.generation == deferredRefreshGeneration &&
+        !snapshot.rows.any(
+          (TerminalContextDockDirectoryRow row) =>
+              row.entry.path == '/root/created.txt',
+        ),
+    'automatic refresh defers while the Navigator owns input',
+  );
+  dock.focusTerminal(window.id, firstPane);
+  controller.synchronize();
+  await _waitUntil(
+    () =>
+        controller.snapshotForWindow(window.id)!.generation !=
+            deferredRefreshGeneration &&
+        controller.activeOperationCount == 0,
+  );
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
+    snapshot.rows.any(
+      (TerminalContextDockDirectoryRow row) =>
+          row.entry.path == '/root/created.txt',
+    ),
+    'returning input to the terminal applies the deferred refresh',
+  );
+  files.includeCreatedRootFile = false;
+  _expect(
+    controller.refreshWindow(window.id, firstPane),
+    'explicit refresh restores the fixture after deferred refresh testing',
+  );
+  await _waitUntil(() => controller.activeOperationCount == 0);
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
     controller.handleTreeIntent(
           window.id,
           TerminalContextDockTreeIntent.toggle,

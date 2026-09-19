@@ -2798,6 +2798,7 @@ final class TerminalApplication {
     TerminalNativeHierarchyAdapter? hierarchy;
     TerminalContextDockState? contextDockState;
     TerminalContextDockProcessController? contextDockProcessController;
+    final Set<PaneId> directoryObservableProcessPaneIds = <PaneId>{};
     TerminalContextDockDirectoryController? contextDockDirectoryController;
     TerminalContextDockDirectoryPresenter? contextDockPresenter;
     TerminalContextDockActionCoordinator? contextDockActionCoordinator;
@@ -4622,6 +4623,34 @@ final class TerminalApplication {
               }
             },
             onChanged: () {
+              final TerminalContextDockProcessController? processController =
+                  contextDockProcessController;
+              final Set<PaneId> observable = <PaneId>{};
+              if (processController != null) {
+                for (final TerminalWindowState window in state.windows.where(
+                  (TerminalWindowState candidate) =>
+                      candidate.role == TerminalWindowRole.standard,
+                )) {
+                  final TerminalContextDockWindowSnapshot? dock =
+                      createdContextDockState.snapshotForWindow(window.id);
+                  if (dock?.isVisible == true &&
+                      processController.canObserveDirectoryPane(
+                        dock!.targetPaneId,
+                      )) {
+                    observable.add(dock.targetPaneId);
+                  }
+                }
+              }
+              for (final PaneId resumed in observable.difference(
+                directoryObservableProcessPaneIds,
+              )) {
+                contextDockDirectoryController?.scheduleSynchronize(
+                  changedPaneId: resumed,
+                );
+              }
+              directoryObservableProcessPaneIds
+                ..clear()
+                ..addAll(observable);
               reconcileRequest?.call();
               final TerminalAppKitMenuProjection? menu = menuProjection;
               if (menu != null && !menu.isDisposed) menu.refresh();
@@ -8554,6 +8583,15 @@ final class TerminalApplication {
       final File hiddenFixtureFile = File(
         '$fixtureRootPath/.context-hidden.txt',
       )..writeAsStringSync('hidden');
+      final File commandCreatedFile = File(
+        '$fixtureRootPath/command-created.txt',
+      );
+      final File silentCommandCreatedFile = File(
+        '$fixtureRootPath/silent-command-created.txt',
+      );
+      final File manualRefreshFile = File(
+        '$fixtureRootPath/manual-refresh.txt',
+      );
       final Directory hiddenFixtureDirectory = Directory(
         '$fixtureRootPath/.context-hidden-directory',
       )..createSync();
@@ -8708,6 +8746,83 @@ final class TerminalApplication {
                   row.entry.path == hiddenFixtureDirectory.path,
             );
       }, 'Context Dock toggle did not project the real plain-sh cwd tree');
+      final int automaticRefreshGeneration = contextDockDirectory
+          .snapshotForWindow(initialWindow.id)!
+          .generation;
+      initialPane.insertText(
+        "touch command-created.txt; "
+        "printf '\\r\\n__DT_NAV_REFRESH_READY__\\r\\n'",
+      );
+      await initialPane.submit();
+      await _waitForAsciiMarker(initialSession, '__DT_NAV_REFRESH_READY__');
+      await waitFor(() {
+        final TerminalContextDockDirectorySnapshot? directory =
+            contextDockDirectory.snapshotForWindow(initialWindow.id);
+        return commandCreatedFile.existsSync() &&
+            directory != null &&
+            directory.generation != automaticRefreshGeneration &&
+            directory.rows.any(
+              (TerminalContextDockDirectoryRow row) =>
+                  row.entry.path == commandCreatedFile.path,
+            );
+      }, 'terminal command completion did not refresh the same-cwd tree');
+
+      final int silentRefreshGeneration = contextDockDirectory
+          .snapshotForWindow(initialWindow.id)!
+          .generation;
+      initialPane.insertText(
+        "PS1=''; sleep 1; touch silent-command-created.txt",
+      );
+      await initialPane.submit();
+      await waitFor(() {
+        final TerminalContextDockDirectorySnapshot? directory =
+            contextDockDirectory.snapshotForWindow(initialWindow.id);
+        return silentCommandCreatedFile.existsSync() &&
+            initialPane.processSnapshot().disposition ==
+                TerminalPaneProcessDisposition.idleShell &&
+            directory != null &&
+            directory.generation != silentRefreshGeneration &&
+            directory.rows.any(
+              (TerminalContextDockDirectoryRow row) =>
+                  row.entry.path == silentCommandCreatedFile.path,
+            );
+      }, 'silent command completion did not refresh the same-cwd tree');
+
+      final int manualRefreshWriteBaseline =
+          writeEnqueuedCounts[initialPaneId] ?? 0;
+      final int manualRefreshGeneration = contextDockDirectory
+          .snapshotForWindow(initialWindow.id)!
+          .generation;
+      manualRefreshFile.writeAsStringSync('manual');
+      _expectLifecycle(
+        dispatcher
+                .snapshot(TerminalActionId.refreshDirectoryNavigator)
+                .isEnabled &&
+            !contextDockDirectory
+                .snapshotForWindow(initialWindow.id)!
+                .rows
+                .any(
+                  (TerminalContextDockDirectoryRow row) =>
+                      row.entry.path == manualRefreshFile.path,
+                ),
+        'manual Directory Navigator refresh was unavailable or already stale',
+      );
+      await dispatch(TerminalActionId.refreshDirectoryNavigator);
+      await waitFor(() {
+        final TerminalContextDockWindowSnapshot? dock = contextDockState
+            .snapshotForWindow(initialWindow.id);
+        final TerminalContextDockDirectorySnapshot? directory =
+            contextDockDirectory.snapshotForWindow(initialWindow.id);
+        return dock?.inputOwner == TerminalContextDockInputOwner.terminal &&
+            directory != null &&
+            directory.generation != manualRefreshGeneration &&
+            directory.rows.any(
+              (TerminalContextDockDirectoryRow row) =>
+                  row.entry.path == manualRefreshFile.path,
+            ) &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) ==
+                manualRefreshWriteBaseline;
+      }, 'manual refresh did not update the tree with zero PTY writes');
       void expectContextDockAppearance() {
         final TerminalContextDockAppearance? appearance = contextDockPresenter
             .nativeAppearanceForWindow(initialWindow.id);
@@ -9053,8 +9168,9 @@ final class TerminalApplication {
       await waitFor(() {
         final TerminalContextDockDirectorySnapshot? directory =
             contextDockDirectory.snapshotForWindow(initialWindow.id);
-        return directory?.rows.first.entry.path == toggledFolderPath &&
-            directory!.rows.first.isExpanded;
+        return directory?.rows.isNotEmpty == true &&
+            directory!.rows.first.entry.path == toggledFolderPath &&
+            directory.rows.first.isExpanded;
       }, 'Return did not expand the selected Context Dock folder');
       _injectKeyEventForTesting(
         application,
@@ -10057,6 +10173,7 @@ final class TerminalApplication {
         'TERMINAL_NATIVE_CONTENT_TEST context=true mouse_zero_write=true '
         'navigator_tree=true navigator_search=true navigator_copy=true '
         'navigator_insert=true navigator_zero_write=true '
+        'navigator_auto_refresh=true navigator_manual_refresh=true '
         'navigator_privacy=true navigator_accessibility=true '
         'process_inspector=true process_pipeline=true process_input=true '
         'process_shell_owned=true process_short=true process_elapsed=true '

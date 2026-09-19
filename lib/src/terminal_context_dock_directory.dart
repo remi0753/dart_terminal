@@ -204,6 +204,7 @@ final class TerminalContextDockDirectoryController {
   final Map<PaneId, Set<String>> _expandedByPane = <PaneId, Set<String>>{};
   final List<String> _recentRoots = <String>[];
   final Set<PaneId> _pendingRefreshPaneIds = <PaneId>{};
+  final Set<PaneId> _deferredRefreshPaneIds = <PaneId>{};
   int _generation = 0;
   Timer? _scheduledSynchronization;
   bool _synchronizing = false;
@@ -295,13 +296,19 @@ final class TerminalContextDockDirectoryController {
           _pendingRefreshPaneIds,
         );
         _pendingRefreshPaneIds.clear();
-        synchronize(refreshPaneIds: refreshPaneIds);
+        synchronize(
+          refreshPaneIds: refreshPaneIds,
+          deferRefreshWhileNavigatorOwnsInput: true,
+        );
       },
     );
   }
 
   /// Re-resolves cwd on terminal output/focus changes and cancels stale work.
-  void synchronize({Set<PaneId> refreshPaneIds = const <PaneId>{}}) {
+  void synchronize({
+    Set<PaneId> refreshPaneIds = const <PaneId>{},
+    bool deferRefreshWhileNavigatorOwnsInput = false,
+  }) {
     if (_isDisposed || _synchronizing) return;
     _synchronizing = true;
     try {
@@ -316,6 +323,9 @@ final class TerminalContextDockDirectoryController {
       };
       _expandedByPane.removeWhere(
         (PaneId paneId, Set<String> _) => !livePaneIds.contains(paneId),
+      );
+      _deferredRefreshPaneIds.removeWhere(
+        (PaneId paneId) => !livePaneIds.contains(paneId),
       );
       final List<TerminalWindowState> standardWindows = applicationState.windows
           .where(
@@ -339,6 +349,9 @@ final class TerminalContextDockDirectoryController {
         final TerminalContextDockWindowSnapshot? dock = dockState
             .snapshotForWindow(logicalWindow.id);
         if (dock == null || !dock.isVisible) {
+          if (dock != null) {
+            _deferredRefreshPaneIds.remove(dock.targetPaneId);
+          }
           _windows.remove(logicalWindow.id)?.cancel();
           continue;
         }
@@ -366,9 +379,24 @@ final class TerminalContextDockDirectoryController {
         }
         final _TerminalContextDockDirectoryWindowState? retained =
             _windows[logicalWindow.id];
+        final bool incomingRefresh = refreshPaneIds.contains(dock.targetPaneId);
+        if (incomingRefresh &&
+            deferRefreshWhileNavigatorOwnsInput &&
+            dock.navigatorOwnsInput) {
+          _deferredRefreshPaneIds.add(dock.targetPaneId);
+        }
+        final bool applyIncomingRefresh =
+            incomingRefresh &&
+            (!deferRefreshWhileNavigatorOwnsInput || !dock.navigatorOwnsInput);
+        final bool applyDeferredRefresh =
+            !dock.navigatorOwnsInput &&
+            _deferredRefreshPaneIds.contains(dock.targetPaneId);
         final bool refreshAvailableSnapshot =
             resolution.isAvailable &&
-            refreshPaneIds.contains(dock.targetPaneId);
+            (applyIncomingRefresh || applyDeferredRefresh);
+        if (applyIncomingRefresh || applyDeferredRefresh) {
+          _deferredRefreshPaneIds.remove(dock.targetPaneId);
+        }
         if (retained != null &&
             retained.matches(dock, resolution) &&
             !refreshAvailableSnapshot) {
@@ -511,6 +539,7 @@ final class TerminalContextDockDirectoryController {
     _scheduledSynchronization?.cancel();
     _scheduledSynchronization = null;
     _pendingRefreshPaneIds.clear();
+    _deferredRefreshPaneIds.clear();
     _clearWindows();
     _expandedByPane.clear();
     _recentRoots.clear();
