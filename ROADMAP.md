@@ -64,7 +64,7 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
   （[`archived-roadmap-acceptance-ownership.md`](docs/contextual-memory/archived-roadmap-acceptance-ownership.md)
   を参照して実施する）
 - [x] CM-01 Pure Note domain model と trigger state machineを実装する
-- [ ] CM-02 Note store version 1 codecを実装する
+- [x] CM-02 Note store version 1 codecを実装する
 - [ ] CM-03 durable Note store workerを実装する
 - [ ] CM-04 durable context identityとrestoration bindingを実装する
 - [ ] CM-05 application-root Note authorityを実装する

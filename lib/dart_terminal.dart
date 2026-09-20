@@ -225,6 +225,7 @@ export 'src/terminal_memory_pressure.dart';
 export 'src/terminal_native_content.dart';
 export 'src/terminal_native_hierarchy.dart';
 export 'src/terminal_note_model.dart';
+export 'src/terminal_note_store_codec.dart';
 export 'src/terminal_notification_product.dart';
 export 'src/terminal_osc52_confirmation.dart';
 export 'src/terminal_osc52_projection.dart';
