@@ -61,6 +61,7 @@ Map<String, Object?> _source() => <String, Object?>{
     ],
     'nativeCapabilities': <Object?>[
       <String, Object?>{'id': 'dart_terminal_applescript_macos'},
+      <String, Object?>{'id': 'dart_terminal_notes_macos'},
       <String, Object?>{'id': 'dart_terminal_renderer_macos'},
     ],
     'appIntents': <String, Object?>{

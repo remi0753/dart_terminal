@@ -8,6 +8,8 @@ environment:
 
 dependencies:
   code_assets: any
+  dart_macos_runtime:
+    path: ../../../dart_appkit/packages/dart_macos_runtime
   ffi: any
   hooks: any
   native_toolchain_c: any

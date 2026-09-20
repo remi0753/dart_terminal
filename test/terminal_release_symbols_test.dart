@@ -39,7 +39,7 @@ Future<void> _testSuccessfulThinPackage() async {
             result.codeImageCount == terminalUpdateCodePaths.length &&
             result.symbolCount == terminalUpdateCodePaths.length &&
             result.machineLine() ==
-                'TERMINAL_RELEASE_SYMBOLS code=9 architectures=1 symbols=9',
+                'TERMINAL_RELEASE_SYMBOLS code=10 architectures=1 symbols=10',
         'thin package result differs',
       );
       _expect(

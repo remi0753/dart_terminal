@@ -42,10 +42,12 @@ Future<void> main() async {
       'tool/terminal_differential_macos_activation.swift',
     };
     const Set<String> productPackageNativeRoots = <String>{
+      'packages/dart_durable_file_macos/native/',
       'packages/dart_pty_macos/native/',
       'packages/dart_terminal_renderer_macos/native/',
       'packages/dart_terminal_applescript_macos/native/',
       'packages/dart_terminal_app_intents_macos/native/',
+      'packages/dart_terminal_notes_macos/native/',
     };
     final List<String> nativeSources = tracked
         .where(
@@ -219,7 +221,7 @@ Future<void> main() async {
             value['id']! as String: value,
         };
     _expect(
-      capabilitiesById.length == 2 &&
+      capabilitiesById.length == 3 &&
           capabilitiesById['dart_terminal_renderer_macos']?['package'] ==
               'dart_terminal_renderer_macos' &&
           capabilitiesById['dart_terminal_applescript_macos']?['package'] ==
@@ -233,6 +235,17 @@ Future<void> main() async {
               'abiVersion': 1,
               'abiVersionSymbol': 'dtas_abi_version',
               'initializerSymbol': 'dtas_initialize',
+            },
+          ) &&
+          _exactEntries(
+            capabilitiesById['dart_terminal_notes_macos']!,
+            const <String, Object>{
+              'id': 'dart_terminal_notes_macos',
+              'package': 'dart_terminal_notes_macos',
+              'library': 'libdart_terminal_notes_macos.dylib',
+              'abiVersion': 1,
+              'abiVersionSymbol': 'dtn_abi_version',
+              'initializerSymbol': 'dtn_initialize',
             },
           ),
       'terminal native capability declarations do not match',
@@ -305,11 +318,12 @@ Future<void> main() async {
             .singleWhere(
               (Map<String, Object?> value) => value['name'] == 'dart_terminal',
             );
+    final Set<Object?> rootDependencies =
+        (rootPackage['dependencies']! as List<Object?>).toSet();
     _expect(
-      (rootPackage['dependencies']! as List<Object?>).contains(
-        'dart_terminal_app_intents_macos',
-      ),
-      'terminal App Intents package is not a direct product dependency',
+      rootDependencies.contains('dart_terminal_app_intents_macos') &&
+          rootDependencies.contains('dart_terminal_notes_macos'),
+      'terminal native product packages are not direct dependencies',
     );
     final File consumerSdef = File('resources/DartTerminal.sdef');
     final File canonicalSdef = await _packageFile(

@@ -33,6 +33,20 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.7"
+  dart_appkit:
+    dependency: transitive
+    description:
+      path: "../../../dart_appkit/packages/dart_appkit"
+      relative: true
+    source: path
+    version: "0.1.0-dev.1"
+  dart_macos_runtime:
+    dependency: "direct main"
+    description:
+      path: "../../../dart_appkit/packages/dart_macos_runtime"
+      relative: true
+    source: path
+    version: "0.1.0-dev.1"
   ffi:
     dependency: "direct main"
     description:

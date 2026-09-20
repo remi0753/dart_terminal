@@ -10,6 +10,13 @@
 
 namespace {
 
+const da_native_extension_services_v1 kServices = {
+    sizeof(da_native_extension_services_v1),
+    DA_NATIVE_EXTENSION_ABI_VERSION,
+    nullptr,
+    nullptr,
+};
+
 void write_u16(std::vector<uint8_t>& bytes, size_t offset, uint16_t value) {
   bytes[offset] = static_cast<uint8_t>(value);
   bytes[offset + 1u] = static_cast<uint8_t>(value >> 8u);
@@ -185,6 +192,14 @@ void mark_cards_due(std::vector<uint8_t>& bytes, uint32_t count) {
 
 int main() {
   @autoreleasepool {
+    if (!expect(dtn_initialize(nullptr) == DTN_STATUS_UNSUPPORTED_VERSION,
+                "null initialize services") ||
+        !expect(dtn_initialize(&kServices) == DTN_STATUS_OK,
+                "initialize") ||
+        !expect(dtn_initialize(&kServices) == DTN_STATUS_OK,
+                "idempotent initialize")) {
+      return 1;
+    }
   bool ok = true;
   const TerminalGeometrySentinel terminal_before = {
       24u, 80u, 640u, 480u, 24u, 80u, 0u, 1u, 41u};

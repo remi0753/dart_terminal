@@ -16,6 +16,7 @@ const List<String> terminalUpdateCodePaths = <String>[
   'Contents/Frameworks/libdart_pty_macos.dylib',
   'Contents/Frameworks/libdart_terminal_app_intents_macos.dylib',
   'Contents/Frameworks/libdart_terminal_applescript_macos.dylib',
+  'Contents/Frameworks/libdart_terminal_notes_macos.dylib',
   'Contents/Frameworks/libdart_terminal_renderer_macos.dylib',
   'Contents/Helpers/dart_terminal_runtime_worker',
   'Contents/MacOS/dart_terminal',

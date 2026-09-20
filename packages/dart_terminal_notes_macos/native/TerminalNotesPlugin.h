@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "dart_appkit_native_extension.h"
+
 #define DTN_ABI_VERSION 1u
 #define DTN_PROJECTION_VERSION 1u
 #define DTN_SNAPSHOT_VERSION 1u
@@ -244,6 +246,9 @@ extern "C" {
 #endif
 
 __attribute__((visibility("default"))) uint32_t dtn_abi_version(void);
+
+__attribute__((visibility("default"))) int32_t dtn_initialize(
+    const da_native_extension_services_v1* services);
 
 // Surface lifecycle, projection, layout, snapshot, and composition calls are
 // AppKit process-main-thread only. Wrong-thread calls fail without mutation.

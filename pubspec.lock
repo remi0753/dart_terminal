@@ -82,6 +82,13 @@ packages:
       relative: true
     source: path
     version: "0.1.0-dev.1"
+  dart_terminal_notes_macos:
+    dependency: "direct main"
+    description:
+      path: "packages/dart_terminal_notes_macos"
+      relative: true
+    source: path
+    version: "0.1.0-dev.1"
   dart_terminal_renderer_macos:
     dependency: "direct main"
     description:

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 Future<void> main(List<String> arguments) async {
@@ -14,10 +15,32 @@ Future<void> main(List<String> arguments) async {
 
   final String rootPubspec = _read(root, 'pubspec.yaml');
   final String appManifest = _read(root, 'macos_application.json');
+  final Map<String, Object?> manifest =
+      jsonDecode(appManifest) as Map<String, Object?>;
+  final List<Map<String, Object?>> capabilities =
+      (manifest['nativeCapabilities']! as List<Object?>)
+          .cast<Map<String, Object?>>();
+  final List<Map<String, Object?>> noteCapabilities = capabilities
+      .where(
+        (Map<String, Object?> value) =>
+            value['id'] == 'dart_terminal_notes_macos',
+      )
+      .toList();
   _expect(
-    !rootPubspec.contains('dart_terminal_notes_macos') &&
-        !appManifest.contains('dart_terminal_notes_macos'),
-    'CM-08 must remain absent from the application dependency and manifest',
+    rootPubspec.contains(
+          '  dart_terminal_notes_macos:\n'
+          '    path: packages/dart_terminal_notes_macos',
+        ) &&
+        noteCapabilities.length == 1 &&
+        _exactEntries(noteCapabilities.single, const <String, Object>{
+          'id': 'dart_terminal_notes_macos',
+          'package': 'dart_terminal_notes_macos',
+          'library': 'libdart_terminal_notes_macos.dylib',
+          'abiVersion': 1,
+          'abiVersionSymbol': 'dtn_abi_version',
+          'initializerSymbol': 'dtn_initialize',
+        }),
+    'Notes product dependency or native capability declaration differs',
   );
 
   final String header = _read(
@@ -86,6 +109,7 @@ Future<void> main(List<String> arguments) async {
   const Set<String> expected = <String>{
     '_dtn_abi_version',
     '_dtn_debug_live_surfaces',
+    '_dtn_initialize',
     '_dtn_surface_apply_projection',
     '_dtn_surface_apply_result',
     '_dtn_surface_attach_to_host',
@@ -123,7 +147,7 @@ Future<void> main(List<String> arguments) async {
   );
 
   stdout.writeln(
-    'TERMINAL_NOTES_CAPABILITY_AUDIT_PASS manifest=absent '
+    'TERMINAL_NOTES_CAPABILITY_AUDIT_PASS manifest=registered '
     'snapshot=content-free exports=${actual.length} dart_appkit=generic',
   );
 }
@@ -136,6 +160,14 @@ String _between(String source, String start, String end) {
   final int finish = source.indexOf(end, begin + start.length);
   _expect(begin >= 0 && finish > begin, 'audit source block is missing');
   return source.substring(begin, finish + end.length);
+}
+
+bool _exactEntries(Map<String, Object?> actual, Map<String, Object> expected) {
+  if (actual.length != expected.length) return false;
+  for (final MapEntry<String, Object> entry in expected.entries) {
+    if (actual[entry.key] != entry.value) return false;
+  }
+  return true;
 }
 
 void _expect(bool condition, String message) {

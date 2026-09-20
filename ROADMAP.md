@@ -107,6 +107,12 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
   - [x] native multiline editor、draft admission、actionsを実装する
   - [x] input isolation、focus/accessibility、teardown acceptanceを完了する
 - [ ] CM-10 S1 Basic memoryをproductへ統合する
+  （[`cm-10-s1-basic-memory-product-integration.md`](docs/contextual-memory/cm-10-s1-basic-memory-product-integration.md)
+  を参照して実施する）
+  - [x] native capability manifestとproduct Note subsystem adapterを実装する
+  - [ ] application compositionとpane/Quick Terminal surface lifecycleを接続する
+  - [ ] S1 mutation、Detached、export、localized actionを接続する
+  - [ ] restart、fault、close/quit、両runtime product acceptanceを完了する
 - [ ] CM-11 S2 On Returnをproductへ統合する
 - [ ] CM-12 R0 hidden qualificationを完了する
 - [ ] CM-13 R1 internal S1/S2 opt-inを完了する

@@ -524,10 +524,12 @@ terminal-app-intents-dart-test: $(TERMINAL_APP_INTENTS_LIBRARY)
 
 terminal-notes-contract-check:
 	@$(CLANG) $(PRODUCT_NATIVE_FLAGS) -std=c11 \
+		-I$(DART_APPKIT_ROOT)/native/bridge/include \
 		-I$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native \
 		-fsyntax-only \
 		$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native/test/header_compile.c
 	@$(CLANGXX) $(PRODUCT_NATIVE_FLAGS) -std=c++20 \
+		-I$(DART_APPKIT_ROOT)/native/bridge/include \
 		-I$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native \
 		-fsyntax-only \
 		$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native/test/header_compile.cc
@@ -537,6 +539,7 @@ $(TERMINAL_NOTES_PLUGIN_LIBRARY): \
 		$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native/TerminalNotesPlugin.m
 	@mkdir -p $(PRODUCT_NATIVE_TEST_BUILD_DIR)
 	$(CLANG) $(PRODUCT_NATIVE_FLAGS) -fobjc-arc -fblocks -dynamiclib \
+		-I$(DART_APPKIT_ROOT)/native/bridge/include \
 		-I$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native \
 		$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native/TerminalNotesPlugin.m \
 		-framework AppKit -framework Foundation \
@@ -546,6 +549,7 @@ $(TERMINAL_NOTES_TEST_BINARY): $(TERMINAL_NOTES_PLUGIN_LIBRARY) \
 		$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native/test/TerminalNotesCapabilityTests.mm
 	@mkdir -p $(PRODUCT_NATIVE_TEST_BUILD_DIR)
 	$(CLANGXX) $(PRODUCT_NATIVE_FLAGS) -std=c++20 \
+		-I$(DART_APPKIT_ROOT)/native/bridge/include \
 		-I$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native \
 		$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native/test/TerminalNotesCapabilityTests.mm \
 		$(TERMINAL_NOTES_PLUGIN_LIBRARY) \

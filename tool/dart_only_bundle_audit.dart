@@ -190,8 +190,8 @@ Future<void> main(List<String> arguments) async {
             value['id']! as String: value,
         };
     _expect(
-      capabilities.length == 2 &&
-          capabilitiesById.length == 2 &&
+      capabilities.length == 3 &&
+          capabilitiesById.length == 3 &&
           capabilitiesById.containsKey('dart_terminal_renderer_macos') &&
           capabilitiesById.containsKey('dart_terminal_applescript_macos') &&
           _exactEntries(
@@ -203,6 +203,17 @@ Future<void> main(List<String> arguments) async {
               'abiVersion': 1,
               'abiVersionSymbol': 'dtas_abi_version',
               'initializerSymbol': 'dtas_initialize',
+            },
+          ) &&
+          _exactEntries(
+            capabilitiesById['dart_terminal_notes_macos']!,
+            const <String, Object>{
+              'id': 'dart_terminal_notes_macos',
+              'package': 'dart_terminal_notes_macos',
+              'library': 'libdart_terminal_notes_macos.dylib',
+              'abiVersion': 1,
+              'abiVersionSymbol': 'dtn_abi_version',
+              'initializerSymbol': 'dtn_initialize',
             },
           ),
       'terminal capability manifest mismatch',
@@ -266,6 +277,8 @@ Future<void> main(List<String> arguments) async {
         '$contents/Frameworks/libdart_terminal_renderer_macos.dylib';
     final String appleScript =
         '$contents/Frameworks/libdart_terminal_applescript_macos.dylib';
+    final String notes =
+        '$contents/Frameworks/libdart_terminal_notes_macos.dylib';
     final String appIntentsImage =
         '$contents/Frameworks/libdart_terminal_app_intents_macos.dylib';
     final String applicationIconPath = '$resources/DartTerminal.icns';
@@ -285,6 +298,7 @@ Future<void> main(List<String> arguments) async {
       pty,
       renderer,
       appleScript,
+      notes,
       appIntentsImage,
       if (helperPayloadPath != null) helperPayloadPath,
       if (mode == 'release-aot') payload,
@@ -365,6 +379,7 @@ Future<void> main(List<String> arguments) async {
       pty,
       renderer,
       appleScript,
+      notes,
       appIntentsImage,
       applicationIconPath,
       scriptingDictionary,

@@ -89,6 +89,14 @@
       "abiVersion": 12,
       "abiVersionSymbol": "dtr_abi_version",
       "initializerSymbol": "dtr_initialize"
+    },
+    {
+      "id": "dart_terminal_notes_macos",
+      "package": "dart_terminal_notes_macos",
+      "library": "libdart_terminal_notes_macos.dylib",
+      "abiVersion": 1,
+      "abiVersionSymbol": "dtn_abi_version",
+      "initializerSymbol": "dtn_initialize"
     }
   ],
   "diagnostics": {

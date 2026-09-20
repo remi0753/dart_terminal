@@ -14,6 +14,7 @@ const List<String> terminalDistributionCodePaths = <String>[
   'Contents/Frameworks/libdart_pty_macos.dylib',
   'Contents/Frameworks/libdart_terminal_app_intents_macos.dylib',
   'Contents/Frameworks/libdart_terminal_applescript_macos.dylib',
+  'Contents/Frameworks/libdart_terminal_notes_macos.dylib',
   'Contents/Frameworks/libdart_terminal_renderer_macos.dylib',
   'Contents/Helpers/dart_terminal_runtime_worker',
   'Contents/MacOS/dart_terminal',
@@ -95,13 +96,14 @@ final class TerminalDistributionPolicy {
       contract['nativeCapabilities'],
     );
     _expect(
-      capabilities.length == 2 &&
+      capabilities.length == 3 &&
           _sameStrings(
             capabilities.map(
               (Map<String, Object?> value) => value['id'] as String,
             ),
             const <String>[
               'dart_terminal_applescript_macos',
+              'dart_terminal_notes_macos',
               'dart_terminal_renderer_macos',
             ],
           ),

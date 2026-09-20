@@ -43,6 +43,7 @@ static int32_t dtn_emit_view_intent(DtnSurface* surface, uint32_t kind,
                                     NSString* body, uint32_t color,
                                     uint64_t token);
 static bool dtn_intent_kind_mutates(uint32_t kind);
+static const da_native_extension_services_v1* g_dtn_services = NULL;
 
 static const uint32_t kDtnLightSurfaces[6] = {
     0xf5f5f3ffu, 0xfff3a6ffu, 0xdcebffffu,
@@ -1626,6 +1627,24 @@ static int dtn_compare_revision(const DtnParsedProjection* left,
 }
 
 uint32_t dtn_abi_version(void) { return DTN_ABI_VERSION; }
+
+int32_t dtn_initialize(const da_native_extension_services_v1* services) {
+  if (![NSThread isMainThread]) return DTN_STATUS_WRONG_THREAD;
+  if (services == NULL ||
+      services->struct_size <
+          offsetof(da_native_extension_services_v1,
+                   register_custom_view_provider) +
+              sizeof(services->register_custom_view_provider) ||
+      services->abi_version != DA_NATIVE_EXTENSION_ABI_VERSION) {
+    return DTN_STATUS_UNSUPPORTED_VERSION;
+  }
+  if (g_dtn_services != NULL) {
+    return g_dtn_services == services ? DTN_STATUS_OK
+                                      : DTN_STATUS_INVALID_ARGUMENT;
+  }
+  g_dtn_services = services;
+  return DTN_STATUS_OK;
+}
 
 DtnSurface* dtn_surface_create(void) {
   if (![NSThread isMainThread]) return NULL;

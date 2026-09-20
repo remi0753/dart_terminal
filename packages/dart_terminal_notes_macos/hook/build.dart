@@ -11,6 +11,7 @@ Future<void> main(List<String> arguments) async {
       name: 'dart_terminal_notes_macos',
       assetName: 'dart_terminal_notes_macos.dart',
       sources: const <String>['native/TerminalNotesPlugin.m'],
+      includes: const <String>['../../../dart_appkit/native/bridge/include'],
       frameworks: const <String>['AppKit', 'Foundation'],
       flags: const <String>[
         '-fobjc-arc',
