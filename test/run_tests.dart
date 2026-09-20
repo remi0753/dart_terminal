@@ -91,6 +91,7 @@ import 'terminal_mouse_encoder_test.dart';
 import 'terminal_mouse_router_test.dart';
 import 'terminal_native_content_test.dart';
 import 'terminal_native_hierarchy_test.dart';
+import 'terminal_note_model_test.dart';
 import 'terminal_osc52_policy_test.dart';
 import 'terminal_osc52_projection_test.dart';
 import 'terminal_overlay_contract_test.dart';
@@ -207,6 +208,7 @@ Future<void> main() async {
   runTerminalCellGlyphTests();
   await runTerminalNativeHierarchyTests();
   await runTerminalNativeContentTests();
+  runTerminalNoteModelTests();
   runTerminalInputMatrixTests();
   runTerminalAppKitKeyAdapterTests();
   runTerminalAppKitPolicyTests();

@@ -63,7 +63,7 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
 - [x] archived release roadmapへcompatibility acceptanceのhistorical owner参照を移す
   （[`archived-roadmap-acceptance-ownership.md`](docs/contextual-memory/archived-roadmap-acceptance-ownership.md)
   を参照して実施する）
-- [ ] CM-01 Pure Note domain model と trigger state machineを実装する
+- [x] CM-01 Pure Note domain model と trigger state machineを実装する
 - [ ] CM-02 Note store version 1 codecを実装する
 - [ ] CM-03 durable Note store workerを実装する
 - [ ] CM-04 durable context identityとrestoration bindingを実装する
