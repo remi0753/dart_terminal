@@ -27,8 +27,10 @@
   （判断結果は
   [`contextual-terminal-memory-product-slices.md`](docs/proposals/contextual-terminal-memory-product-slices.md)
   を参照する）
-- [ ] scope、identity、lifecycle と trigger delivery semantics を確定する
-  （実施時に同文書の Gate 2、Gate 4 を参照する）
+- [x] scope、identity、lifecycle と trigger delivery semantics を確定する
+  （判断結果は
+  [`contextual-terminal-memory-scope-trigger-semantics.md`](docs/proposals/contextual-terminal-memory-scope-trigger-semantics.md)
+  を参照する）
 - [ ] data model、永続化、privacy、security、migration 方針を確定する
   （実施時に同文書の Gate 3 を参照する）
 - [ ] overlay、編集体験、input authority、accessibility の仕様を確定する

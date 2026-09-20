@@ -249,6 +249,11 @@ safe state を区別する。
 
 ## 後続 gate への制約
 
+Gate 2/4の結果は
+[`contextual-terminal-memory-scope-trigger-semantics.md`](contextual-terminal-memory-scope-trigger-semantics.md)
+を正本とする。以下の制約を保ったまま、`This Terminal` scope、durable note context、
+deterministic On Return／At Next Prompt semanticsを採用した。
+
 - Gate 2/4 は S1〜S3だけを current scope とし、S4〜S6のための durable receipt、digest、
   rule scope、checkpoint stateを先行設計しない。
 - Gate 2では initial release の attach target を pane/session のどちらとして userへ説明するか、

@@ -1,6 +1,6 @@
 # Contextual terminal memory 設計判断一覧
 
-- 状態: Gate 1 完了、Gate 2以降は未決定（実装未承認）
+- 状態: Gate 1/2/4 完了、Gate 3/5/6/7は未決定（実装未承認）
 - 作成日: 2026-09-20
 - 対象提案: [`contextual-terminal-memory-and-input-checkpoints.md`](contextual-terminal-memory-and-input-checkpoints.md)
 
@@ -117,6 +117,23 @@ persistence、trigger、input authority、shell adapter、privacy、UX などに
 - Product validation は production telemetry ではなく、scripted acceptance、5人以上の
   moderated usability、明示的 opt-in feedback で行う。Note内容や利用時刻は収集しない。
 
+### 2026-09-20: Gate 2/4 scope and trigger decision
+
+- S1〜S3のattach identityとして、restorationを跨ぐopaque 128-bit
+  `TerminalNoteContextId`を採用した。live `PaneId`／`TerminalSessionId`とは一対一mappingを持つが、
+  shell restartでNote identityを変えない。
+- initial user-facing scopeは`This Terminal`だけとし、workspace、invocation receipt、
+  exact-command rule scopeはそれぞれ対応sliceとともに延期した。
+- pane closeやrestoration不一致時にNoteをpath/cwdで推測reattachせず、Detached collectionへ
+  保持する。split/new tab/cloneへの自動copyも行わない。
+- `On Return`はapp/window/tab/paneのeligible focusが一度awayになった後のfalse→trueだけを
+  qualifying eventとし、Note UI内部のfirst-responder移動はawayに数えない。
+- `At Next Prompt`はruntime sessionとnon-secret integration instanceにbindし、arm後の
+  C→D→A/N→Bだけをqualifying cycleにした。standard OSC 133 rangeとNote delivery channelを
+  分離し、remote/TUIの偶発markerをNote triggerに使わない。
+- 複数due Noteは単一railへFIFO coalesceし、capabilityはavailable/probing/suspended/unavailableを
+  明示する。available以外をno-matchやsafeと表示しない。
+
 ## 判断方法
 
 各項目は次のいずれかで閉じる。`採用` だけが後続の仕様化と実装候補になる。
@@ -129,7 +146,9 @@ persistence、trigger、input authority、shell adapter、privacy、UX などに
 behavior」「検証可能な acceptance」「後続 task」を本書または直接 link した decision recordへ
 追記する。Gate 1 の D-01〜D-06 は
 [`product slice decisions`](contextual-terminal-memory-product-slices.md) で完了した。
-Gate 2〜7 は**未決定**であり、表に挙げた選択肢は採用を意味しない。
+Gate 2/4 のD-07〜D-11、D-21〜D-26は
+[`scope and trigger semantics`](contextual-terminal-memory-scope-trigger-semantics.md) で完了した。
+Gate 3/5/6/7は**未決定**であり、表に挙げた選択肢は採用を意味しない。
 
 ## 機能 slice
 
@@ -168,6 +187,12 @@ S1+S2、S3は次 increment、S4〜S6は延期とした。
 
 ### Gate 2 — Scope、identity、lifecycle
 
+**状態: 完了。** Initial attach targetはuser-facing `This Terminal`、durable identityは
+opaque `TerminalNoteContextId`とした。workspace、invocation receipt、exact-command rule scopeは
+延期した。runtime/restoration/orphan transitionの正本は
+[`contextual-terminal-memory-scope-trigger-semantics.md`](contextual-terminal-memory-scope-trigger-semantics.md)
+を参照する。
+
 | ID | 決めること | 主な選択肢・問い | 完了証拠と影響 |
 | --- | --- | --- | --- |
 | D-07 | Workspace identity | git root、自動検出 cwd tree、user-created workspace、profile、または初版対象外のどれか。rename、symlink、複数 window、remote cwd をどう扱うか。 | stable key と lifecycle を定義できなければ workspace scope は延期する。store key、UI、migration に影響する。 |
@@ -191,6 +216,12 @@ S1+S2、S3は次 increment、S4〜S6は延期とした。
 | D-20 | Observability boundary | note本文、scope、digest、match event を log、diagnostic bundle、crash metadata、analyticsへ含めるか。 | default-exclude matrix と opt-in redaction test を作る。既存 diagnostics privacy contract に影響する。 |
 
 ### Gate 4 — Trigger と delivery semantics
+
+**状態: 完了。** S2はeligible focusのaway→return、S3は同一session/integration instanceの
+arm後C→D→A/N→B cycleで一度だけdueになる。passive/due、FIFO coalescing、capability状態の
+正本は
+[`contextual-terminal-memory-scope-trigger-semantics.md`](contextual-terminal-memory-scope-trigger-semantics.md)
+を参照する。
 
 | ID | 決めること | 主な選択肢・問い | 完了証拠と影響 |
 | --- | --- | --- | --- |
@@ -274,14 +305,14 @@ Gate 1で、S1/S2採用、S3を次 incrementとして採用、S4〜S6延期と�
 
 ## 次の検討で最初に閉じる事項
 
-`ROADMAP.md` の次の未完了 task は Gate 2/4 の scope、identity、lifecycle、trigger delivery
-semantics である。S1〜S3だけを current scope とし、次の順に決める。
+`ROADMAP.md` の次の未完了 task は Gate 3 のdata model、永続化、privacy、security、migration
+方針である。S1〜S3だけを current scope とし、次の順に決める。
 
-1. initial attach target を pane lifetime と terminal session のどちらとして定義するか。
-2. app restart、pane close、restoration、shell restartでNoteをretain、orphan、expireのどれにするか。
-3. `On Return` の正確なfocus event、arming、exactly-once consumptionを決める。
-4. `At Next Prompt` のverified event、capability loss、waiting/delivery semanticsを決める。
-5. workspace scopeをinitial releaseで不採用または延期にするか、stable identityを新設するか決める。
+1. Note entity、trigger record、delivery recordを分離するかとfield invariantを決める。
+2. 本文format、Unicode/control/link policy、bounded sizeを決める。
+3. active/resolved、trigger/delivery、detachedのstate transitionをdata modelへ落とす。
+4. store、atomic transaction、restoration reconciliation、quota、corruption recoveryを決める。
+5. export/import/delete/diagnostics/privacy boundaryとschema migrationを決める。
 
 ## 検証記録
 
