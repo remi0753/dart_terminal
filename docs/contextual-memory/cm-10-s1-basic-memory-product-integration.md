@@ -357,3 +357,97 @@ explicit exportをdurable authorityに接続する。Default-offではentry/surf
 - Native surfaceは意図的にcollapsedのままである。次のtaskでsemantic intentをdurable authorityへ接続し、create/open actionから
   railを展開する。Accepted resultはdurable commit後にだけnativeへ返し、content-free境界を維持する。
 - 実AppKitのS1全flow、restart/fault、2 window/3 tab/5 pane、dirty confirmation、owner 0 aggregateはCM-10最後のtaskで実施する。
+
+## 2026-09-21: S1 mutation/Detached/export/action task分割
+
+- ROADMAPを再確認し、先頭未完了がCM-10の「S1 mutation、Detached、export、localized actionを接続する」であることを確認した。
+  Data/privacy、overlay/editor、architecture/rolloutの凍結仕様、CM-05 authority、CM-09 native intent/result、既存action/menu/paletteと
+  save panel/export workerを再照合した。
+- このtaskはnative navigation ABI、durable mutation、Detached global collection、copy/export egress、application action/localizationの
+  独立成果物を含むため、一つの変更・検証・commitで扱うとowner境界と残作業が曖昧になる。次の順へ分割してROADMAPに登録した。
+  1. rail/editor navigationとdurable create/edit/color/reorder/resolve/reopen/delete bridge
+  2. Detached collection、explicit reattach、body-only copy、warning/save-panel後だけのportable export
+  3. hidden/internal create/open actionとEnglish/Japanese menu/palette projection
+- Native intentをproduct subsystemでpersistent IDへ変換する案は不採用とする。Surface/card tokenからNote IDへのmapはauthorityだけが所有し、
+  product/nativeへIDを返さないhigh-level semantic ingressを追加する。
+- Per-keystroke draftやselectionをDartへmirrorする案は不採用とする。Dart authorityはeditor mode、draft generation、ephemeral selectionだけを
+  projectionし、本文はSave intentのbounded payloadで一度だけ受ける。
+- Current/Detached切替、card selection、New/Edit開始をlocal native stateだけで変更する案は、authority generation/tokenとの不一致を
+  作るため不採用とする。Bounded semantic navigation intentとしてDart ownerへ返し、accepted projectionだけでUIを更新する。
+- Store commit前にaccepted native resultを返す案は不採用とする。Durable mutationはauthority queueでcommitし、新projectionをnativeが
+  acceptした後に同じoutstanding intentへsuccessを返す。Conflict/busy/failureはold revision/generationのfixed resultを返す。
+- Exportは既存workerのwrite-only portable codecとexclusive temp/flush/atomic renameを再利用する。Save panel前のstore content readやwrite、
+  path/contentのlog、general diagnosticsへのNote body追加は行わない。
+- `dart_appkit`は引き続き汎用libraryとして読み取り監査だけにし、Dart Terminal固有のNote/action/export codeを追加しない。
+
+## 2026-09-21: rail/editor navigationとdurable mutation bridge着手
+
+- ROADMAPを再確認し、分割後の先頭未完了が
+  「rail/editor navigationとdurable CRUD/reorder mutation bridgeを接続する」であることを確認した。
+- 範囲はnative badge/rail navigation、card selection、create/edit/cancelのvolatile state、Save/color/reorder/resolve/reopen/deleteの
+  durable authority ingress、lazy intent pump、result/projection orderingである。Detached projection/reattach、copy/export、application
+  action catalog/localizationは後続subtaskまで実装しない。
+- 完了条件はpersistent ID非公開、surface/projection/event/draft/store revisionのstrict照合、surfaceごとone outstanding、
+  commit-before-projection-before-success、失敗時draft/selection/Undo保持、disabled timer/resource 0、teardown owner 0とする。
+- このsubtaskもauthority、native ABI/pump、application interactionの3層へまたがるため、さらに次の順へ分割した。
+  1. authority-owned surface stateとpersistent-ID-free semantic mutation contract
+  2. native navigation ABIとlazy product intent pump
+  3. applicationのrail/editor owner transfer、focus、close admission接続
+
+## 2026-09-21: authority-owned surface stateとsemantic mutation contract着手
+
+- ROADMAPを再確認し、先頭未完了が
+  「authority-owned surface stateとsemantic mutation contractを実装する」であることを確認した。
+- Authorityのlive surfaceにvisibilityとは別のsection/page/selection/editor/draft generationを持たせる。Persistent Note IDは
+  authority内部のtoken mapとselectionだけに保持し、projectionはephemeral card tokenだけを公開する。
+- Product subsystemへ任意の`TerminalNoteAuthorityTransition`を渡す案はpersistent ID、revision、delete tombstoneの責務を漏らすため
+  不採用とする。Pane/surface/projection/event/draft/store revisionとfixed semantic kindだけを受けるhigh-level authority APIを作る。
+- Secure Note ID生成もauthorityが所有する。Testだけdeterministic entropyを注入し、product/nativeへcanonical IDを返さない。
+- この段階ではnative ABIとpollingを変更しない。Pure authority testからopen/create/edit/color/reorder/resolve/reopen/delete/cancel、
+  stale/duplicate/conflict、commit-before-publication、projection token rotationを固定する。
+
+## 2026-09-21: authority-owned surface stateとsemantic mutation contract実装
+
+### 実装と判断
+
+- `TerminalNoteAuthority`へsurface generationごとのCurrent section、page start、選択中Note、editor mode、draft generationを追加した。
+  Persistent Note IDは`_LiveNoteSurface`とprojectionごとに再生成するtoken mapだけに保持し、public projection/result/diagnosticsには
+  ephemeral tokenしか出さない。
+- High-level `submitSurfaceIntent`はpane/surface/projection/event/draft/store revision、fixed intent kind、bounded Save payloadだけを受ける。
+  Product側が任意のdomain transition、Note ID/revision、delete tombstoneを組み立てる余地を持たない。
+- Open/close/select/create/edit/cancelはprojection-only state transitionとし、native surfaceがprojectionをrejectした場合はvolatile stateを
+  rollbackする。Editing中のclose、古いtoken、draft不一致、unexpected payloadはfail closedとする。
+- Save/createではauthority-owned secure 128-bit Note IDを生成する。Testだけentropy sourceを注入でき、衝突時は最大32回まで再生成する。
+  Edit/color/reorder/resolve/reopen/deleteはauthority内でtokenをIDへ解決し、request時のstore/note revisionをdomain mutationへ渡す。
+- Durable intentは既存の単一直列queueへ投入し、store commit成功後の`onBeforePublication`でのみeditor/selectionを遷移させる。
+  その後target surfaceが新store revisionのprojectionをacceptして初めてsurface intentを成功扱いにする。Projection reject時はdurable
+  commitを巻き戻さず`unavailable`を返し、後続のprojection reconciliationで収束させる。
+- Deleteはaccepted snapshotの新store revisionを持つexact tombstoneを同じcommitへ渡す。Reorderはattached collection全体の
+  deterministic orderをauthority内で組み替える。
+- Projectionへsection/page/total/selection/editor/draftを追加した。最大64 card/256 KiBを維持し、選択Noteがpage外なら選択位置を
+  page先頭へ移して必ずephemeral selected tokenを生成する。Collapsed projectionは本文とselected tokenを0に保つ。
+- `dart_appkit`は変更していない。今回のAPI/state/mutationはすべて`dart_terminal`のproduct authority内に限定した。
+
+### Focused検証
+
+- `dart analyze lib/src/terminal_note_authority.dart lib/src/terminal_note_projection.dart test/terminal_note_authority_test.dart`:
+  issue 0。Analytics session fileのmtime更新だけはsandboxに拒否されたが、解析自体は完了した。
+- `dart run test/terminal_note_authority_test.dart`: pass。最初のsandbox実行はMetal/Clang module cache書込み拒否で停止し、
+  host権限の同一commandで成功した。
+- 新規vectorはopen/create/edit/color/reorder/resolve/reopen/delete/cancel、古いprojection/token、duplicate event、deterministic ID、
+  durable revision conflict、delete tombstone、commit-before-projection、native projection reject後のreconciliationを確認する。
+
+### 完了検証
+
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: pass。376 filesのformat変更0、root/package analyze issue 0、
+  native capability/host acceptance、Note store実filesystem、privacy/security stress、distribution/update/symbolを含む全回帰が
+  `dart_terminal tests passed`で完了した。
+- `make RUNTIME_ARCH=arm64 developer-jit-audit release-aot-audit`: 両runtimeともpass。Notesを含む`capabilities=3`、
+  application asset/code inventory、localization、App Intents metadataをexactに受理した。
+- `git diff --check`: pass。隣接`dart_appkit`の差分は着手前から存在する3 fileだけで、このsubtaskによる追加変更は0。
+
+### 次への境界
+
+- Native intent enumにはnavigation intentがまだなく、product adapterも新しいsection/selection/editor/draft projectionをまだ転送しない。
+  次のROADMAP項目「native navigation ABIとproduct intent pump」で接続する。
+- Detached collection/reattach、copy/exportは後続の専用subtaskまでauthority intentへ追加しない。

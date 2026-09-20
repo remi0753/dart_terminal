@@ -12,6 +12,7 @@ Future<void> runTerminalNoteAuthorityTests() async {
   await _testPromptOverflowAndSessionReplacement();
   await _testProjectionAcknowledgementAndClose();
   await _testExpandedProjectionHardBounds();
+  await _testSurfaceSemanticMutationContract();
   await _testSixtyFourPaneAndSessionBound();
   await _testApplicationShutdownAndReopen();
   await _testRealWorkerAuthorityReopen();
@@ -902,6 +903,327 @@ Future<void> _testExpandedProjectionHardBounds() async {
   _expect(surface.disposeCount == 1, 'stop disposes the bounded surface once');
 }
 
+Future<void> _testSurfaceSemanticMutationContract() async {
+  final _FakeAuthorityStore store = _FakeAuthorityStore();
+  var nextIdentity = 1;
+  final TerminalNoteAuthority authority = await _startAuthority(
+    store,
+    noteIdGenerator: TerminalNoteIdGenerator.forTesting(() {
+      final List<int> bytes = List<int>.filled(16, 0);
+      bytes[15] = nextIdentity++;
+      return bytes;
+    }),
+  );
+  final List<bool> committedBeforeProjection = <bool>[];
+  final _FakeNoteSurface surface = _FakeNoteSurface(
+    onApply: (TerminalNoteSurfaceProjection projection) {
+      committedBeforeProjection.add(
+        store.current.snapshot.storeRevision >= projection.storeRevision,
+      );
+    },
+  );
+  TerminalNoteSurfaceProjection projection = authority
+      .attachSurface(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        port: surface,
+      )
+      .projection!;
+  var event = 0;
+
+  Future<TerminalNoteSurfaceIntentResult> intent(
+    TerminalNoteSurfaceIntentKind kind, {
+    TerminalNoteCardToken? cardToken,
+    String? body,
+    NoteColorKey? color,
+    int? timestamp,
+  }) async {
+    final TerminalNoteSurfaceIntentResult result = await authority
+        .submitSurfaceIntent(
+          sequence: authority.nextSequence(),
+          paneId: const PaneId(1),
+          surfaceGeneration: projection.surfaceGeneration,
+          projectionGeneration: projection.projectionGeneration,
+          eventGeneration: ++event,
+          draftGeneration: projection.draftGeneration,
+          cardToken: cardToken,
+          expectedStoreRevision: projection.storeRevision,
+          kind: kind,
+          updatedAtUtcMicros: timestamp,
+          body: body,
+          color: color,
+        );
+    if (result.projection != null) projection = result.projection!;
+    return result;
+  }
+
+  final TerminalNoteSurfaceIntentResult opened = await intent(
+    TerminalNoteSurfaceIntentKind.open,
+  );
+  final TerminalNoteSurfaceIntentResult creating = await intent(
+    TerminalNoteSurfaceIntentKind.beginCreate,
+  );
+  _expect(
+    opened.disposition ==
+            TerminalNoteAuthorityMutationDisposition.runtimeApplied &&
+        creating.disposition ==
+            TerminalNoteAuthorityMutationDisposition.runtimeApplied &&
+        projection.visibility == TerminalNoteSurfaceVisibility.expanded &&
+        projection.editorMode == TerminalNoteEditorMode.creating &&
+        projection.draftGeneration == 1 &&
+        projection.selectedToken == null,
+    'surface navigation is authority-owned and starts a bounded create draft',
+  );
+
+  final TerminalNoteSurfaceProjection createProjection = projection;
+  final TerminalNoteSurfaceIntentResult staleSave = await authority
+      .submitSurfaceIntent(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        surfaceGeneration: projection.surfaceGeneration,
+        projectionGeneration: projection.projectionGeneration - 1,
+        eventGeneration: ++event,
+        draftGeneration: projection.draftGeneration,
+        cardToken: null,
+        expectedStoreRevision: projection.storeRevision,
+        kind: TerminalNoteSurfaceIntentKind.save,
+        updatedAtUtcMicros: 100,
+        body: 'alpha',
+        color: NoteColorKey.yellow,
+      );
+  _expect(
+    staleSave.disposition == TerminalNoteAuthorityMutationDisposition.stale &&
+        identical(staleSave.projection, createProjection) &&
+        projection.editorMode == TerminalNoteEditorMode.creating,
+    'stale projection rejection preserves the authority draft state',
+  );
+
+  final Completer<void> competingGate = store.blockNextCommit();
+  final Future<TerminalNoteAuthorityMutationResult> competingMutation =
+      authority.bindPane(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(2),
+      );
+  final Future<TerminalNoteSurfaceIntentResult> conflictingSave = intent(
+    TerminalNoteSurfaceIntentKind.save,
+    body: 'alpha',
+    color: NoteColorKey.yellow,
+    timestamp: 100,
+  );
+  await Future<void>.delayed(Duration.zero);
+  competingGate.complete();
+  await competingMutation;
+  final TerminalNoteSurfaceIntentResult conflict = await conflictingSave;
+  _expect(
+    conflict.disposition == TerminalNoteAuthorityMutationDisposition.rejected &&
+        conflict.mutationFailure ==
+            TerminalNoteMutationFailure.revisionConflict &&
+        projection.editorMode == TerminalNoteEditorMode.creating &&
+        projection.draftGeneration == createProjection.draftGeneration,
+    'a racing durable revision preserves the create draft and reports conflict',
+  );
+
+  final Completer<void> createGate = store.blockNextCommit();
+  final Future<TerminalNoteSurfaceIntentResult> creatingNote = intent(
+    TerminalNoteSurfaceIntentKind.save,
+    body: 'alpha',
+    color: NoteColorKey.yellow,
+    timestamp: 100,
+  );
+  await Future<void>.delayed(Duration.zero);
+  _expect(
+    authority.document.snapshot.notes.isEmpty &&
+        surface.applied.last.editorMode == TerminalNoteEditorMode.creating,
+    'a pending create is not projected before its durable commit',
+  );
+  createGate.complete();
+  final TerminalNoteSurfaceIntentResult created = await creatingNote;
+  final NoteId firstNoteId = authority.document.snapshot.notes.keys.single;
+  _expect(
+    created.disposition == TerminalNoteAuthorityMutationDisposition.committed &&
+        projection.editorMode == TerminalNoteEditorMode.inactive &&
+        projection.selectedToken != null &&
+        projection.cards.single.body == 'alpha' &&
+        committedBeforeProjection.every((bool value) => value) &&
+        !projection.toString().contains(firstNoteId.canonicalValue) &&
+        !projection.selectedToken.toString().contains(
+          firstNoteId.canonicalValue,
+        ),
+    'create commits before projection and never exposes its persistent ID',
+  );
+
+  final TerminalNoteCardToken firstToken = projection.selectedToken!;
+  final TerminalNoteSurfaceIntentResult editing = await intent(
+    TerminalNoteSurfaceIntentKind.beginEdit,
+    cardToken: firstToken,
+  );
+  final TerminalNoteSurfaceIntentResult edited = await intent(
+    TerminalNoteSurfaceIntentKind.save,
+    cardToken: projection.selectedToken,
+    body: 'alpha edited',
+    color: NoteColorKey.blue,
+    timestamp: 101,
+  );
+  _expect(
+    editing.isAccepted &&
+        edited.disposition ==
+            TerminalNoteAuthorityMutationDisposition.committed &&
+        projection.cards.single.body == 'alpha edited' &&
+        projection.cards.single.color == NoteColorKey.blue &&
+        projection.editorMode == TerminalNoteEditorMode.inactive,
+    'edit closes only after the durable body and color commit',
+  );
+
+  final TerminalNoteSurfaceIntentResult recolored = await intent(
+    TerminalNoteSurfaceIntentKind.changeColor,
+    cardToken: projection.selectedToken,
+    color: NoteColorKey.green,
+    timestamp: 102,
+  );
+  await intent(TerminalNoteSurfaceIntentKind.beginCreate);
+  final TerminalNoteSurfaceIntentResult secondCreated = await intent(
+    TerminalNoteSurfaceIntentKind.save,
+    body: 'second',
+    color: NoteColorKey.pink,
+    timestamp: 103,
+  );
+  final TerminalNoteCardToken secondTokenBeforeMove = projection.selectedToken!;
+  final TerminalNoteSurfaceIntentResult moved = await intent(
+    TerminalNoteSurfaceIntentKind.moveEarlier,
+    cardToken: secondTokenBeforeMove,
+    timestamp: 104,
+  );
+  _expect(
+    recolored.isAccepted &&
+        secondCreated.isAccepted &&
+        moved.isAccepted &&
+        projection.cards.first.body == 'second' &&
+        projection.selectedToken != secondTokenBeforeMove,
+    'color, second create, and reorder are durable and rotate card tokens',
+  );
+
+  final TerminalNoteSurfaceIntentResult oldToken = await intent(
+    TerminalNoteSurfaceIntentKind.changeColor,
+    cardToken: secondTokenBeforeMove,
+    color: NoteColorKey.purple,
+    timestamp: 105,
+  );
+  _expect(
+    oldToken.disposition == TerminalNoteAuthorityMutationDisposition.rejected &&
+        oldToken.mutationFailure == TerminalNoteMutationFailure.invalidState &&
+        projection.cards.first.color == NoteColorKey.pink,
+    'a token from an older projection cannot mutate a persistent Note',
+  );
+
+  final TerminalNoteSurfaceIntentResult resolved = await intent(
+    TerminalNoteSurfaceIntentKind.resolve,
+    cardToken: projection.selectedToken,
+    timestamp: 106,
+  );
+  final TerminalNoteSurfaceIntentResult reopened = await intent(
+    TerminalNoteSurfaceIntentKind.reopen,
+    cardToken: projection.selectedToken,
+    timestamp: 107,
+  );
+  await intent(
+    TerminalNoteSurfaceIntentKind.beginEdit,
+    cardToken: projection.selectedToken,
+  );
+  final int commitsBeforeCancel = store.commitCount;
+  final TerminalNoteSurfaceIntentResult cancelled = await intent(
+    TerminalNoteSurfaceIntentKind.cancelEditor,
+    cardToken: projection.selectedToken,
+  );
+  _expect(
+    resolved.isAccepted &&
+        reopened.isAccepted &&
+        cancelled.disposition ==
+            TerminalNoteAuthorityMutationDisposition.runtimeApplied &&
+        projection.editorMode == TerminalNoteEditorMode.inactive &&
+        store.commitCount == commitsBeforeCancel,
+    'resolve/reopen commit while cancel is a projection-only transition',
+  );
+
+  final int duplicateEvent = event;
+  final TerminalNoteSurfaceIntentResult duplicate = await authority
+      .submitSurfaceIntent(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        surfaceGeneration: projection.surfaceGeneration,
+        projectionGeneration: projection.projectionGeneration,
+        eventGeneration: duplicateEvent,
+        draftGeneration: projection.draftGeneration,
+        cardToken: projection.selectedToken,
+        expectedStoreRevision: projection.storeRevision,
+        kind: TerminalNoteSurfaceIntentKind.delete,
+        updatedAtUtcMicros: 108,
+      );
+  final TerminalNoteSurfaceIntentResult deleted = await intent(
+    TerminalNoteSurfaceIntentKind.delete,
+    cardToken: projection.selectedToken,
+    timestamp: 108,
+  );
+  _expect(
+    duplicate.disposition ==
+            TerminalNoteAuthorityMutationDisposition.duplicate &&
+        deleted.disposition ==
+            TerminalNoteAuthorityMutationDisposition.committed &&
+        authority.document.snapshot.notes.length == 1 &&
+        projection.selectedToken == null &&
+        store.committedDeletions.last.length == 1 &&
+        store.committedDeletions.last.single.deletionRevision ==
+            projection.storeRevision,
+    'duplicate events are rejected and delete commits one exact tombstone',
+  );
+
+  await intent(
+    TerminalNoteSurfaceIntentKind.selectCard,
+    cardToken: projection.cards.single.token,
+  );
+  surface.rejectNext = true;
+  final TerminalNoteSurfaceIntentResult projectionFailure = await intent(
+    TerminalNoteSurfaceIntentKind.changeColor,
+    cardToken: projection.selectedToken,
+    color: NoteColorKey.purple,
+    timestamp: 109,
+  );
+  _expect(
+    projectionFailure.disposition ==
+            TerminalNoteAuthorityMutationDisposition.unavailable &&
+        authority.document.snapshot.noteFor(firstNoteId)!.color ==
+            NoteColorKey.purple &&
+        projection.cards.single.color == NoteColorKey.green,
+    'a committed mutation is not reported successful until native accepts its '
+    'new projection',
+  );
+  projection = authority
+      .updateSurface(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        surfaceGeneration: projection.surfaceGeneration,
+        visibility: TerminalNoteSurfaceVisibility.expanded,
+        foreground: true,
+        occluded: false,
+      )
+      .projection!;
+  _expect(
+    projection.cards.single.color == NoteColorKey.purple,
+    'a later projection reconciliation exposes the already committed state',
+  );
+
+  final TerminalNoteSurfaceIntentResult closed = await intent(
+    TerminalNoteSurfaceIntentKind.close,
+  );
+  _expect(
+    closed.isAccepted &&
+        projection.visibility == TerminalNoteSurfaceVisibility.collapsed &&
+        projection.cards.isEmpty &&
+        projection.totalCount == 1,
+    'closing removes content from the projection without deleting the Note',
+  );
+  await authority.stop();
+}
+
 Future<void> _testSixtyFourPaneAndSessionBound() async {
   final _FakeAuthorityStore store = _FakeAuthorityStore();
   final TerminalNoteAuthority authority = await _startAuthority(
@@ -1400,6 +1722,7 @@ Future<void> _testStartupFailureStates() async {
 Future<TerminalNoteAuthority> _startAuthority(
   _FakeAuthorityStore store, {
   int authorityGeneration = 1,
+  TerminalNoteIdGenerator? noteIdGenerator,
   TerminalNoteAuthorityPublicationObserver? onPublished,
 }) => TerminalNoteAuthority.start(
   authorityGeneration: authorityGeneration,
@@ -1412,6 +1735,7 @@ Future<TerminalNoteAuthority> _startAuthority(
   ensureQuickTerminalContext: false,
   updatedAtUtcMicros: 1,
   idGenerator: _contextGenerator(authorityGeneration),
+  noteIdGenerator: noteIdGenerator,
   onPublished: onPublished,
 );
 
@@ -1599,6 +1923,8 @@ final class _FakeAuthorityStore implements TerminalNoteAuthorityStorePort {
       <TerminalNoteStoreDocument>[];
   final List<Completer<void>> _gates = <Completer<void>>[];
   final List<String> events = <String>[];
+  final List<List<TerminalNoteDeletionTombstone>> committedDeletions =
+      <List<TerminalNoteDeletionTombstone>>[];
   TerminalNoteStoreFailure? failNextCommit;
   var commitCount = 0;
   var stopCount = 0;
@@ -1657,6 +1983,9 @@ final class _FakeAuthorityStore implements TerminalNoteAuthorityStorePort {
       }
       current = candidate;
       committed.add(candidate);
+      committedDeletions.add(
+        List<TerminalNoteDeletionTombstone>.unmodifiable(deletions),
+      );
       return TerminalNoteStoreResult(
         disposition: TerminalNoteStoreDisposition.committed,
         failure: null,
@@ -1683,6 +2012,9 @@ final class _FakeAuthorityStore implements TerminalNoteAuthorityStorePort {
 }
 
 final class _FakeNoteSurface implements TerminalNoteSurfacePort {
+  _FakeNoteSurface({this.onApply});
+
+  final void Function(TerminalNoteSurfaceProjection projection)? onApply;
   final List<TerminalNoteSurfaceProjection> applied =
       <TerminalNoteSurfaceProjection>[];
   var rejectNext = false;
@@ -1696,6 +2028,7 @@ final class _FakeNoteSurface implements TerminalNoteSurfacePort {
       rejectNext = false;
       return false;
     }
+    onApply?.call(projection);
     applied.add(projection);
     return true;
   }

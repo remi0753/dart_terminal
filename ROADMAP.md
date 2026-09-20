@@ -115,6 +115,12 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
     - [x] production Note subsystemのauthority/topology lifecycleを実装する
     - [x] application composition、interaction、live font、disabled lifecycleを接続する
   - [ ] S1 mutation、Detached、export、localized actionを接続する
+    - [ ] rail/editor navigationとdurable CRUD/reorder mutation bridgeを接続する
+      - [x] authority-owned surface stateとsemantic mutation contractを実装する
+      - [ ] native navigation ABIとproduct intent pumpを実装する
+      - [ ] applicationのrail/editor interaction lifecycleへ接続する
+    - [ ] Detached collection、reattach、explicit copy/exportを接続する
+    - [ ] hidden create/open actionとlocalized menu/palette projectionを接続する
   - [ ] restart、fault、close/quit、両runtime product acceptanceを完了する
 - [ ] CM-11 S2 On Returnをproductへ統合する
 - [ ] CM-12 R0 hidden qualificationを完了する

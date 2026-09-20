@@ -12,6 +12,10 @@ abstract final class TerminalNoteProjectionLimits {
 
 enum TerminalNoteSurfaceVisibility { collapsed, expanded }
 
+enum TerminalNoteCollectionSection { current, detached }
+
+enum TerminalNoteEditorMode { inactive, creating, editing }
+
 /// Process-local card identity. It is never persisted or derived from Note ID.
 final class TerminalNoteCardToken implements Comparable<TerminalNoteCardToken> {
   TerminalNoteCardToken(this.value) {
@@ -84,8 +88,15 @@ final class TerminalNoteSurfaceProjection {
     required this.presentationEligible,
     required this.activeCount,
     required this.dueCount,
+    this.section = TerminalNoteCollectionSection.current,
+    this.pageStart = 0,
+    int? totalCount,
+    this.selectedToken,
+    this.editorMode = TerminalNoteEditorMode.inactive,
+    this.draftGeneration = 0,
     required Iterable<TerminalNoteCardProjection> cards,
-  }) : cards = List<TerminalNoteCardProjection>.unmodifiable(cards) {
+  }) : cards = List<TerminalNoteCardProjection>.unmodifiable(cards),
+       totalCount = totalCount ?? cards.length {
     if (surfaceGeneration <= 0 ||
         surfaceGeneration > TerminalNoteProjectionLimits.maximumGeneration ||
         projectionGeneration <= 0 ||
@@ -94,12 +105,28 @@ final class TerminalNoteSurfaceProjection {
         activeCount < 0 ||
         dueCount < 0 ||
         dueCount > activeCount ||
+        pageStart < 0 ||
+        this.totalCount < 0 ||
+        pageStart > this.totalCount ||
+        pageStart + this.cards.length > this.totalCount ||
+        draftGeneration < 0 ||
+        draftGeneration > TerminalNoteProjectionLimits.maximumGeneration ||
+        ((editorMode == TerminalNoteEditorMode.inactive) !=
+            (draftGeneration == 0)) ||
+        (editorMode == TerminalNoteEditorMode.creating &&
+            selectedToken != null) ||
+        (editorMode == TerminalNoteEditorMode.editing &&
+            selectedToken == null) ||
         this.cards.length > TerminalNoteProjectionLimits.maximumExpandedCards ||
         this.cards
                 .map((TerminalNoteCardProjection card) => card.token)
                 .toSet()
                 .length !=
             this.cards.length ||
+        (selectedToken != null &&
+            !this.cards.any(
+              (TerminalNoteCardProjection card) => card.token == selectedToken,
+            )) ||
         this.cards.fold<int>(
               0,
               (int total, TerminalNoteCardProjection card) =>
@@ -107,7 +134,9 @@ final class TerminalNoteSurfaceProjection {
             ) >
             TerminalNoteProjectionLimits.maximumExpandedBodyUtf8Bytes ||
         (visibility == TerminalNoteSurfaceVisibility.collapsed &&
-            this.cards.isNotEmpty)) {
+            (this.cards.isNotEmpty ||
+                selectedToken != null ||
+                editorMode == TerminalNoteEditorMode.editing))) {
       throw ArgumentError('Note surface projection is invalid');
     }
   }
@@ -123,6 +152,12 @@ final class TerminalNoteSurfaceProjection {
   final bool presentationEligible;
   final int activeCount;
   final int dueCount;
+  final TerminalNoteCollectionSection section;
+  final int pageStart;
+  final int totalCount;
+  final TerminalNoteCardToken? selectedToken;
+  final TerminalNoteEditorMode editorMode;
+  final int draftGeneration;
   final List<TerminalNoteCardProjection> cards;
 
   int get aggregateBodyUtf8Bytes => cards.fold<int>(
