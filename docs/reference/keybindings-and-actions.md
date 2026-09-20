@@ -16,7 +16,7 @@ The left side is one physical key plus zero or more exact modifiers. Each modifi
 
 Bindings are applied in include, including file, then command-line order. A later declaration of the same exact chord replaces an earlier declaration. Up to 1013 configured declarations are retained, in addition to 11 standard bindings. One keybind value is limited to 512 UTF-16 units; the enclosing configuration also limits a line to 16384 units and all assignments to 4096.
 
-Invalid declarations are diagnosed independently and omitted. Application actions are dispatched without blocking key delivery. Busy, unavailable, or failed actions are consumed and never fall through as terminal bytes.
+Invalid declarations are diagnosed independently and omitted. Application actions are dispatched without blocking key delivery. Busy, unavailable, or failed actions are consumed and never fall through as terminal bytes. Explicit application-action overrides also dispatch while Directory Navigator owns input; their key-down executes at most once and key release never reaches the PTY.
 
 Special targets:
 

@@ -67,7 +67,9 @@ String generateKeybindActionReference() {
       'Invalid declarations are diagnosed independently and omitted. '
       'Application actions are dispatched without blocking key delivery. '
       'Busy, unavailable, or failed actions are consumed and never fall '
-      'through as terminal bytes.',
+      'through as terminal bytes. Explicit application-action overrides also '
+      'dispatch while Directory Navigator owns input; their key-down executes '
+      'at most once and key release never reaches the PTY.',
     )
     ..writeln()
     ..writeln('Special targets:')

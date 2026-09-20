@@ -1689,13 +1689,13 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （実施時に
   [`docs/phase7/context-dock-tab-focus-directory-retention.md`](docs/phase7/context-dock-tab-focus-directory-retention.md)
   を参照する）
-- [ ] 全window／tab／split pane遷移でProcess InspectorとDirectory Navigatorの切替・refresh・設定keybindを安定化する
+- [x] 全window／tab／split pane遷移でProcess InspectorとDirectory Navigatorの切替・refresh・設定keybindを安定化する
   （実施時に
   [`docs/phase7/context-dock-transition-action-reliability.md`](docs/phase7/context-dock-transition-action-reliability.md)
   を参照する）
   - [x] foreground Directory保持authorityと画面遷移stateを整理し、全遷移matrixの回帰testを追加する
   - [x] `view.refresh-directory-navigator`をpane単位の表示authorityと設定keybindから確実にdispatchできるようにする
-  - [ ] native Developer JIT／Release AOTで遷移・refresh・keybindを受け入れ、仕様と検証証跡を更新する
+  - [x] native Developer JIT／Release AOTで遷移・refresh・keybindを受け入れ、仕様と検証証跡を更新する
 - [ ] native-content acceptanceのmanual Secure Keyboard Entry foreground activationを安定化する
   （実施時に
   [`docs/phase10/native-content-secure-input-activation.md`](docs/phase10/native-content-secure-input-activation.md)

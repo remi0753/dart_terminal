@@ -8635,6 +8635,9 @@ final class TerminalApplication {
       final File manualRefreshFile = File(
         '$fixtureRootPath/manual-refresh.txt',
       );
+      final File configuredRefreshFile = File(
+        '$fixtureRootPath/configured-refresh.txt',
+      );
       final Directory hiddenFixtureDirectory = Directory(
         '$fixtureRootPath/.context-hidden-directory',
       )..createSync();
@@ -10221,8 +10224,7 @@ final class TerminalApplication {
               .snapshotForWindow(initialWindow.id);
           final TerminalContextDockDirectorySnapshot? directory =
               contextDockDirectory.snapshotForWindow(initialWindow.id);
-          return content?.mode == TerminalContextDockContentMode.unavailable &&
-              content?.process == null &&
+          return content == null &&
               contextDockProcess.canRetainDirectoryPane(initialPaneId) &&
               contextDockProcess.activeOperationCount == 0 &&
               contextDockProcess.activeTimerCount == 0 &&
@@ -10239,6 +10241,20 @@ final class TerminalApplication {
               processDocumentText()?.contains('/sleep') == false;
         },
         'focus loss discarded the frozen Directory or retained process details',
+        failureDetails: () {
+          final TerminalContextDockContentSnapshot? content = contextDockProcess
+              .snapshotForWindow(initialWindow.id);
+          final TerminalContextDockDirectorySnapshot? directory =
+              contextDockDirectory.snapshotForWindow(initialWindow.id);
+          return 'content=${content?.mode.name ?? 'not-projected'} '
+              'process=${content?.process != null} '
+              'process_retained=${contextDockProcess.canRetainDirectoryPane(initialPaneId)} '
+              'process_operations=${contextDockProcess.activeOperationCount} '
+              'process_timers=${contextDockProcess.activeTimerCount} '
+              'directory=${directory?.status.name ?? 'absent'} '
+              'directory_frozen=${directory?.isFrozen ?? false} '
+              'directory_operations=${contextDockDirectory.activeOperationCount}';
+        },
       );
       appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
         application.eventProtocolVersion,
@@ -10605,12 +10621,46 @@ final class TerminalApplication {
         'context Split Right did not create one shared-action pane',
       );
       final PaneId splitPaneId = initialTab.focusedPaneId;
+      final TerminalPane splitPane = state.paneForId(splitPaneId)!;
+      final TerminalSession splitSession = sessions[splitPaneId]!;
       _expectLifecycle(
         splitPaneId != initialPaneId &&
             nativeActionInvocations.last == TerminalActionId.splitPaneRight &&
             actionDispatches.last.disposition ==
                 TerminalActionDispatchDisposition.executed,
         'context Split Right did not retain native invocation ownership',
+      );
+      await _waitForAsciiMarker(splitSession, prompt);
+      splitPane.insertText(
+        "cd $quotedFixtureRoot && printf '\\r\\n__DT_SPLIT_CWD_READY__\\r\\n'",
+      );
+      await splitPane.submit();
+      await _waitForAsciiMarker(splitSession, '__DT_SPLIT_CWD_READY__');
+      await waitFor(
+        () =>
+            splitPane.processSnapshot().disposition ==
+            TerminalPaneProcessDisposition.idleShell,
+        'same-cwd split pane did not return to its shell',
+      );
+      await waitFor(
+        () {
+          reconcile();
+          final TerminalContextDockDirectorySnapshot? directory =
+              contextDockDirectory.snapshotForWindow(initialWindow.id);
+          return directory?.paneId == splitPaneId &&
+              directory?.workingDirectory == fixtureRootPath &&
+              contextDockDirectory.activeOperationCount == 0;
+        },
+        'same-cwd split pane did not establish independent Directory authority',
+        failureDetails: () {
+          final TerminalContextDockDirectorySnapshot? directory =
+              contextDockDirectory.snapshotForWindow(initialWindow.id);
+          return 'focused=${initialTab.focusedPaneId == splitPaneId} '
+              'pane=${directory?.paneId == splitPaneId} '
+              'root_match=${directory?.workingDirectory == fixtureRootPath} '
+              'status=${directory?.status.name ?? 'absent'} '
+              'operations=${contextDockDirectory.activeOperationCount}';
+        },
       );
       await dispatch(TerminalActionId.focusPaneLeft);
       await waitFor(
@@ -10698,76 +10748,16 @@ final class TerminalApplication {
             TerminalContextDockContentMode.foregroundJob,
         'pane-focus Directory did not return to Process Inspector',
       );
-      initialPane.sendEndOfFile();
-      await _waitForAsciiMarker(initialSession, '__DT_PANE_FOCUS_DONE__');
-      await waitFor(
-        () =>
-            initialPane.processSnapshot().disposition ==
-            TerminalPaneProcessDisposition.idleShell,
-        'pane-focus foreground fixture did not return to its shell',
-      );
-      await dispatch(TerminalActionId.focusPaneRight);
-      await waitFor(
-        () => initialTab.focusedPaneId == splitPaneId,
-        'pane-focus fixture did not return to the temporary split for cleanup',
-      );
-      await dispatch(TerminalActionId.closeWindow);
-      await waitFor(
-        () =>
-            state.paneCount == 1 &&
-            sessions.length == 1 &&
-            owners.length == 1 &&
-            hierarchy.paneResourceCount == 1 &&
-            allSessions.length == 2 &&
-            sessions.containsKey(initialPaneId),
-        'Close did not remove only the focused split pane',
-      );
-      _expectLifecycle(
-        allSessions
-                .singleWhere(
-                  (TerminalSession session) => session.id.paneId == splitPaneId,
-                )
-                .shutdownResult
-                ?.isClean ==
-            true,
-        'Close did not cleanly release the split session',
-      );
-
-      reconcile();
-      await waitFor(
-        () =>
-            contextDockDirectory.hasRetainedSnapshot(initialPaneId) &&
-            contextDockDirectory.activeOperationCount == 0,
-        'tab-focus Directory fixture did not start from a settled snapshot',
-      );
-      final String? tabFocusRetainedRoot = contextDockDirectory
-          .snapshotForWindow(initialWindow.id)
-          ?.workingDirectory;
-      initialPane.insertText(
-        "printf '\\r\\n__DT_TAB_FOCUS_JOB__\\r\\n'; /bin/cat; "
-        "printf '\\r\\n__DT_TAB_FOCUS_DONE__\\r\\n'",
-      );
-      await initialPane.submit();
-      await _waitForAsciiMarker(initialSession, '__DT_TAB_FOCUS_JOB__');
-      await waitFor(
-        () =>
-            contextDockProcess
-                .snapshotForWindow(initialWindow.id)
-                ?.process
-                ?.executablePath
-                ?.endsWith('/cat') ==
-            true,
-        'tab-focus fixture did not enter Process Inspector',
-      );
+      final String? tabFocusRetainedRoot = paneFocusRetainedRoot;
       final int tabFocusWriteBaseline = writeEnqueuedCounts[initialPaneId] ?? 0;
       await dispatch(TerminalActionId.newTab);
       await waitFor(
         () =>
             state.tabCount == 2 &&
-            state.paneCount == 2 &&
-            sessions.length == 2 &&
-            owners.length == 2 &&
-            hierarchy.paneResourceCount == 2 &&
+            state.paneCount == 3 &&
+            sessions.length == 3 &&
+            owners.length == 3 &&
+            hierarchy.paneResourceCount == 3 &&
             allSessions.length == 3 &&
             initialWindow.selectedTabId != initialTab.id,
         'tab-focus fixture did not create and select its temporary tab',
@@ -10863,20 +10853,55 @@ final class TerminalApplication {
         (writeEnqueuedCounts[initialPaneId] ?? 0) == tabFocusWriteBaseline,
         'tab focus and retained Directory toggle wrote to the foreground PTY',
       );
+      final int configuredRefreshCommitCount =
+          contextDockDirectory.refreshCommitCount;
+      configuredRefreshFile.writeAsStringSync('configured');
+      _expectLifecycle(
+        !contextDockDirectory
+            .snapshotForWindow(initialWindow.id)!
+            .rows
+            .any(
+              (TerminalContextDockDirectoryRow row) =>
+                  row.entry.path == configuredRefreshFile.path,
+            ),
+        'configured refresh fixture was visible before its key event',
+      );
+      _injectKeyEventForTesting(
+        application,
+        contextDockWindow,
+        keyCode: 15,
+        modifiers: ModifierKeys.controlBit,
+        characters: '\u0012',
+        charactersIgnoringModifiers: 'r',
+        monotonicNanoseconds: eventTimestamp++,
+      );
+      await waitFor(
+        () =>
+            contextDockDirectory.refreshCommitCount ==
+                configuredRefreshCommitCount + 1 &&
+            contextDockDirectory.activeOperationCount == 0 &&
+            contextDockDirectory
+                .snapshotForWindow(initialWindow.id)!
+                .rows
+                .any(
+                  (TerminalContextDockDirectoryRow row) =>
+                      row.entry.path == configuredRefreshFile.path,
+                ),
+        'configured Navigator keybind did not refresh the active process pane exactly once',
+      );
+      _expectLifecycle(
+        contextDockState
+                .snapshotForWindow(initialWindow.id)!
+                .navigatorOwnsInput &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) == tabFocusWriteBaseline,
+        'configured Navigator refresh changed input ownership or wrote to the foreground PTY',
+      );
       contentItem.performAction();
       await waitFor(
         () =>
             contextDockProcess.snapshotForWindow(initialWindow.id)?.mode ==
             TerminalContextDockContentMode.foregroundJob,
         'tab-focus Directory did not return to Process Inspector',
-      );
-      initialPane.sendEndOfFile();
-      await _waitForAsciiMarker(initialSession, '__DT_TAB_FOCUS_DONE__');
-      await waitFor(
-        () =>
-            initialPane.processSnapshot().disposition ==
-            TerminalPaneProcessDisposition.idleShell,
-        'tab-focus foreground fixture did not return to its shell',
       );
       await dispatch(TerminalActionId.selectNextTab);
       _injectFocusEventForTesting(
@@ -10899,10 +10924,10 @@ final class TerminalApplication {
       await waitFor(
         () =>
             state.tabCount == 1 &&
-            state.paneCount == 1 &&
-            sessions.length == 1 &&
-            owners.length == 1 &&
-            hierarchy.paneResourceCount == 1 &&
+            state.paneCount == 2 &&
+            sessions.length == 2 &&
+            owners.length == 2 &&
+            hierarchy.paneResourceCount == 2 &&
             allSessions.length == 3 &&
             initialWindow.selectedTabId == initialTab.id &&
             sessions.containsKey(initialPaneId),
@@ -10911,6 +10936,78 @@ final class TerminalApplication {
       _expectLifecycle(
         tabFocusOtherSession.shutdownResult?.isClean == true,
         'Close did not cleanly release the temporary tab session',
+      );
+      await waitFor(() {
+        reconcile();
+        return initialTab.focusedPaneId == initialPaneId &&
+            contextDockProcess
+                    .snapshotForWindow(initialWindow.id)
+                    ?.process
+                    ?.executablePath
+                    ?.endsWith('/cat') ==
+                true;
+      }, 'combined tab cleanup did not restore the original process pane');
+      await dispatch(TerminalActionId.focusPaneRight);
+      await waitFor(
+        () {
+          reconcile();
+          final TerminalContextDockDirectorySnapshot? directory =
+              contextDockDirectory.snapshotForWindow(initialWindow.id);
+          final TerminalContextDockContentSnapshot? content = contextDockProcess
+              .snapshotForWindow(initialWindow.id);
+          return initialTab.focusedPaneId == splitPaneId &&
+              directory?.paneId == splitPaneId &&
+              directory?.workingDirectory == fixtureRootPath &&
+              content?.paneId == splitPaneId &&
+              content?.process == null &&
+              contextDockProcess.canRetainDirectoryPane(initialPaneId);
+        },
+        'same-cwd split pane did not remain independently targetable after configured refresh',
+      );
+      await dispatch(TerminalActionId.focusPaneLeft);
+      await waitFor(() {
+        reconcile();
+        return initialTab.focusedPaneId == initialPaneId &&
+            contextDockProcess
+                    .snapshotForWindow(initialWindow.id)
+                    ?.process
+                    ?.executablePath
+                    ?.endsWith('/cat') ==
+                true;
+      }, 'combined split/tab round trip did not restore Process Inspector');
+      initialPane.sendEndOfFile();
+      await _waitForAsciiMarker(initialSession, '__DT_PANE_FOCUS_DONE__');
+      await waitFor(
+        () =>
+            initialPane.processSnapshot().disposition ==
+            TerminalPaneProcessDisposition.idleShell,
+        'combined split/tab foreground fixture did not return to its shell',
+      );
+      await dispatch(TerminalActionId.focusPaneRight);
+      await waitFor(
+        () => initialTab.focusedPaneId == splitPaneId,
+        'combined transition fixture did not select its temporary split for cleanup',
+      );
+      await dispatch(TerminalActionId.closeWindow);
+      await waitFor(
+        () =>
+            state.paneCount == 1 &&
+            sessions.length == 1 &&
+            owners.length == 1 &&
+            hierarchy.paneResourceCount == 1 &&
+            allSessions.length == 3 &&
+            sessions.containsKey(initialPaneId),
+        'Close did not remove only the combined fixture split pane',
+      );
+      _expectLifecycle(
+        allSessions
+                .singleWhere(
+                  (TerminalSession session) => session.id.paneId == splitPaneId,
+                )
+                .shutdownResult
+                ?.isClean ==
+            true,
+        'Close did not cleanly release the combined fixture split session',
       );
 
       await prepareExactPasteReader(
@@ -11069,7 +11166,8 @@ final class TerminalApplication {
         'navigator_privacy=true navigator_accessibility=true '
         'process_inspector=true process_pipeline=true process_input=true '
         'process_shell_owned=true process_short=true process_elapsed=true '
-        'tab_focus=true '
+        'tab_focus=true transition_matrix=true configured_refresh=true '
+        'same_directory_targeted=true '
         'quick_look=true services_selection=true service_confirmation=true '
         'service_exact=true drop_text_exact=true drop_files_exact=true '
         'folder_tabs=true folder_windows=true cwd_exact=true focus=true '

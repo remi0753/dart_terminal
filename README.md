@@ -102,7 +102,10 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   tree／Searchを表示し、rootと開いたsubtreeを含む結果が揃った時に一度で差し替えて
   fileの追加・削除・metadata変更を反映する。Viewメニュー／Command Paletteの
   `Refresh Directory Navigator`（`view.refresh-directory-navigator`）から手動更新でき、
-  任意の非予約chordを`keybind`で割り当てられる。矢印/Page/Command+矢印とrefresh中はPTY write 0を保つ
+  任意の非予約chordを`keybind`で割り当てられる。設定keybindはterminal／Navigatorのどちらが入力を
+  所有していても同じshared actionへ一回だけ届き、key releaseを含めPTYへfall throughしない。
+  同じdirectoryを参照する別paneのsnapshot、selection、expanded stateはpath一致だけでは更新しない。
+  矢印/Page/Command+矢印とrefresh中はPTY write 0を保つ
 - NavigatorのCommand-Cは選択したabsolute pathだけをcopyし、Option-Returnは既存paste
   admissionでshell literalにquoteした1 pathを改行なしで挿入してterminalへ戻る。自動cdや
   command実行はせず、stale/remote/alternate screen/foreground process/manual secure inputは
@@ -115,12 +118,12 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   terminalが入力を所有したままなのでinteractive commandを操作でき、Shift-Command-F/G/MはPTYへ送らず消費する。
   75 ms未満の短いcommandは表示を切り替えず、silent commandも250 ms以内に検出し、詳細情報の再取得は最大1秒に
   1回とする。shell builtinは推測したargvを出さず実行中statusだけを示す。ECHO-offやmanual／automatic
-  Secure Keyboard Entry中もprocess情報を表示し、入力保護とは独立させる。app非active時はprocessの
-  path／argvとpollを即時破棄するが、同じvisible window／pane／session／PGIDへ戻るapplication focus round tripと、
-  同じwindow内のsplit pane／tab focus round tripに限り、command前のDirectory snapshotと照合用job identityを
-  非投影のまま凍結保持する。別pane／tabをfocused中は旧paneのprocess詳細／poll／filesystem operationを持たず、
-  元paneへ戻った時にsession／PGIDを再検証する。Dock非表示、別windowへのfocus変更、tab／pane close、
-  app非active中の別tab cache、session／PGID変更では保持snapshotも破棄する。終了後はfreshな
+  Secure Keyboard Entry中もprocess情報を表示し、入力保護とは独立させる。app非active、Dock非表示、別window、
+  split pane、native tabへ移るとprocessのpath／argv、poll、filesystem operation、表示overrideを即時破棄する一方、
+  live paneごとにcommand前のimmutable Directory snapshotと照合用のsession／PGIDだけを非投影で凍結保持する。
+  画面遷移を複数回組み合わせても元paneへ戻った時に現在のsession／PGIDを再検証し、一致する同じjobだけ
+  Process InspectorとDirectory Navigatorを再構築する。pane／tab／window close、session／PGID変更では保持snapshotも
+  破棄し、別paneへpath一致だけで転用しない。終了後はfreshな
   Directory Navigatorへ戻る。実行中もControl-Shift-Command-NでDirectory Navigatorへ切り替えるとMove modeへ
   focusし、矢印／Page移動、folder展開・折り畳み、Search／Go To／Move、hidden切替、手動refreshを通常時と同じ
   bounded operationとして使える。同じ操作で同一jobのProcess Inspectorへ戻り、terminal inputも復元する。

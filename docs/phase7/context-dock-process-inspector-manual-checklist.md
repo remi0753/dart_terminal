@@ -1,7 +1,7 @@
 # Process Inspector manual acceptance checklist
 
 - Status: manual verification checklist
-- Date: 2026-09-16
+- Date: 2026-09-20
 - Scope: macOS standard windowのContext Dock／local foreground process表示
 - Automated companion: `make RUNTIME_ARCH=arm64 runtime-native-content-integration`
 
@@ -57,7 +57,12 @@ architecture、Developer JIT／Release AOT、pass/failとcontent-freeな失敗�
   変わった場合は古いtreeを表示しない。
 - [ ] foreground jobのpaneから同じwindow内の別split pane／tabへ移動中は、旧paneのprocess詳細／poll／filesystem
   operationを持たない。元paneへ戻った時、同じsession／PGIDならProcess Inspectorから保持treeへ切り替えられる。
-  別windowへの移動、tab／pane close、app非active中の別tab cache、session／PGID変更後は古いtreeを表示しない。
+  split→tab→別window→app非active→Dock hideの順序を入れ替えて連続しても同じ結果となり、元paneへ戻るまで
+  process詳細やDirectoryを投影しない。pane／tab／window close、session／PGID変更後は古いtreeを表示しない。
+- [ ] 同じworking directoryを参照するsplit paneを2つ作り、片方でforeground job中の保持treeを表示する。
+  `keybind = control+r=view.refresh-directory-navigator`など未予約chordを設定して外部作成fileを更新すると、
+  表示中paneのtreeだけが一回更新され、Navigator focusを保ち、key-down／releaseともPTYへ届かない。
+  もう一方のpaneのselection、expanded state、refresh generationはpath一致だけでは変わらない。
 - [ ] Option-Shift-CはProcess Inspector表示中もDockだけを開閉し、foreground commandを停止・変更しない。
 - [ ] View > Show Process Arguments（日本語: プロセスの引数を表示）のcheckを外すとargvだけが非表示となり、
   process名、実行ファイル、PID／PGID、経過時間は維持される。Shift-Command-Pから同じactionを検索し、
@@ -77,12 +82,14 @@ architecture、Developer JIT／Release AOT、pass/failとcontent-freeな失敗�
   Process Inspector表示中のNavigator shortcutは入力を奪わない。Control-Shift-Command-Nで明示的にDirectoryへ
   切り替えた時だけNavigatorがinputを所有し、path挿入は引き続き拒否する。
 - [ ] command実行中に別pane、tab、windowへfocusを移すと、Dockは新しいfocused paneだけを反映し、旧jobの
-  executable／argvを表示しない。同じwindow内のsplit pane／tab round trip用に保持するのは非投影のtreeと
-  照合identityだけで、app非active中や別pane／tab表示中にprocess詳細を保持・再表示しない。
+  executable／argvを表示しない。任意のpresentation round trip用に保持するのはpane-boundな非投影treeと
+  session／PGIDだけで、app非active、Dock非表示、別window／pane／tab表示中にprocess詳細を保持・再表示せず、
+  filesystem operationも0になる。
 - [ ] pipeline leaderが先に終了する、process数が上限を超える、権限によりpath／argvの一部が読めない場合も、
   UIは操作可能なままpartial／omittedを表示し、Directoryの`unknown`とは混同しない。
-- [ ] tab/window close、Dock hide、app Quit後にpoll timer、process observation、PTY、native text view、
-  Secure Keyboard Entry ownerが残らない。
+- [ ] tab/window close、app Quit後に保持snapshot、poll timer、process observation、PTY、native text view、
+  Secure Keyboard Entry ownerが残らない。Dock hideはoperationを全停止したpane-bound snapshotだけを保持し、
+  再表示時にsession／PGIDが一致しなければ破棄する。
 
 ## VoiceOverと記録
 

@@ -183,3 +183,61 @@ native presentation policyが別々にretained stateを管理している。複�
 - 初回`test/run_tests.dart`はsource変更後のgap inventory staleを意図どおり検出した。正規generatorで全関連証跡を更新後、
   同じsuiteを再実行して成功した。
 - `git diff --check`: 成功。
+
+### 2026-09-20 — 実AppKit複合遷移と設定keybind
+
+- native-content fixtureの従来split round tripとtab round tripは、別々のforeground `/bin/cat` jobを開始して各々を
+  cleanupしていた。この構造では報告された遷移の組合せを検出できないため、同じforeground jobを維持したまま
+  split A→B→A、new native tab→元tab、B→Aを連続する一つのfixtureへ統合した。各復帰でProcess Inspectorと
+  Directory toggleを確認し、最後に同じjobを終了してsplit／tabを個別cleanupする。
+- second splitは通常のcwd継承metadataだけに依存せず、fixture内で同じlocal directoryへ明示`cd`し、独立したpane／sessionの
+  Directory authorityを確立する。これにより同一cwdの複数paneという報告条件を実PTY上で固定した。
+- native-content起動設定へ`control+r=view.refresh-directory-navigator`を追加した。tab round trip後にforeground pane Aで
+  Directory Navigatorを表示し、外部作成fileをControl+Rのnative key eventで一回だけ取得する。refresh commit countは
+  exactly one、Navigator ownership維持、foreground PTY write count不変を検証する。その後pane Bへ移り、同じcwdでも
+  pane B自身のDirectory projectionと、Aのcontent-free retention authorityが同時に成立することを確認する。
+- model fixtureでは非投影pane Bのimmutable snapshotがAのrefreshでは変わらないことを直接確認できる。実AppKit fixtureで
+  pane Bへfocusすると、idle paneの通常同期が現時点のfilesystemを再取得し得るため、focus後のfile一覧を古いままとする
+  assertionは仕様より強すぎる。native側はtarget pane identityとexactly-once dispatch、model側は非投影snapshot分離を担当する。
+- app非active時は投影window state自体を除去するリファクタリング後のcontractに合わせ、native fixtureも
+  `unavailable` documentではなくprocess snapshot nullを期待する。Directoryはimmutable frozen snapshot、process側は
+  pane／session／PGIDだけを保持し、rich process contentとtimerは0である。
+
+### 2026-09-20 — native fixtureの失敗と修正
+
+- sandbox内の最初のDeveloper JIT buildはMetal compilerが`~/.cache/clang/ModuleCache`へ書けず失敗した。実AppKit起動を含むため、
+  sandbox外で同じ正式make targetを再実行した。sourceやfixtureの問題ではない。
+- 最初のnative runは旧fixtureがapp非active中に`unavailable` content documentを期待し、新しい非投影contractのnull snapshotと
+  不一致だった。非投影中のprocess detailを残さない期待へ更新した。
+- 次のrunでは新規splitがmetadata上の元cwdで起動し、初期paneのplain sh内`cd`を暗黙継承しなかった。split自身でfixture cwdへ
+  移動してからsnapshotを確立するよう修正した。
+- 3 pane（元split tree 2 pane + temporary tab 1 pane）へ変わったため、旧tab fixtureの2 pane countを3へ修正した。
+- pane Aのrefresh後にpane Bへfocusして古いfile一覧を要求するassertionは、idle paneの正規再同期まで禁止してしまった。
+  非投影中のsnapshot分離はmodel testに残し、native testはpane Bの独立target、同一cwd、Aのretention継続を検証するよう整理した。
+
+### 2026-09-20 — 第三subtask実機検証
+
+- `make RUNTIME_ARCH=arm64 developer-jit-native-content`: 最終再実行は成功。
+  `RUNTIME_NATIVE_CONTENT_INTEGRATION_PASS mode=developer-jit`を確認した。
+- `make RUNTIME_ARCH=arm64 release-aot-native-content`: 成功。
+  `RUNTIME_NATIVE_CONTENT_INTEGRATION_PASS mode=release-aot`を確認した。
+- 両runtimeとも`transition_matrix=true configured_refresh=true same_directory_targeted=true`を含むexact markerを要求し、
+  実AppKit hierarchy、native key routing、実PTY write count、5 session最終cleanupを既存native-content gate内で検証した。
+- `make keybind-action-reference phase7-appkit-acceptance terminal-compatibility-regression-coverage
+  ghostty-p0-p1-gap-inventory release-candidate-daily-use-matrix`: 成功。設定keybindのNavigator routing仕様と変更後source hashを
+  versioned evidenceへ反映した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: 成功。351 Dart fileのformat差分0、`dart analyze`の`No issues found!`、
+  Context Dock unit／configuration／key routing、全native capability、security stress、reference freshness、release-candidate gateを含み、
+  最終行`dart_terminal tests passed`を確認した。
+- `git diff --check`: 成功。
+
+## 完了時の設計状態
+
+- process controllerはrichなwindow projectionと、pane ID別のcontent-free retention authorityを分離した。presentationの
+  理由や順序に依存するcallback／pending markerはなく、全非投影遷移が同じsuspend pathを通る。
+- Directory controllerはpane IDをidentityとし、同じpathの複数paneでもsnapshot、selection、expanded state、refresh generationを
+  共有しない。非投影中とProcess Inspector表示中はoperation 0を保ち、明示Directory表示中の対象paneだけ再開する。
+- keybinding engineはbinding originを保持し、Navigator固有の既定Command-arrow操作と、利用者が明示したapplication action overrideを
+  両立する。terminal／Navigatorの両入力経路でapplication actionのdownはexactly once、releaseとunavailable actionはPTYへ流れない。
+- model transition matrix、実AppKitのapp focus、Dock hide、同一jobのsplit＋tab複合往復、同一cwd pane、Developer JIT／Release AOTが
+  同じcontractを検証する。今後presentation経路を追加する場合も、理由別cacheを増やさず共通suspend／revalidateへ接続する。

@@ -2471,6 +2471,7 @@ Future<void> _runNativeContent(_Options options, _Invocation invocation) async {
       '--no-config',
       '--shell-integration=none',
       '--runtime-native-content-test',
+      '--keybind=control+r=view.refresh-directory-navigator',
       '--font-family=Menlo',
       '--font-size=16',
       '--palette-foreground=#c0d0e0',
@@ -2504,6 +2505,8 @@ Future<void> _runNativeContent(_Options options, _Invocation invocation) async {
           r'navigator_accessibility=true process_inspector=true '
           r'process_pipeline=true process_input=true process_shell_owned=true '
           r'process_short=true process_elapsed=true tab_focus=true '
+          r'transition_matrix=true configured_refresh=true '
+          r'same_directory_targeted=true '
           r'quick_look=true '
           r'services_selection=true '
           r'service_confirmation=true service_exact=true '

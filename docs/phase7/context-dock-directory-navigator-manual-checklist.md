@@ -1,7 +1,7 @@
 # Directory Navigator manual acceptance checklist
 
 - Status: manual verification checklist
-- Date: 2026-09-14
+- Date: 2026-09-20
 - Scope: macOS standard windowのContext Dock／Directory Navigator
 - Automated companion: `make RUNTIME_ARCH=arm64 runtime-native-content-integration`
 
@@ -34,6 +34,9 @@
 - [ ] Command-Leftでsubtreeを畳み、selectionがvisible parentへ戻る。
 - [ ] Escapeを1回押すとquery/resultを保持したままterminalへ戻り、Dockが`Mode: Terminal`を表示する。再度Shift-Command-Fで同じcontextへ戻る。
 - [ ] Dock表示中でもterminal focusなら通常のterminal key、selection、scrollが従来どおり動作する。
+- [ ] `keybind = control+r=view.refresh-directory-navigator`など未予約chordを設定し、terminal focusとNavigator focusの
+  両方から実行すると、表示中paneのroot／expanded subtree／Searchだけが一回更新される。key releaseを含めPTY writeは0で、
+  同じworking directoryを参照する別paneのselection／expanded state／snapshot generationは変わらない。
 - [ ] 初回表示のDockは従来より広い380 ptで、狭いwindow、resize、keyboard境界操作、fullscreen、tab/pane切替、Dock hide/showでもterminalと重ならず、focused paneのcwdへ追従する。
 
 ## Tree、search、path handoff
