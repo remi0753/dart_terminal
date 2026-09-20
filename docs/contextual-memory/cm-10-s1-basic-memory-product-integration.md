@@ -607,6 +607,8 @@ explicit exportをdurable authorityに接続する。Default-offではentry/surf
 - 次の先頭未完了taskは「hidden create/open actionとlocalized menu/palette projectionを接続する」である。
 - Notes actionは既存のDart Terminal action registry/menu/paletteへ追加し、generic AppKitへNote固有actionを追加しない。Visibilityはhidden/internal
   `notes=true`かつ利用可能なsurface ownerへ限定する。
+- Authority-owned Detached paging/reorder/reattach、body-only copy、consented portable exportの全childが個別commitとfull gateを完了したため、
+  集約親「Detached collection、reattach、explicit copy/exportを接続する」も完了状態へ更新した。追加実装や未追跡のchildはない。
 
 ## 2026-09-21: S1 mutation/Detached/export/action task分割
 

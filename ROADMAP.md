@@ -119,7 +119,7 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
       - [x] authority-owned surface stateとsemantic mutation contractを実装する
       - [x] native navigation ABIとproduct intent pumpを実装する
       - [x] applicationのrail/editor interaction lifecycleへ接続する
-    - [ ] Detached collection、reattach、explicit copy/exportを接続する
+    - [x] Detached collection、reattach、explicit copy/exportを接続する
       - [x] authority-owned Detached navigation、64件paging、durable reorder、explicit reattachを接続する
       - [x] selected Noteのexplicit body-only pasteboard copyを接続する
       - [x] sensitive warning、save panel、portable exportを接続する
