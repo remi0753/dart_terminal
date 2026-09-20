@@ -1,11 +1,14 @@
 #include "TerminalNotesPlugin.h"
+#include "TerminalRendererPlugin.h"
 
 #import <AppKit/AppKit.h>
 
+#include <dlfcn.h>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -16,6 +19,57 @@ const da_native_extension_services_v1 kServices = {
     nullptr,
     nullptr,
 };
+
+da_custom_view_factory_v1 g_renderer_view_factory = nullptr;
+void* g_renderer_view_factory_context = nullptr;
+da_custom_view_operation_v1 g_renderer_view_operation = nullptr;
+void* g_renderer_view_operation_context = nullptr;
+
+int32_t RegisterRendererViewProvider(
+    const uint8_t* provider_identifier, size_t provider_identifier_length,
+    da_custom_view_factory_v1 factory, void* context) {
+  constexpr char kProvider[] = "dart_terminal.TerminalMetalView";
+  if (provider_identifier == nullptr || factory == nullptr ||
+      provider_identifier_length != sizeof(kProvider) - 1u ||
+      std::memcmp(provider_identifier, kProvider, sizeof(kProvider) - 1u) !=
+          0 ||
+      g_renderer_view_factory != nullptr) {
+    return DA_STATUS_INVALID_ARGUMENT;
+  }
+  g_renderer_view_factory = factory;
+  g_renderer_view_factory_context = context;
+  return DA_STATUS_OK;
+}
+
+int32_t RegisterRendererViewOperation(
+    const uint8_t* provider_identifier, size_t provider_identifier_length,
+    da_custom_view_operation_v1 operation, void* context) {
+  constexpr char kProvider[] = "dart_terminal.TerminalMetalView";
+  if (provider_identifier == nullptr || operation == nullptr ||
+      provider_identifier_length != sizeof(kProvider) - 1u ||
+      std::memcmp(provider_identifier, kProvider, sizeof(kProvider) - 1u) !=
+          0 ||
+      g_renderer_view_operation != nullptr) {
+    return DA_STATUS_INVALID_ARGUMENT;
+  }
+  g_renderer_view_operation = operation;
+  g_renderer_view_operation_context = context;
+  return DA_STATUS_OK;
+}
+
+const da_native_extension_services_v1 kRendererServices = {
+    sizeof(da_native_extension_services_v1),
+    DA_NATIVE_EXTENSION_ABI_VERSION,
+    RegisterRendererViewProvider,
+    RegisterRendererViewOperation,
+};
+
+template <typename Function>
+Function Lookup(void* image, const char* symbol) {
+  dlerror();
+  Function function = reinterpret_cast<Function>(dlsym(image, symbol));
+  return dlerror() == nullptr ? function : nullptr;
+}
 
 void write_u16(std::vector<uint8_t>& bytes, size_t offset, uint16_t value) {
   bytes[offset] = static_cast<uint8_t>(value);
@@ -190,14 +244,25 @@ void mark_cards_due(std::vector<uint8_t>& bytes, uint32_t count) {
 
 }  // namespace
 
-int main() {
+int main(int argc, const char* argv[]) {
   @autoreleasepool {
+    [NSApplication sharedApplication];
+    if (argc != 2) {
+      std::fprintf(stderr, "usage: terminal_notes_tests <renderer.dylib>\n");
+      return 64;
+    }
+    void* renderer_image = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL);
+    if (renderer_image == nullptr) {
+      std::fprintf(stderr, "renderer capability load failed: %s\n", dlerror());
+      return 1;
+    }
     if (!expect(dtn_initialize(nullptr) == DTN_STATUS_UNSUPPORTED_VERSION,
                 "null initialize services") ||
         !expect(dtn_initialize(&kServices) == DTN_STATUS_OK,
                 "initialize") ||
         !expect(dtn_initialize(&kServices) == DTN_STATUS_OK,
                 "idempotent initialize")) {
+      dlclose(renderer_image);
       return 1;
     }
   bool ok = true;
@@ -351,6 +416,108 @@ int main() {
                        DTN_STATUS_OK &&
                    host.subviews.lastObject == note_view,
                "native child surface attachment and layer order");
+
+  using RendererInitialize = int32_t (*)(
+      const da_native_extension_services_v1*);
+  using RendererCreate = int32_t (*)(const DtrMetalRendererConfigV1*,
+                                      DtrMetalRendererSummaryV1*);
+  using RendererRelease = int32_t (*)(uint64_t);
+  const RendererInitialize renderer_initialize = Lookup<RendererInitialize>(
+      renderer_image, "dtr_initialize");
+  const RendererCreate renderer_create =
+      Lookup<RendererCreate>(renderer_image, "dtr_metal_renderer_create");
+  const RendererRelease renderer_release =
+      Lookup<RendererRelease>(renderer_image, "dtr_metal_renderer_release");
+  ok &= expect(renderer_initialize != nullptr && renderer_create != nullptr &&
+                   renderer_release != nullptr &&
+                   renderer_initialize(&kRendererServices) == DA_STATUS_OK &&
+                   g_renderer_view_factory != nullptr &&
+                   g_renderer_view_operation != nullptr,
+               "renderer native composition fixture initializes");
+  NSView* renderer_view = nil;
+  DtrMetalRendererSummaryV1 renderer_summary = {};
+  DtnSurface* composition_surface = nullptr;
+  if (g_renderer_view_factory != nullptr &&
+      g_renderer_view_operation != nullptr && renderer_create != nullptr &&
+      renderer_release != nullptr) {
+    void* retained_view =
+        g_renderer_view_factory(g_renderer_view_factory_context);
+    renderer_view = (__bridge_transfer NSView*)retained_view;
+    DtrMetalRendererConfigV1 renderer_config = {};
+    renderer_config.struct_size = sizeof(renderer_config);
+    renderer_config.version = DTR_METAL_RENDERER_CONFIG_VERSION;
+    renderer_config.maximum_viewport_width = 640u;
+    renderer_config.maximum_viewport_height = 480u;
+    renderer_config.maximum_instances = 64u;
+    renderer_config.atlas_width = 16u;
+    renderer_config.atlas_height = 16u;
+    renderer_config.maximum_alpha_pages = 1u;
+    renderer_config.maximum_color_pages = 1u;
+    renderer_summary.struct_size = sizeof(renderer_summary);
+    renderer_summary.version = DTR_METAL_RENDERER_SUMMARY_VERSION;
+    ok &= expect(renderer_view != nil &&
+                     renderer_create(&renderer_config, &renderer_summary) ==
+                         DTR_STATUS_OK,
+                 "renderer composition fixture owns one renderer generation");
+    DtrMetalViewBindingV1 binding = {};
+    binding.struct_size = sizeof(binding);
+    binding.version = DTR_METAL_VIEW_BINDING_VERSION;
+    binding.operation = DTR_METAL_VIEW_OPERATION_BIND;
+    binding.renderer_handle = renderer_summary.handle;
+    binding.renderer_generation = renderer_summary.generation;
+    ok &= expect(
+        renderer_summary.handle != 0u &&
+            g_renderer_view_operation(
+                g_renderer_view_operation_context,
+                (__bridge void*)renderer_view,
+                reinterpret_cast<const uint8_t*>(&binding),
+                sizeof(binding)) == DA_STATUS_OK,
+        "renderer composition fixture binds its private AppKit view");
+
+    composition_surface = dtn_surface_create();
+    NSView* composition_view =
+        (__bridge NSView*)dtn_surface_native_view(composition_surface);
+    ok &= expect(
+        composition_surface != nullptr &&
+            dtn_surface_attach_to_renderer(
+                composition_surface, renderer_summary.handle,
+                renderer_summary.generation + 1u) == DTN_STATUS_NOT_FOUND &&
+            dtn_surface_attach_to_renderer(
+                composition_surface, renderer_summary.handle,
+                renderer_summary.generation) == DTN_STATUS_OK &&
+            composition_view.superview == renderer_view &&
+            renderer_view.subviews.lastObject == composition_view,
+        "Notes resolves RTLD_LOCAL renderer identity and overlays natively");
+    NSView* second_host =
+        [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 320, 240)];
+    ok &= expect(dtn_surface_attach_to_host(
+                     composition_surface, (__bridge void*)second_host) ==
+                         DTN_STATUS_BUSY &&
+                     dtn_surface_attach_to_renderer(
+                         composition_surface, renderer_summary.handle,
+                         renderer_summary.generation) == DTN_STATUS_OK,
+                 "one Note surface cannot own two native hosts");
+    int32_t worker_attach_status = DTN_STATUS_OK;
+    std::thread worker([&] {
+      worker_attach_status = dtn_surface_attach_to_renderer(
+          composition_surface, renderer_summary.handle,
+          renderer_summary.generation);
+    });
+    worker.join();
+    ok &= expect(worker_attach_status == DTN_STATUS_WRONG_THREAD,
+                 "renderer attachment is AppKit-main-thread confined");
+    ok &= expect(dtn_surface_detach_from_host(composition_surface) ==
+                         DTN_STATUS_OK &&
+                     composition_view.superview == nil &&
+                     renderer_release(renderer_summary.handle) ==
+                         DTR_STATUS_OK &&
+                     dtn_surface_attach_to_renderer(
+                         composition_surface, renderer_summary.handle,
+                         renderer_summary.generation) == DTN_STATUS_NOT_FOUND,
+                 "detach and released renderer identity fail closed");
+    dtn_surface_destroy(composition_surface);
+    composition_surface = nullptr;
+  }
   NSArray* expanded_children = [note_view accessibilityChildren];
   ok &= expect(expanded_children.count == 1u &&
                    [[[expanded_children firstObject] accessibilityRole]
@@ -1210,6 +1377,8 @@ int main() {
 
   dtn_surface_destroy(surface);
   ok &= expect(dtn_debug_live_surfaces() == 0u, "final owner count");
+  renderer_view = nil;
+  dlclose(renderer_image);
   if (!ok) return 1;
   std::puts("terminal Notes native codec tests passed");
   return 0;

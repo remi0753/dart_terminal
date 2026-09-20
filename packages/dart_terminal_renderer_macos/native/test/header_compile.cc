@@ -79,6 +79,7 @@ int main() {
   auto* catalog_count = &dtr_debug_live_font_catalog_count;
   auto* renderer_create = &dtr_metal_renderer_create;
   auto* renderer_release = &dtr_metal_renderer_release;
+  auto* renderer_native_view = &dtr_metal_renderer_native_view;
   auto* renderer_finalizer = &dtr_metal_renderer_release_finalizer;
   auto* renderer_reset = &dtr_metal_renderer_reset_atlas;
   auto* renderer_upload = &dtr_metal_renderer_upload_atlas;
@@ -95,7 +96,8 @@ int main() {
          catalog_shape == nullptr || catalog_rasterize == nullptr ||
          catalog_diagnostics == nullptr || catalog_count == nullptr ||
          renderer_create == nullptr ||
-         renderer_release == nullptr || renderer_finalizer == nullptr ||
+         renderer_release == nullptr || renderer_native_view == nullptr ||
+         renderer_finalizer == nullptr ||
          renderer_reset == nullptr ||
          renderer_upload == nullptr || renderer_submit == nullptr ||
          renderer_state == nullptr || renderer_request_draw == nullptr ||

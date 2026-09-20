@@ -162,6 +162,7 @@ int main(int argc, const char* argv[]) {
     using MetalCreate = int32_t (*)(const DtrMetalRendererConfigV1*,
                                     DtrMetalRendererSummaryV1*);
     using MetalRelease = int32_t (*)(uint64_t);
+    using MetalNativeView = void* (*)(uint64_t, uint64_t);
     using MetalFinalizer = void (*)(void*);
     using MetalReset = int32_t (*)(uint64_t,
                                    const DtrMetalAtlasResetV1*);
@@ -203,6 +204,8 @@ int main(int argc, const char* argv[]) {
         Lookup<MetalCreate>(image, "dtr_metal_renderer_create");
     const MetalRelease metal_release =
         Lookup<MetalRelease>(image, "dtr_metal_renderer_release");
+    const MetalNativeView metal_native_view = Lookup<MetalNativeView>(
+        image, "dtr_metal_renderer_native_view");
     const MetalFinalizer metal_finalizer = Lookup<MetalFinalizer>(
         image, "dtr_metal_renderer_release_finalizer");
     const MetalReset metal_reset =
@@ -1241,6 +1244,10 @@ int main(int argc, const char* argv[]) {
                metal_summary.failure_kind == DTR_METAL_FAILURE_NONE &&
                live_metal_count != nullptr && live_metal_count() == 1,
            "Metal renderer publishes exact bounded resource identity");
+    Expect(metal_native_view != nullptr &&
+               metal_native_view(metal_summary.handle,
+                                 metal_summary.generation) == nullptr,
+           "unbound renderer publishes no native composition view");
 
     DtrMetalAtlasResetV1 initial_atlas_reset = {};
     initial_atlas_reset.struct_size = sizeof(initial_atlas_reset);
@@ -1705,6 +1712,13 @@ int main(int argc, const char* argv[]) {
                  view_handle, reinterpret_cast<const uint8_t*>(&binding),
                  sizeof(binding)) == DA_STATUS_OK,
              "opaque provider operation binds renderer to terminal view");
+      Expect(metal_native_view(presentation_summary.handle,
+                               presentation_summary.generation) ==
+                     (__bridge void*)view &&
+                 metal_native_view(presentation_summary.handle,
+                                   presentation_summary.generation + 1) ==
+                     nullptr,
+             "native composition resolves only the exact bound generation");
       __unsafe_unretained CAMetalLayer* metal_layer =
           static_cast<CAMetalLayer*>(view.layer);
       const CGColorSpaceRef layer_color_space = metal_layer.colorspace;
@@ -2633,6 +2647,9 @@ int main(int argc, const char* argv[]) {
       const uint64_t presentation_handle = presentation_summary.handle;
       Expect(metal_release(presentation_handle) == DTR_STATUS_OK,
              "renderer release succeeds on the AppKit main thread");
+      Expect(metal_native_view(presentation_handle,
+                               presentation_summary.generation) == nullptr,
+             "released renderer cannot resolve a native composition view");
       Expect(view.delegate == nil,
              "renderer release detaches its view on the AppKit main thread");
       Expect(live_metal_count() == 0,

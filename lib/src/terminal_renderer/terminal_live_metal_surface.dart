@@ -654,6 +654,11 @@ final class TerminalLiveMetalSurface {
   Timer? _timer;
 
   bool get isDisposed => _disposed;
+  TerminalMetalRendererCompositionIdentity get compositionIdentity {
+    _requireLive();
+    return _recovery.currentDomain.renderer.compositionIdentity;
+  }
+
   TerminalFontCatalogMetrics get fontMetrics => _catalog.metrics;
   String get fontFamily => _catalog.family;
   TerminalSyntheticStylePolicy get syntheticStylePolicy =>

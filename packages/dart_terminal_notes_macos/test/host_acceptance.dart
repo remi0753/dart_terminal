@@ -142,6 +142,16 @@ final class _MissingBindings implements TerminalNotesNativeBindings {
   int focus(Object handle, int target) => throw UnsupportedError('unreachable');
 
   @override
+  int attachToRenderer(
+    Object handle, {
+    required int rendererHandle,
+    required int rendererGeneration,
+  }) => throw UnsupportedError('unreachable');
+
+  @override
+  int detachFromHost(Object handle) => throw UnsupportedError('unreachable');
+
+  @override
   void destroySurface(Object handle) => throw UnsupportedError('unreachable');
 
   @override

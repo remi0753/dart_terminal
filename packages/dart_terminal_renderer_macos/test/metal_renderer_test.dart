@@ -215,6 +215,13 @@ void _testTypedRendererReadback() {
     ),
   );
   try {
+    final TerminalMetalRendererCompositionIdentity compositionIdentity =
+        renderer.compositionIdentity;
+    _expect(
+      compositionIdentity.handle > 0 &&
+          compositionIdentity.generation == renderer.generation,
+      'native composition identity is bounded to the live renderer generation',
+    );
     _expect(
       renderer.resetAtlas(atlasGeneration: 1) ==
           TerminalMetalUploadDisposition.uploaded,
@@ -349,6 +356,10 @@ void _testTypedRendererReadback() {
   _expectThrows(
     renderer.state,
     'disposed renderer cannot cross the native boundary',
+  );
+  _expectThrows(
+    () => renderer.compositionIdentity,
+    'disposed renderer cannot publish a composition identity',
   );
 }
 

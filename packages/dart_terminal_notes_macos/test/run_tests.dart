@@ -348,6 +348,30 @@ void _testSurfaceFacade() {
     () => surface.focus(TerminalNotesNativeFocusTarget.none),
     'none is not a focus request',
   );
+  _expect(
+    surface.attachToRenderer(rendererHandle: 41, rendererGeneration: 43) ==
+            TerminalNotesAttachDisposition.attached &&
+        bindings.attachment == (41, 43),
+    'opaque renderer identity attaches without an AppKit object in Dart',
+  );
+  bindings.attachStatus = 7;
+  _expect(
+    surface.attachToRenderer(rendererHandle: 41, rendererGeneration: 43) ==
+        TerminalNotesAttachDisposition.busy,
+    'second native host is surfaced as a typed busy result',
+  );
+  bindings.attachStatus = 6;
+  _expect(
+    surface.attachToRenderer(rendererHandle: 99, rendererGeneration: 101) ==
+        TerminalNotesAttachDisposition.rendererUnavailable,
+    'stale renderer generation is fail-soft',
+  );
+  _expectThrows<RangeError>(
+    () => surface.attachToRenderer(rendererHandle: 0, rendererGeneration: 1),
+    'zero renderer handle is rejected before FFI',
+  );
+  surface.detachFromHost();
+  _expect(bindings.detachCount == 1, 'typed host detach is forwarded once');
   bindings.intent = TerminalNotesNativeRawIntent(
     surfaceGeneration: 7,
     projectionGeneration: 3,
@@ -408,6 +432,9 @@ class _FakeBindings implements TerminalNotesNativeBindings {
   (double, double, double, double)? layout;
   int destroyCount = 0;
   TerminalNotesNativeRawIntent? intent;
+  (int, int)? attachment;
+  int attachStatus = 0;
+  int detachCount = 0;
 
   @override
   int get abiVersion => 1;
@@ -514,6 +541,24 @@ class _FakeBindings implements TerminalNotesNativeBindings {
 
   @override
   int focus(Object handle, int target) => target == 1 ? 0 : 6;
+
+  @override
+  int attachToRenderer(
+    Object handle, {
+    required int rendererHandle,
+    required int rendererGeneration,
+  }) {
+    _expect(identical(handle, this.handle), 'fake attach handle');
+    attachment = (rendererHandle, rendererGeneration);
+    return attachStatus;
+  }
+
+  @override
+  int detachFromHost(Object handle) {
+    _expect(identical(handle, this.handle), 'fake detach handle');
+    detachCount++;
+    return 0;
+  }
 
   @override
   void destroySurface(Object handle) {

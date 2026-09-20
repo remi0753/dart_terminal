@@ -85,6 +85,8 @@ int main(void) {
                              DtrMetalRendererSummaryV1*) =
       dtr_metal_renderer_create;
   int32_t (*renderer_release)(uint64_t) = dtr_metal_renderer_release;
+  void* (*renderer_native_view)(uint64_t, uint64_t) =
+      dtr_metal_renderer_native_view;
   void (*renderer_finalizer)(void*) = dtr_metal_renderer_release_finalizer;
   int32_t (*renderer_reset)(uint64_t, const DtrMetalAtlasResetV1*) =
       dtr_metal_renderer_reset_atlas;
@@ -110,6 +112,7 @@ int main(void) {
          catalog_shape == 0 || catalog_rasterize == 0 ||
          catalog_diagnostics == 0 || catalog_count == 0 ||
          renderer_create == 0 || renderer_release == 0 ||
+         renderer_native_view == 0 ||
          renderer_finalizer == 0 ||
          renderer_reset == 0 ||
          renderer_upload == 0 || renderer_submit == 0 ||

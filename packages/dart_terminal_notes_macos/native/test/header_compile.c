@@ -19,5 +19,7 @@ _Static_assert(sizeof(DtnSurfaceResultV1) == 88u,
 
 int main(void) {
   DtnSurface* surface = (DtnSurface*)0;
-  return surface == (DtnSurface*)0 ? 0 : 1;
+  int32_t (*attach_renderer)(DtnSurface*, uint64_t, uint64_t) =
+      dtn_surface_attach_to_renderer;
+  return surface == (DtnSurface*)0 && attach_renderer != 0 ? 0 : 1;
 }

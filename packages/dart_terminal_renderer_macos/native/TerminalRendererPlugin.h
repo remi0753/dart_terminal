@@ -779,6 +779,13 @@ __attribute__((visibility("default"))) int32_t dtr_metal_renderer_create(
 __attribute__((visibility("default"))) int32_t
 dtr_metal_renderer_release(uint64_t handle);
 
+// Native-to-native composition seam. Returns the currently bound terminal
+// view for exactly one live renderer generation. The result is unretained and
+// must never cross Dart FFI or be persisted. Product-owned native capabilities
+// may resolve this symbol at runtime to attach bounded child presentation.
+__attribute__((visibility("default"))) void* dtr_metal_renderer_native_view(
+    uint64_t handle, uint64_t generation);
+
 // NativeFinalizer-compatible fallback. The pointer value is the opaque handle;
 // it is never dereferenced. Explicit release remains the deterministic path.
 __attribute__((visibility("default"))) void

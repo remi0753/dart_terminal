@@ -546,19 +546,22 @@ $(TERMINAL_NOTES_PLUGIN_LIBRARY): \
 		-Wl,-install_name,@rpath/libdart_terminal_notes_macos.dylib -o $@
 
 $(TERMINAL_NOTES_TEST_BINARY): $(TERMINAL_NOTES_PLUGIN_LIBRARY) \
+		$(TERMINAL_RENDERER_PLUGIN_LIBRARY) \
 		$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native/test/TerminalNotesCapabilityTests.mm
 	@mkdir -p $(PRODUCT_NATIVE_TEST_BUILD_DIR)
-	$(CLANGXX) $(PRODUCT_NATIVE_FLAGS) -std=c++20 \
+	$(CLANGXX) $(PRODUCT_NATIVE_FLAGS) -std=c++20 -fobjc-arc \
 		-I$(DART_APPKIT_ROOT)/native/bridge/include \
 		-I$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native \
+		-I$(PROJECT_ROOT)/packages/dart_terminal_renderer_macos/native \
 		$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native/test/TerminalNotesCapabilityTests.mm \
 		$(TERMINAL_NOTES_PLUGIN_LIBRARY) \
 		-framework AppKit -framework Foundation \
 		-Wl,-rpath,$(PRODUCT_NATIVE_TEST_BUILD_DIR) -o $@
 
 terminal-notes-native-test: terminal-notes-contract-check \
-		$(TERMINAL_NOTES_PLUGIN_LIBRARY) $(TERMINAL_NOTES_TEST_BINARY)
-	@$(TERMINAL_NOTES_TEST_BINARY)
+		$(TERMINAL_NOTES_PLUGIN_LIBRARY) $(TERMINAL_RENDERER_PLUGIN_LIBRARY) \
+		$(TERMINAL_NOTES_TEST_BINARY)
+	@$(TERMINAL_NOTES_TEST_BINARY) $(TERMINAL_RENDERER_PLUGIN_LIBRARY)
 
 terminal-notes-dart-test:
 	@cd $(PROJECT_ROOT)/packages/dart_terminal_notes_macos && $(DART) pub get

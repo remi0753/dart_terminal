@@ -594,6 +594,21 @@ final class TerminalMetalRendererState {
   final int acceptedAtlasUploadBytes;
 }
 
+/// Volatile identity used only for native-to-native child-view composition.
+///
+/// This is a renderer registry identity, not an AppKit object address. It is
+/// valid only while the owning renderer is live and its generation is current;
+/// callers must never persist it or use it as terminal or Note identity.
+final class TerminalMetalRendererCompositionIdentity {
+  const TerminalMetalRendererCompositionIdentity({
+    required this.handle,
+    required this.generation,
+  });
+
+  final int handle;
+  final int generation;
+}
+
 /// Generation-owned, bounded native Metal renderer.
 ///
 /// [submit] only validates and copies. Native view presentation and GPU
@@ -690,6 +705,12 @@ final class TerminalMetalRenderer implements Finalizable {
   final TerminalMetalRendererConfig config;
 
   bool get isDisposed => _handle == 0;
+
+  TerminalMetalRendererCompositionIdentity get compositionIdentity =>
+      TerminalMetalRendererCompositionIdentity(
+        handle: _liveHandle(),
+        generation: generation,
+      );
 
   void bindToView(View view) {
     final int handle = _liveHandle();

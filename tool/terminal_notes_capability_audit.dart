@@ -113,6 +113,7 @@ Future<void> main(List<String> arguments) async {
     '_dtn_surface_apply_projection',
     '_dtn_surface_apply_result',
     '_dtn_surface_attach_to_host',
+    '_dtn_surface_attach_to_renderer',
     '_dtn_surface_create',
     '_dtn_surface_destroy',
     '_dtn_surface_detach_from_host',

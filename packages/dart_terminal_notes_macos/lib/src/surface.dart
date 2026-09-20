@@ -14,6 +14,8 @@ enum TerminalNotesApplyDisposition {
 
 enum TerminalNotesCapabilityAvailability { available, nativeUnavailable }
 
+enum TerminalNotesAttachDisposition { attached, rendererUnavailable, busy }
+
 enum TerminalNotesIntentKind {
   save,
   cancel,
@@ -386,6 +388,43 @@ final class TerminalNotesNativeSurface {
     if (status == nativeStatusOk) return true;
     if (status == nativeStatusNotFound) return false;
     throw TerminalNotesNativeException('focus', status);
+  }
+
+  TerminalNotesAttachDisposition attachToRenderer({
+    required int rendererHandle,
+    required int rendererGeneration,
+  }) {
+    RangeError.checkValueInInterval(
+      rendererHandle,
+      1,
+      TerminalNotesLimits.maximumSignedGeneration,
+      'rendererHandle',
+    );
+    RangeError.checkValueInInterval(
+      rendererGeneration,
+      1,
+      TerminalNotesLimits.maximumSignedGeneration,
+      'rendererGeneration',
+    );
+    final int status = _bindings.attachToRenderer(
+      _requireHandle(),
+      rendererHandle: rendererHandle,
+      rendererGeneration: rendererGeneration,
+    );
+    return switch (status) {
+      nativeStatusOk => TerminalNotesAttachDisposition.attached,
+      nativeStatusNotFound =>
+        TerminalNotesAttachDisposition.rendererUnavailable,
+      nativeStatusBusy => TerminalNotesAttachDisposition.busy,
+      _ => throw TerminalNotesNativeException('attachToRenderer', status),
+    };
+  }
+
+  void detachFromHost() {
+    final int status = _bindings.detachFromHost(_requireHandle());
+    if (status != nativeStatusOk) {
+      throw TerminalNotesNativeException('detachFromHost', status);
+    }
   }
 
   void updateLayout({

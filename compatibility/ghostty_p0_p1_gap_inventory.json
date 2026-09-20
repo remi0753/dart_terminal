@@ -164,11 +164,11 @@
     },
     {
       "path": "packages/dart_terminal_renderer_macos/native/TerminalRendererPlugin.h",
-      "sha256": "d0f655c12a155e77f8933e2eb173df406b39477595bdd29389b05807c48e753b"
+      "sha256": "0b231cb1309bbf5dad78b4bbc0176bb3969f7ec2267b6c805e8e346cd305476a"
     },
     {
       "path": "packages/dart_terminal_renderer_macos/native/TerminalRendererPlugin.m",
-      "sha256": "cce2dae44ff142a25f50d65985e4a3f9d07d378ed211af5ec8b3c0577cdc47c9"
+      "sha256": "424d435cc35f200787a3d7e1cf29a4b513c013558f9a3bd422a223f6fbbec0f2"
     },
     {
       "path": "packages/dart_terminal_renderer_macos/native/TerminalShaders.metal",
@@ -176,7 +176,7 @@
     },
     {
       "path": "packages/dart_terminal_renderer_macos/native/test/TerminalRendererCapabilityTests.mm",
-      "sha256": "6dc85888f41e45cb4406a52478aaf07518e7e51c92f718269ab62224a71eb0cd"
+      "sha256": "f0018ac66ec6f929ba882eaccd8f791381cd20429dcd9ec1928e4e6a804c3950"
     },
     {
       "path": "packages/dart_terminal_renderer_macos/test/font_catalog_test.dart",

@@ -24,6 +24,7 @@ export 'src/projection.dart'
 export 'src/surface.dart'
     show
         TerminalNotesApplyDisposition,
+        TerminalNotesAttachDisposition,
         TerminalNotesCapabilityAvailability,
         TerminalNotesIntentKind,
         TerminalNotesNativeIntent,

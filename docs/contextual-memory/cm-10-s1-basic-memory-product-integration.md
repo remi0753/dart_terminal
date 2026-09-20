@@ -144,3 +144,78 @@ explicit exportをdurable authorityに接続する。Default-offではentry/surf
   composition/lifecycleは未実装であり、第2サブタスクで行う。
 - 第1サブタスクではsurfaceをapplicationへ生成していない。したがってdefault-off/on双方でNote surface/store ownerはまだ0で、
   entry action、mutation、Detached/exportも後続サブタスクの範囲である。
+
+## 2026-09-21: 第2サブタスク着手と分割
+
+- ROADMAPを再確認し、先頭未完了がCM-10第2サブタスク
+  「application compositionとpane/Quick Terminal surface lifecycleを接続する」であることを確認した。
+- Implementation plan、CM-04〜CM-09のauthority/restoration/input/native契約、`TerminalApplication`のinteractive hierarchy、
+  `TerminalNativeHierarchyAdapter`、`TerminalQuickTerminalController`、product configuration reload/teardownを再確認した。
+- このサブタスクはnative host composition、durable authority/topology、application wiringの独立した3境界にまたがり、
+  一commitではfailure isolationが不十分になるため、次の順に分割した。
+  1. Product-owned rendererのopaque identityを用い、Note native surfaceをterminal native viewへ
+     native-to-nativeでcompositionする。
+  2. Production Note subsystemでlazy store/authority、pane/Quick Terminal bind/attach/update/detachを所有する。
+  3. Application composition root、window interaction、live font、ordered teardownへ接続しdisabled resource 0を固定する。
+- `View`の非公開native handleをDartへ公開する案、generic `dart_appkit`へNote型やNote operationを追加する案、
+  AppKit object pointerをDart FFIへ渡す案はすべて不採用とした。
+- 既存の`register_custom_view_provider`／`register_custom_view_operation`は、operationを呼んだcustom View自身にのみ
+  dispatchする。Note側custom Viewから別providerがterminal Viewを安全に解決できず、仲介のAppKit
+  object pointerをDartへ露出するため、host compositionに利用する案は追加調査後に不採用とした。
+- 採用案は、rendererが自身のopaque `handle`/`generation`に紐づくbound native viewを
+  native-to-native限定で解決するexportを持ち、Notes capabilityがそのexportをprocess-localに解決して
+  既存の`dtn_surface_attach_to_host`を呼ぶ境界とする。DartはAppKit object pointerではなく、
+  rendererにもともと必要なvolatile opaque identityのみを注入する。
+- Renderer identityをpersistent Note/Context identityに使わず、renderer generationの生存期間に限定する。
+  Unknown/stale/unbound identity、wrong thread、多重hostはfail closedにし、rendererにはNote body、ID、timestamp、
+  card geometryを渡さない。
+
+## 2026-09-21: Note overlay composition seam完了
+
+### 実装と判断
+
+- Renderer capabilityに`dtr_metal_renderer_native_view(handle, generation)`を追加した。Main thread上で
+  live registry、exact generation、bound/admitting viewを検証し、条件が揃ったときだけunretained
+  native viewを返す。Dart FFIはこの関数を呼ばない。
+- Dart renderer facadeに`TerminalMetalRendererCompositionIdentity`を追加し、live rendererのopaque
+  handle/generationだけを取得可能にした。`TerminalLiveMetalSurface.compositionIdentity`は常に
+  recovery coordinatorのcurrent domainから取得するため、renderer復旧後の新generationに追従できる。
+  Dispose後はidentityを公開しない。
+- Notes capabilityに`dtn_surface_attach_to_renderer`を追加した。通常のprocess-global lookupに加え、
+  manifest/native-assets loaderがrenderer dylibをlocal scopeで読み込んだ場合も、読み込み済みimageのexact
+  leaf nameから`RTLD_NOLOAD`でresolverを取得する。Notes側から新たにdylibをloadしない。
+- `TerminalNotesNativeSurface.attachToRenderer`はAppKit pointerではなくopaque identityだけを受け、
+  `attached` / `rendererUnavailable` / `busy`の型付き結果を返す。DetachもDart facadeへ追加した。
+  Zero/out-of-rangeはFFI前に拒否し、stale/unbound/releasedはfail soft、off-main-threadは拒否、異なる
+  2つのhostへの同時attachは`busy`とした。Same-host attachはidempotentである。
+- Native integration testは実renderer dylibを`RTLD_LOCAL`でloadし、登録されたcustom View factory/operationを使って
+  rendererをbindする。その上でNotes surfaceがterminal Metal viewの最前面childになることを検証した。
+  これによりDartやtestがnative pointerを仲介して成功したように見せない。
+- `dart_appkit`には一切変更を加えていない。隣接repositoryで検出した3 fileの変更はすべて
+  着手前からのuser変更である。
+
+### 検証
+
+- `make terminal-renderer-native-test terminal-renderer-dart-test terminal-notes-native-test terminal-notes-dart-test
+  terminal-notes-capability-audit`: 権限付き最終実行で全成功。Notes export allowlistは17、
+  `dart_appkit=generic`を維持した。Rendererのunbound/exact/stale/released identity、Notesのactual overlay、
+  same-host idempotence、second-host busy、wrong-thread、detachを含む。
+- 最初のsandbox内renderer native testはMetal device/shaderを利用できず後続失敗したため中断した。
+  Host framework/GPUへアクセスできる権限付き同一gateは成功し、製品codeの失敗ではない。
+- 最初の`make test`はrenderer source hashを参照するGhostty gap inventoryのfreshnessだけで停止した。
+  `make ghostty-p0-p1-gap-inventory release-candidate-daily-use-matrix`を正規generatorで実行し、
+  classification/count/blockerを変えずsource hash chainだけを更新した。
+- 再生成後の`CI=true DART_SUPPRESS_ANALYTICS=true make test`: 成功。372 filesのformat変更0、
+  root/package analyze issue 0、native capability、Note store実filesystem、security stress、distributionを含む全回帰が
+  `dart_terminal tests passed`で完了した。
+- `make RUNTIME_ARCH=arm64 developer-jit-audit release-aot-audit`: 両方で成功。どちらも
+  `capabilities=3`、Notes/rendererを含むexact native asset bundleとarchitecture/code inventoryを受け入れた。
+- `git diff --check`: 成功。
+
+### 次への引き継ぎ
+
+- 現時点でapplicationはNote surfaceを生成せず、overlay seamも呼び出さない。次はproduction
+  Note subsystemがlazy store/authorityとpane/Quick Terminalごとのsurfaceを所有し、bind/attach/update/detachの
+  topologyを実装する。
+- Renderer recoveryでcomposition identityが変わる場合は、topology ownerが旧hostからdetachし、新identityへ
+  reattachする。Native surfaceやrendererにpersistent Note/Context identityを持たせない。

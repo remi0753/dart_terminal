@@ -11,4 +11,7 @@ static_assert(sizeof(DtnSurfaceIntentV1) == 112u);
 static_assert(sizeof(DtnSurfaceResultV1) == 88u);
 static_assert(std::is_standard_layout_v<DtnSurfaceSnapshotV1>);
 
-int main() { return dtn_abi_version() == 1u ? 0 : 1; }
+int main() {
+  auto* attach_renderer = &dtn_surface_attach_to_renderer;
+  return dtn_abi_version() == 1u && attach_renderer != nullptr ? 0 : 1;
+}

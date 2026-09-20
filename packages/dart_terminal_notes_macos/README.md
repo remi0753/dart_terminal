@@ -61,8 +61,13 @@ projection locale. A ready announcement is emitted once only after the rail is
 actually visible; the snapshot exposes eligibility generation/count state, not
 card content or a durable acknowledgement mutation.
 
-`dtn_surface_attach_to_host` is a native-to-native composition seam; its
-opaque `NSView` pointer must never cross Dart FFI. Dart can update bounded
-layout and read content-free geometry/appearance snapshots. Actual host
-attachment remains product composition work and does not require any
-Dart-Terminal-specific API in `dart_appkit`.
+`dtn_surface_attach_to_host` is the primitive native-to-native composition
+seam; its opaque `NSView` pointer must never cross Dart FFI.
+`TerminalNotesNativeSurface.attachToRenderer` instead accepts the product
+renderer's volatile opaque handle/generation. The Notes dylib resolves the
+matching bound renderer view inside native code and attaches above it, including
+when the renderer dylib was loaded locally. Unknown, stale, or unbound
+generations fail soft; a surface already attached to another host reports
+`busy`. Dart can update bounded layout and read content-free
+geometry/appearance snapshots. This boundary adds no Dart-Terminal-specific API
+to generic `dart_appkit` and passes no Note content or geometry to the renderer.

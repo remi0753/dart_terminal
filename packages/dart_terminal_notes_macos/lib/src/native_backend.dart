@@ -199,6 +199,14 @@ abstract interface class TerminalNotesNativeBindings {
 
   int focus(Object handle, int target);
 
+  int attachToRenderer(
+    Object handle, {
+    required int rendererHandle,
+    required int rendererGeneration,
+  });
+
+  int detachFromHost(Object handle);
+
   void destroySurface(Object handle);
 
   int get liveSurfaceCount;
@@ -276,6 +284,20 @@ final class TerminalNotesNativeFfiBindings
   @override
   int focus(Object handle, int target) =>
       _surfaceFocus(_handle(handle), target);
+
+  @override
+  int attachToRenderer(
+    Object handle, {
+    required int rendererHandle,
+    required int rendererGeneration,
+  }) => _surfaceAttachToRenderer(
+    _handle(handle),
+    rendererHandle,
+    rendererGeneration,
+  );
+
+  @override
+  int detachFromHost(Object handle) => _surfaceDetachFromHost(_handle(handle));
 
   @override
   int applyProjection(Object handle, Uint8List bytes) {
@@ -818,6 +840,22 @@ external int _surfaceApplyResult(
   assetId: _assetId,
 )
 external int _surfaceFocus(Pointer<Void> surface, int target);
+
+@Native<Int32 Function(Pointer<Void>, Uint64, Uint64)>(
+  symbol: 'dtn_surface_attach_to_renderer',
+  assetId: _assetId,
+)
+external int _surfaceAttachToRenderer(
+  Pointer<Void> surface,
+  int rendererHandle,
+  int rendererGeneration,
+);
+
+@Native<Int32 Function(Pointer<Void>)>(
+  symbol: 'dtn_surface_detach_from_host',
+  assetId: _assetId,
+)
+external int _surfaceDetachFromHost(Pointer<Void> surface);
 
 @Native<Void Function(Pointer<Void>)>(
   symbol: 'dtn_surface_destroy',

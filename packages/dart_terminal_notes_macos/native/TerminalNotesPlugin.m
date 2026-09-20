@@ -2,6 +2,8 @@
 
 #include <math.h>
 #include <stdbool.h>
+#include <dlfcn.h>
+#include <mach-o/dyld.h>
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,6 +46,34 @@ static int32_t dtn_emit_view_intent(DtnSurface* surface, uint32_t kind,
                                     uint64_t token);
 static bool dtn_intent_kind_mutates(uint32_t kind);
 static const da_native_extension_services_v1* g_dtn_services = NULL;
+
+typedef void* (*DtnRendererNativeViewV1)(uint64_t handle,
+                                         uint64_t generation);
+
+static DtnRendererNativeViewV1 DtnRendererNativeViewResolver(void) {
+  void* symbol = dlsym(RTLD_DEFAULT, "dtr_metal_renderer_native_view");
+  if (symbol == NULL) {
+    const uint32_t image_count = _dyld_image_count();
+    for (uint32_t index = 0; index < image_count && symbol == NULL; ++index) {
+      const char* path = _dyld_get_image_name(index);
+      if (path == NULL) continue;
+      const char* leaf = strrchr(path, '/');
+      leaf = leaf == NULL ? path : leaf + 1;
+      if (strcmp(leaf, "libdart_terminal_renderer_macos.dylib") != 0) {
+        continue;
+      }
+      void* image = dlopen(path, RTLD_LAZY | RTLD_LOCAL | RTLD_NOLOAD);
+      if (image == NULL) continue;
+      symbol = dlsym(image, "dtr_metal_renderer_native_view");
+      dlclose(image);
+    }
+  }
+  DtnRendererNativeViewV1 resolver = NULL;
+  if (symbol != NULL) {
+    memcpy(&resolver, &symbol, sizeof(resolver));
+  }
+  return resolver;
+}
 
 static const uint32_t kDtnLightSurfaces[6] = {
     0xf5f5f3ffu, 0xfff3a6ffu, 0xdcebffffu,
@@ -2118,11 +2148,30 @@ int32_t dtn_surface_attach_to_host(DtnSurface* surface, void* host_view) {
     return DTN_STATUS_INVALID_ARGUMENT;
   }
   NSView* host = (NSView*)candidate;
+  if (surface->view.superview != nil && surface->view.superview != host) {
+    return DTN_STATUS_BUSY;
+  }
   surface->view.frame = host.bounds;
   surface->view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
-  [host addSubview:surface->view positioned:NSWindowAbove relativeTo:nil];
+  if (surface->view.superview == nil) {
+    [host addSubview:surface->view positioned:NSWindowAbove relativeTo:nil];
+  }
   [surface->view layoutPresentation];
   return DTN_STATUS_OK;
+}
+
+int32_t dtn_surface_attach_to_renderer(DtnSurface* surface,
+                                       uint64_t renderer_handle,
+                                       uint64_t renderer_generation) {
+  if (surface == NULL || renderer_handle == 0 || renderer_generation == 0) {
+    return DTN_STATUS_INVALID_ARGUMENT;
+  }
+  if (![NSThread isMainThread]) return DTN_STATUS_WRONG_THREAD;
+  DtnRendererNativeViewV1 resolve = DtnRendererNativeViewResolver();
+  if (resolve == NULL) return DTN_STATUS_NOT_FOUND;
+  void* host_view = resolve(renderer_handle, renderer_generation);
+  if (host_view == NULL) return DTN_STATUS_NOT_FOUND;
+  return dtn_surface_attach_to_host(surface, host_view);
 }
 
 int32_t dtn_surface_detach_from_host(DtnSurface* surface) {

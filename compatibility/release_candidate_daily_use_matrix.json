@@ -43,7 +43,7 @@
   "evidence_sources": [
     {
       "path": "Makefile",
-      "sha256": "2293a94d5a35ca2238280f7ce521dea0a983ab9045c98dc6a97999538b163038"
+      "sha256": "368c28bbb9bca44af2b4c7b08bbba232fb9c804f27d0fa89117667c8bea99d9f"
     },
     {
       "path": "test/corpus/applications/matrix_v1.json",
@@ -55,7 +55,7 @@
     },
     {
       "path": "compatibility/ghostty_p0_p1_gap_inventory.json",
-      "sha256": "e644af19b71707f0723c823e5fa210081209f42b69ce16001ed3611ec98a8d55"
+      "sha256": "343b406a44c8682d7c6d22bbd0dc95baeb0f5e0013a4495c2835235350159e33"
     },
     {
       "path": "benchmark/evidence/product-performance-regression-macos-arm64-m1.json",

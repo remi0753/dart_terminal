@@ -293,6 +293,13 @@ __attribute__((visibility("default"))) void* dtn_surface_native_view(
 __attribute__((visibility("default"))) int32_t dtn_surface_attach_to_host(
     DtnSurface* surface, void* host_view);
 
+// Resolves one live product renderer generation entirely inside native code
+// and attaches the Note surface above that renderer view. Only the renderer's
+// opaque registry identity crosses Dart; the AppKit object never does.
+__attribute__((visibility("default"))) int32_t dtn_surface_attach_to_renderer(
+    DtnSurface* surface, uint64_t renderer_handle,
+    uint64_t renderer_generation);
+
 __attribute__((visibility("default"))) int32_t dtn_surface_detach_from_host(
     DtnSurface* surface);
 

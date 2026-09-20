@@ -4,7 +4,7 @@ This package owns the native macOS view used by Dart Terminal's renderer. Its
 Dart 3.13 build hook compiles the Objective-C implementation as a code asset;
 `dart_macos_runtime` stages and retains that image. The public Dart facade
 initializes the versioned capability and creates an ordinary `dart_appkit`
-`View` without exposing Objective-C objects or native registry handles.
+`View` without exposing Objective-C objects.
 
 The capability provides a paused, on-demand, framebuffer-only, flipped
 `MTKView`, generation-owned CoreText font catalogs, and a bounded Metal
@@ -69,6 +69,12 @@ Applications declare the following native capability in their runtime manifest:
 
 Call `TerminalRendererMacos.initialize()` after attaching the AppKit
 application, then use `TerminalRendererMacos.createView()`.
+`TerminalMetalRenderer.compositionIdentity` exposes only a volatile opaque
+registry handle/generation while that renderer is live. Product-owned native
+capabilities may use `dtr_metal_renderer_native_view` to resolve the exact bound
+view without sending an AppKit pointer through Dart; the identity is neither a
+terminal/Note ID nor persistent state. Unknown, stale, unbound, off-main-thread,
+and released identities resolve to no view.
 `TerminalRendererMacos.setBackgroundOpacity` applies the shared terminal-only
 opacity to the Metal layer and its owning window; ordinary AppKit views are not
 affected. The value is finite and bounded to 0 through 1, and may be applied

@@ -1291,6 +1291,7 @@ enum {
             pixels:(const uint8_t*)pixels;
 - (int32_t)resetAtlas:(DtrMetalAtlasResetV1)reset;
 - (int32_t)bindView:(DtrTerminalMetalView*)view;
+- (DtrTerminalMetalView*)boundViewForNativeComposition;
 - (int32_t)submitFrame:(const uint8_t*)frame
                  length:(uint32_t)frameLength
                  output:(DtrMetalSubmissionV1*)output;
@@ -1541,6 +1542,18 @@ enum {
   view.framebufferOnly = YES;
   [_lock unlock];
   return DTR_STATUS_OK;
+}
+
+- (DtrTerminalMetalView*)boundViewForNativeComposition {
+  [_lock lock];
+  DtrTerminalMetalView* view =
+      _admitting && !_shuttingDown ? _view : nil;
+  if (view != nil &&
+      view.terminalRendererGeneration != self.generation) {
+    view = nil;
+  }
+  [_lock unlock];
+  return view;
 }
 
 - (void)detachOnMainThread {
@@ -4562,6 +4575,22 @@ int32_t dtr_metal_renderer_release(uint64_t handle) {
     [lock unlock];
     [renderer shutdown];
     return renderer == nil ? DTR_STATUS_INVALID_HANDLE : DTR_STATUS_OK;
+  }
+}
+
+void* dtr_metal_renderer_native_view(uint64_t handle, uint64_t generation) {
+  @autoreleasepool {
+    if (handle == 0 || generation == 0 || ![NSThread isMainThread]) {
+      return NULL;
+    }
+    DtrMetalRenderer* renderer = nil;
+    RetainMetalRendererForHandle(handle, &renderer);
+    if (renderer == nil || renderer.generation != generation) {
+      return NULL;
+    }
+    DtrTerminalMetalView* view =
+        [renderer boundViewForNativeComposition];
+    return view == nil ? NULL : (__bridge void*)view;
   }
 }
 
