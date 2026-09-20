@@ -1696,6 +1696,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   - [x] foreground Directory保持authorityと画面遷移stateを整理し、全遷移matrixの回帰testを追加する
   - [x] `view.refresh-directory-navigator`をpane単位の表示authorityと設定keybindから確実にdispatchできるようにする
   - [x] native Developer JIT／Release AOTで遷移・refresh・keybindを受け入れ、仕様と検証証跡を更新する
+- [x] READMEを英語の簡潔な起動・主要機能案内へ再構成する
+  （実施時に
+  [`docs/readme-product-overview.md`](docs/readme-product-overview.md)
+  を参照する）
 - [ ] native-content acceptanceのmanual Secure Keyboard Entry foreground activationを安定化する
   （実施時に
   [`docs/phase10/native-content-secure-input-activation.md`](docs/phase10/native-content-secure-input-activation.md)

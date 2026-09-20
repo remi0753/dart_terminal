@@ -99,8 +99,8 @@ native panel, and filesystem failures are reported only as stable path-free
 classifications; an incomplete temporary file is removed and an existing
 destination is preserved until replacement succeeds.
 
-The local per-launch metadata described in [Runtime diagnostics](../../README.md#runtime-diagnostics)
-is a separate lifecycle record. Its `features` section gains only four reviewed
+The local per-launch runtime metadata is a separate lifecycle record. Its
+`features` section gains only four reviewed
 incident fields: fixed state, bounded matching-report count, completed-operation
 count, and failure count. Raw report/sample data, report identity, paths, PID,
 timestamps, symbols, and errors are never silently added to this export.
