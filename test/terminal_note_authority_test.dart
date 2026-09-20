@@ -938,6 +938,7 @@ Future<void> _testSurfaceSemanticMutationContract() async {
     String? body,
     NoteColorKey? color,
     int? timestamp,
+    TerminalNoteApprovedExportPath? exportDestination,
   }) async {
     final TerminalNoteSurfaceIntentResult result = await authority
         .submitSurfaceIntent(
@@ -953,6 +954,7 @@ Future<void> _testSurfaceSemanticMutationContract() async {
           updatedAtUtcMicros: timestamp,
           body: body,
           color: color,
+          exportDestination: exportDestination,
         );
     if (result.projection != null) projection = result.projection!;
     return result;
@@ -1079,9 +1081,69 @@ Future<void> _testSurfaceSemanticMutationContract() async {
         !copied.toString().contains('alpha'),
     'copy validates the exact projected body without mutation or content result',
   );
+  store.events.clear();
+  final Completer<void> exportGate = store.blockNextExport();
+  final TerminalNoteApprovedExportPath exportDestination =
+      TerminalNoteApprovedExportPath.fromAbsolutePath(
+        '/private/tmp/dart-terminal-authority-export.json',
+      );
+  final Future<TerminalNoteSurfaceIntentResult> exporting = authority
+      .submitSurfaceIntent(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        surfaceGeneration: projection.surfaceGeneration,
+        projectionGeneration: projection.projectionGeneration,
+        eventGeneration: ++event,
+        draftGeneration: projection.draftGeneration,
+        cardToken: null,
+        expectedStoreRevision: projection.storeRevision,
+        kind: TerminalNoteSurfaceIntentKind.export,
+        exportDestination: exportDestination,
+      );
+  await Future<void>.delayed(Duration.zero);
+  final Future<TerminalNoteAuthorityMutationResult> queuedMutation = authority
+      .bindPane(sequence: authority.nextSequence(), paneId: const PaneId(3));
+  _expect(
+    store.events.join(',') == 'export' &&
+        store.exportCount == 1 &&
+        store.commitCount == commitsBeforeCopy,
+    'portable export occupies the same serial authority queue as mutations',
+  );
+  exportGate.complete();
+  final TerminalNoteSurfaceIntentResult exported = await exporting;
+  final TerminalNoteAuthorityMutationResult mutationAfterExport =
+      await queuedMutation;
+  projection = surface.applied.last;
+  _expect(
+    exported.disposition ==
+            TerminalNoteAuthorityMutationDisposition.runtimeApplied &&
+        mutationAfterExport.disposition ==
+            TerminalNoteAuthorityMutationDisposition.committed &&
+        store.events.join(',') == 'export,commit' &&
+        !exported.toString().contains('dart-terminal-authority-export') &&
+        !exportDestination.toString().contains(
+          'dart-terminal-authority-export',
+        ),
+    'export completes content-free before the following durable mutation',
+  );
+  store.failNextExport = TerminalNoteStoreFailure.permissionDenied;
+  final TerminalNoteSurfaceIntentResult failedExport = await intent(
+    TerminalNoteSurfaceIntentKind.export,
+    exportDestination: exportDestination,
+  );
+  _expect(
+    failedExport.disposition ==
+            TerminalNoteAuthorityMutationDisposition.failed &&
+        failedExport.storeFailure ==
+            TerminalNoteStoreFailure.permissionDenied &&
+        authority.capability == TerminalNoteAuthorityCapability.ready &&
+        failedExport.storeRevision == projection.storeRevision &&
+        !failedExport.toString().contains('dart-terminal-authority-export'),
+    'export failure is fixed and content-free without poisoning Note authority',
+  );
   final TerminalNoteSurfaceIntentResult editing = await intent(
     TerminalNoteSurfaceIntentKind.beginEdit,
-    cardToken: firstToken,
+    cardToken: projection.cards.single.token,
   );
   final TerminalNoteSurfaceIntentResult edited = await intent(
     TerminalNoteSurfaceIntentKind.save,
@@ -2121,11 +2183,14 @@ final class _FakeAuthorityStore implements TerminalNoteAuthorityStorePort {
   final List<TerminalNoteStoreDocument> committed =
       <TerminalNoteStoreDocument>[];
   final List<Completer<void>> _gates = <Completer<void>>[];
+  final List<Completer<void>> _exportGates = <Completer<void>>[];
   final List<String> events = <String>[];
   final List<List<TerminalNoteDeletionTombstone>> committedDeletions =
       <List<TerminalNoteDeletionTombstone>>[];
   TerminalNoteStoreFailure? failNextCommit;
+  TerminalNoteStoreFailure? failNextExport;
   var commitCount = 0;
+  var exportCount = 0;
   var stopCount = 0;
   var concurrentCommits = 0;
   var maximumConcurrentCommits = 0;
@@ -2144,6 +2209,12 @@ final class _FakeAuthorityStore implements TerminalNoteAuthorityStorePort {
   Completer<void> blockNextCommit() {
     final Completer<void> gate = Completer<void>();
     _gates.add(gate);
+    return gate;
+  }
+
+  Completer<void> blockNextExport() {
+    final Completer<void> gate = Completer<void>();
+    _exportGates.add(gate);
     return gate;
   }
 
@@ -2194,6 +2265,31 @@ final class _FakeAuthorityStore implements TerminalNoteAuthorityStorePort {
     } finally {
       concurrentCommits--;
     }
+  }
+
+  @override
+  Future<TerminalNoteStoreResult> exportToApprovedPath(
+    TerminalNoteApprovedExportPath destination,
+  ) async {
+    events.add('export');
+    exportCount++;
+    if (_exportGates.isNotEmpty) await _exportGates.removeAt(0).future;
+    final TerminalNoteStoreFailure? failure = failNextExport;
+    failNextExport = null;
+    if (failure != null || stopped) {
+      return TerminalNoteStoreResult(
+        disposition: TerminalNoteStoreDisposition.unavailable,
+        failure: failure ?? TerminalNoteStoreFailure.invalidState,
+        storeRevision: current.snapshot.storeRevision,
+        metrics: TerminalNoteStoreMetrics.zero,
+      );
+    }
+    return TerminalNoteStoreResult(
+      disposition: TerminalNoteStoreDisposition.exported,
+      failure: null,
+      storeRevision: current.snapshot.storeRevision,
+      metrics: TerminalNoteStoreMetrics.zero,
+    );
   }
 
   @override

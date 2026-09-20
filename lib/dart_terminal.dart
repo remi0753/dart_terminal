@@ -228,6 +228,7 @@ export 'src/terminal_note_application_coordinator.dart';
 export 'src/terminal_note_authority.dart';
 export 'src/terminal_note_composition.dart';
 export 'src/terminal_note_context_restoration.dart';
+export 'src/terminal_note_export_panel.dart';
 export 'src/terminal_note_model.dart';
 export 'src/terminal_note_native_adapter.dart';
 export 'src/terminal_note_product_subsystem.dart';

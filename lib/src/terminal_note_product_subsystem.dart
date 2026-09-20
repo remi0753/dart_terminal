@@ -22,6 +22,8 @@ typedef TerminalNoteStoreLocationResolver = TerminalNoteStoreLocation Function(
 typedef TerminalNoteUtcMicrosClock = int Function();
 typedef TerminalNoteProductSurfaceEventHandler = void Function(PaneId paneId);
 typedef TerminalNoteBodyCopyEffect = bool Function(String body);
+typedef TerminalNoteExportDestinationChooser =
+    TerminalNoteApprovedExportPath? Function(TerminalNotesLocale locale);
 
 enum TerminalNoteProductFocusTarget { rail, editor }
 
@@ -206,6 +208,7 @@ final class TerminalNoteProductSubsystem
     required TerminalNoteNativeSurfaceChannelFactory surfaceFactory,
     required TerminalNoteUtcMicrosClock clock,
     required TerminalNoteBodyCopyEffect copyEffect,
+    required TerminalNoteExportDestinationChooser exportDestinationChooser,
     required Iterable<PaneId> initialPaneIds,
     required TerminalNoteNativePresentationState presentation,
   }) : _authority = authority,
@@ -213,6 +216,7 @@ final class TerminalNoteProductSubsystem
        _surfaceFactory = surfaceFactory,
        _clock = clock,
        _copyEffect = copyEffect,
+       _exportDestinationChooser = exportDestinationChooser,
        _presentation = _presentationWithFont(presentation, configuration) {
     for (final PaneId paneId in initialPaneIds) {
       _paneKinds[paneId] = TerminalNoteContextKind.standard;
@@ -229,6 +233,7 @@ final class TerminalNoteProductSubsystem
     required bool ensureQuickTerminalContext,
     required int updatedAtUtcMicros,
     required TerminalNoteBodyCopyEffect copyEffect,
+    required TerminalNoteExportDestinationChooser exportDestinationChooser,
     TerminalNoteNativeCapabilityInitializer? initializeNativeCapability,
     TerminalNoteNativeSurfaceChannelFactory? surfaceFactory,
     TerminalNoteStoreLocationResolver? locationResolver,
@@ -315,6 +320,7 @@ final class TerminalNoteProductSubsystem
         surfaceFactory: surfaceFactory ?? _openNativeSurface,
         clock: clock ?? () => DateTime.now().toUtc().microsecondsSinceEpoch,
         copyEffect: copyEffect,
+        exportDestinationChooser: exportDestinationChooser,
         initialPaneIds: paneIds,
         presentation: presentation,
       ),
@@ -330,6 +336,7 @@ final class TerminalNoteProductSubsystem
   final TerminalNoteNativeSurfaceChannelFactory _surfaceFactory;
   final TerminalNoteUtcMicrosClock _clock;
   final TerminalNoteBodyCopyEffect _copyEffect;
+  final TerminalNoteExportDestinationChooser _exportDestinationChooser;
   final Map<PaneId, TerminalNoteContextKind> _paneKinds =
       <PaneId, TerminalNoteContextKind>{};
   final Map<PaneId, _TerminalNoteProductSurface> _surfaces =
@@ -819,7 +826,60 @@ final class TerminalNoteProductSubsystem
       );
     }
 
-    final TerminalNoteSurfaceIntentKind? authorityKind = switch (intent.kind) {
+    TerminalNoteApprovedExportPath? exportDestination;
+    if (intent.kind == TerminalNotesIntentKind.export) {
+      final TerminalNoteSurfaceProjection? projection =
+          surface.adapter.lastAuthorityProjection;
+      if (projection == null ||
+          intent.surfaceGeneration != projection.surfaceGeneration ||
+          intent.projectionGeneration != projection.projectionGeneration ||
+          intent.expectedStoreRevision != projection.storeRevision ||
+          intent.eventGeneration <= 0 ||
+          intent.draftGeneration != 0 ||
+          intent.draftGeneration != projection.draftGeneration ||
+          intent.cardToken != null ||
+          intent.body != null ||
+          intent.color != null ||
+          projection.visibility != TerminalNoteSurfaceVisibility.expanded ||
+          projection.editorMode != TerminalNoteEditorMode.inactive) {
+        return _completeNativeIntent(
+          paneId: paneId,
+          surface: surface,
+          intent: intent,
+          disposition: TerminalNotesResultDisposition.rejected,
+          storeRevision: intent.expectedStoreRevision,
+          projectionGeneration: intent.projectionGeneration,
+          topologyDisposition: TerminalNoteProductTopologyDisposition.rejected,
+        );
+      }
+      try {
+        exportDestination = _exportDestinationChooser(_presentation.locale);
+      } on Object {
+        return _completeNativeIntent(
+          paneId: paneId,
+          surface: surface,
+          intent: intent,
+          disposition: TerminalNotesResultDisposition.unavailable,
+          storeRevision: intent.expectedStoreRevision,
+          projectionGeneration: intent.projectionGeneration,
+          topologyDisposition:
+              TerminalNoteProductTopologyDisposition.unavailable,
+        );
+      }
+      if (exportDestination == null) {
+        return _completeNativeIntent(
+          paneId: paneId,
+          surface: surface,
+          intent: intent,
+          disposition: TerminalNotesResultDisposition.rejected,
+          storeRevision: intent.expectedStoreRevision,
+          projectionGeneration: intent.projectionGeneration,
+          topologyDisposition: TerminalNoteProductTopologyDisposition.rejected,
+        );
+      }
+    }
+
+    final TerminalNoteSurfaceIntentKind authorityKind = switch (intent.kind) {
       TerminalNotesIntentKind.open => TerminalNoteSurfaceIntentKind.open,
       TerminalNotesIntentKind.close => TerminalNoteSurfaceIntentKind.close,
       TerminalNotesIntentKind.selectCard =>
@@ -851,19 +911,8 @@ final class TerminalNoteProductSubsystem
       TerminalNotesIntentKind.reattach =>
         TerminalNoteSurfaceIntentKind.reattach,
       TerminalNotesIntentKind.copy => TerminalNoteSurfaceIntentKind.copy,
-      TerminalNotesIntentKind.export => null,
+      TerminalNotesIntentKind.export => TerminalNoteSurfaceIntentKind.export,
     };
-    if (authorityKind == null) {
-      return _completeNativeIntent(
-        paneId: paneId,
-        surface: surface,
-        intent: intent,
-        disposition: TerminalNotesResultDisposition.rejected,
-        storeRevision: intent.expectedStoreRevision,
-        projectionGeneration: intent.projectionGeneration,
-        topologyDisposition: TerminalNoteProductTopologyDisposition.rejected,
-      );
-    }
 
     final bool durable = switch (authorityKind) {
       TerminalNoteSurfaceIntentKind.save ||
@@ -908,6 +957,7 @@ final class TerminalNoteProductSubsystem
         updatedAtUtcMicros: timestamp,
         body: intent.body,
         color: _authorityColor(intent.color),
+        exportDestination: exportDestination,
       );
     } on Object {
       return _completeNativeIntent(

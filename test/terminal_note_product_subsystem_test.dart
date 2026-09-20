@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dart_terminal/dart_terminal.dart';
@@ -13,6 +14,26 @@ Future<void> runTerminalNoteProductSubsystemTests() async {
 }
 
 Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
+  final englishPanel = TerminalNoteExportPanel.configuration(
+    TerminalNotesLocale.english,
+  );
+  final japanesePanel = TerminalNoteExportPanel.configuration(
+    TerminalNotesLocale.japanese,
+  );
+  _expect(
+    englishPanel.title == 'Export Notes' &&
+        englishPanel.message.contains('full text of all notes') &&
+        englishPanel.prompt == 'Export' &&
+        englishPanel.defaultFileName == 'Dart Terminal Notes.json' &&
+        englishPanel.allowedFileExtension == 'json' &&
+        japanesePanel.title == 'ノートを書き出す' &&
+        japanesePanel.message.contains('すべてのノート本文') &&
+        japanesePanel.message.contains('保管や共有') &&
+        japanesePanel.prompt == '書き出す' &&
+        japanesePanel.defaultFileName == 'Dart Terminal ノート.json' &&
+        japanesePanel.allowedFileExtension == 'json',
+    'English and Japanese save panels warn before portable content export',
+  );
   final int productBaseline =
       TerminalNoteProductSubsystem.debugLiveProductSubsystemCount;
   final int authorityBaseline = TerminalNoteAuthority.debugLiveAuthorityCount;
@@ -28,6 +49,9 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
   final List<String> copiedBodies = <String>[];
   var copyAttempts = 0;
   var failCopy = false;
+  var failExportChoice = false;
+  TerminalNoteApprovedExportPath? nextExportDestination;
+  final List<TerminalNotesLocale> exportLocales = <TerminalNotesLocale>[];
   var clockMicros = 3000;
   _FakeProductNativeChannel createChannel() {
     final _FakeProductNativeChannel channel = _FakeProductNativeChannel(
@@ -61,6 +85,13 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
             if (failCopy) throw StateError('injected pasteboard failure');
             copiedBodies.add(body);
             return true;
+          },
+          exportDestinationChooser: (TerminalNotesLocale locale) {
+            exportLocales.add(locale);
+            if (failExportChoice) {
+              throw StateError('injected save-panel failure');
+            }
+            return nextExportDestination;
           },
           clock: () => clockMicros++,
           initializeNativeCapability: () {},
@@ -688,10 +719,94 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
       'Current copy writes the exact body once without metadata or mutation',
     );
 
+    final File exported = File('${root.path}/portable-notes.json');
     first.intents.add(
       _nativeIntent(
         currentAfterDetachedRoundTrip,
         eventGeneration: 19,
+        kind: TerminalNotesIntentKind.export,
+      ),
+    );
+    final TerminalNoteProductTopologyResult cancelledExport = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    _expect(
+      cancelledExport.disposition ==
+              TerminalNoteProductTopologyDisposition.rejected &&
+          !exported.existsSync() &&
+          exportLocales.length == 1 &&
+          first.results.last.disposition ==
+              TerminalNotesResultDisposition.rejected,
+      'save-panel cancellation completes without any portable export write',
+    );
+    nextExportDestination = TerminalNoteApprovedExportPath.fromAbsolutePath(
+      exported.path,
+    );
+    first.intents.add(
+      _nativeIntent(
+        currentAfterDetachedRoundTrip,
+        eventGeneration: 20,
+        kind: TerminalNotesIntentKind.export,
+      ),
+    );
+    final TerminalNoteProductTopologyResult exportedNotes = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    final Map<String, dynamic> portable =
+        jsonDecode(exported.readAsStringSync().trim()) as Map<String, dynamic>;
+    final List<dynamic> portableNotes = portable['notes'] as List<dynamic>;
+    _expect(
+      exportedNotes.isAccepted &&
+          first.results.last.disposition ==
+              TerminalNotesResultDisposition.accepted &&
+          first.results.last.newStoreRevision ==
+              currentAfterDetachedRoundTrip.storeRevision &&
+          first.results.last.newProjectionGeneration ==
+              currentAfterDetachedRoundTrip.projectionGeneration &&
+          exportLocales.length == 2 &&
+          exportLocales.every(
+            (TerminalNotesLocale locale) =>
+                locale == TerminalNotesLocale.english,
+          ) &&
+          portable.keys.join(',') == 'format,version,notes' &&
+          portable['format'] == TerminalNotePortableExportCodec.format &&
+          portable['version'] == TerminalNotePortableExportCodec.version &&
+          portableNotes.length == 3 &&
+          portableNotes.every(
+            (dynamic value) =>
+                (value as Map<String, dynamic>).keys.join(',') ==
+                'body,color,status,order,trigger',
+          ) &&
+          !exportedNotes.toString().contains(exported.path) &&
+          !exportedNotes.toString().contains(currentSelection.body),
+      'approved export writes only portable fields and returns no path or content',
+    );
+    failExportChoice = true;
+    first.intents.add(
+      _nativeIntent(
+        currentAfterDetachedRoundTrip,
+        eventGeneration: 21,
+        kind: TerminalNotesIntentKind.export,
+      ),
+    );
+    final TerminalNoteProductTopologyResult failedExportChoice = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    _expect(
+      failedExportChoice.disposition ==
+              TerminalNoteProductTopologyDisposition.unavailable &&
+          first.results.last.disposition ==
+              TerminalNotesResultDisposition.unavailable &&
+          first.results.last.newStoreRevision ==
+              currentAfterDetachedRoundTrip.storeRevision &&
+          first.results.last.newProjectionGeneration ==
+              currentAfterDetachedRoundTrip.projectionGeneration &&
+          !failedExportChoice.toString().contains(exported.path),
+      'save-panel or path-validation failure is fixed and content-free',
+    );
+    failExportChoice = false;
+
+    first.intents.add(
+      _nativeIntent(
+        currentAfterDetachedRoundTrip,
+        eventGeneration: 22,
         kind: TerminalNotesIntentKind.delete,
         cardToken: currentAfterDetachedRoundTrip.selectedToken,
       ),
@@ -750,7 +865,7 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
     first.intents.add(
       _nativeIntent(
         afterDelete,
-        eventGeneration: 20,
+        eventGeneration: 23,
         kind: TerminalNotesIntentKind.export,
       ),
     );
@@ -822,6 +937,7 @@ Future<void> _testStartupFailureStaysContentFree() async {
         ensureQuickTerminalContext: true,
         updatedAtUtcMicros: 0,
         copyEffect: (_) => true,
+        exportDestinationChooser: (_) => null,
         initializeNativeCapability: () => initializerCalls++,
       );
   _expect(
@@ -848,6 +964,7 @@ Future<void> _testStartupFailureStaysContentFree() async {
         ensureQuickTerminalContext: true,
         updatedAtUtcMicros: 0,
         copyEffect: (_) => true,
+        exportDestinationChooser: (_) => null,
         initializeNativeCapability: () => initializerCalls++,
       );
   _expect(

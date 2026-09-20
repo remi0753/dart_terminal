@@ -111,6 +111,7 @@ enum TerminalNoteSurfaceIntentKind {
   delete,
   reattach,
   copy,
+  export,
 }
 
 /// Content-free semantic intent result for one authority-owned surface.
@@ -218,6 +219,10 @@ abstract interface class TerminalNoteAuthorityStorePort {
         const <TerminalNoteDeletionTombstone>[],
   });
 
+  Future<TerminalNoteStoreResult> exportToApprovedPath(
+    TerminalNoteApprovedExportPath destination,
+  );
+
   Future<TerminalNoteStoreResult> stop();
 }
 
@@ -234,6 +239,11 @@ final class TerminalNoteStoreWorkerAuthorityPort
     Iterable<TerminalNoteDeletionTombstone> deletions =
         const <TerminalNoteDeletionTombstone>[],
   }) => client.commitCandidate(candidate, deletions: deletions);
+
+  @override
+  Future<TerminalNoteStoreResult> exportToApprovedPath(
+    TerminalNoteApprovedExportPath destination,
+  ) => client.exportToApprovedPath(destination);
 
   @override
   Future<TerminalNoteStoreResult> stop() => client.stop();
@@ -669,6 +679,25 @@ final class TerminalNoteAuthority {
     return pending.completer.future;
   }
 
+  Future<TerminalNoteAuthorityMutationResult> _enqueueUserExport({
+    required TerminalNoteApprovedExportPath destination,
+    required BigInt expectedStoreRevision,
+  }) {
+    if (_pendingUserIntentCount >=
+        TerminalNoteAuthorityLimits.maximumPendingIntents) {
+      return Future<TerminalNoteAuthorityMutationResult>.value(
+        _result(TerminalNoteAuthorityMutationDisposition.busy),
+      );
+    }
+    final _PendingAuthorityMutation pending = _PendingAuthorityMutation.export(
+      destination: destination,
+      expectedStoreRevision: expectedStoreRevision,
+    );
+    _pendingUserIntentCount++;
+    _enqueue(pending);
+    return pending.completer.future;
+  }
+
   /// Applies one generation-bound UI intent without exposing persistent IDs.
   ///
   /// Navigation state is volatile and authority-owned. Durable operations are
@@ -686,6 +715,7 @@ final class TerminalNoteAuthority {
     int? updatedAtUtcMicros,
     String? body,
     NoteColorKey? color,
+    TerminalNoteApprovedExportPath? exportDestination,
   }) {
     final TerminalNoteAuthorityMutationResult? sequenceFailure =
         _validateSequence(sequence);
@@ -752,6 +782,7 @@ final class TerminalNoteAuthority {
       body: body,
       color: color,
       updatedAtUtcMicros: updatedAtUtcMicros,
+      exportDestination: exportDestination,
     )) {
       return Future<TerminalNoteSurfaceIntentResult>.value(
         _surfaceIntentResult(
@@ -806,6 +837,22 @@ final class TerminalNoteAuthority {
             TerminalNoteAuthorityMutationDisposition.runtimeApplied,
             surface: surface,
           ),
+        );
+      case TerminalNoteSurfaceIntentKind.export:
+        if (cardToken != null ||
+            draftGeneration != 0 ||
+            surface.visibility != TerminalNoteSurfaceVisibility.expanded ||
+            surface.editorMode != TerminalNoteEditorMode.inactive) {
+          return Future<TerminalNoteSurfaceIntentResult>.value(
+            _invalidSurfaceIntent(surface),
+          );
+        }
+        return _enqueueUserExport(
+          destination: exportDestination!,
+          expectedStoreRevision: expectedStoreRevision,
+        ).then(
+          (TerminalNoteAuthorityMutationResult result) =>
+              _surfaceIntentFailure(result, surface: surface),
         );
       case TerminalNoteSurfaceIntentKind.showCurrent:
       case TerminalNoteSurfaceIntentKind.showDetached:
@@ -1490,20 +1537,38 @@ final class TerminalNoteAuthority {
     required String? body,
     required NoteColorKey? color,
     required int? updatedAtUtcMicros,
+    required TerminalNoteApprovedExportPath? exportDestination,
   }) => switch (kind) {
     TerminalNoteSurfaceIntentKind.save =>
-      body != null && color != null && updatedAtUtcMicros != null,
+      body != null &&
+          color != null &&
+          updatedAtUtcMicros != null &&
+          exportDestination == null,
     TerminalNoteSurfaceIntentKind.copy =>
-      body != null && color == null && updatedAtUtcMicros == null,
+      body != null &&
+          color == null &&
+          updatedAtUtcMicros == null &&
+          exportDestination == null,
+    TerminalNoteSurfaceIntentKind.export =>
+      body == null &&
+          color == null &&
+          updatedAtUtcMicros == null &&
+          exportDestination != null,
     TerminalNoteSurfaceIntentKind.changeColor =>
-      body == null && color != null && updatedAtUtcMicros != null,
+      body == null &&
+          color != null &&
+          updatedAtUtcMicros != null &&
+          exportDestination == null,
     TerminalNoteSurfaceIntentKind.moveEarlier ||
     TerminalNoteSurfaceIntentKind.moveLater ||
     TerminalNoteSurfaceIntentKind.resolve ||
     TerminalNoteSurfaceIntentKind.reopen ||
     TerminalNoteSurfaceIntentKind.delete ||
     TerminalNoteSurfaceIntentKind.reattach =>
-      body == null && color == null && updatedAtUtcMicros != null,
+      body == null &&
+          color == null &&
+          updatedAtUtcMicros != null &&
+          exportDestination == null,
     TerminalNoteSurfaceIntentKind.open ||
     TerminalNoteSurfaceIntentKind.close ||
     TerminalNoteSurfaceIntentKind.showCurrent ||
@@ -1514,7 +1579,10 @@ final class TerminalNoteAuthority {
     TerminalNoteSurfaceIntentKind.beginCreate ||
     TerminalNoteSurfaceIntentKind.beginEdit ||
     TerminalNoteSurfaceIntentKind.cancelEditor =>
-      body == null && color == null && updatedAtUtcMicros == null,
+      body == null &&
+          color == null &&
+          updatedAtUtcMicros == null &&
+          exportDestination == null,
   };
 
   NoteId? _currentNoteId(
@@ -1794,6 +1862,7 @@ final class TerminalNoteAuthority {
       case TerminalNoteSurfaceIntentKind.previousPage:
       case TerminalNoteSurfaceIntentKind.nextPage:
       case TerminalNoteSurfaceIntentKind.copy:
+      case TerminalNoteSurfaceIntentKind.export:
       case TerminalNoteSurfaceIntentKind.selectCard:
       case TerminalNoteSurfaceIntentKind.beginCreate:
       case TerminalNoteSurfaceIntentKind.beginEdit:
@@ -2270,9 +2339,13 @@ final class TerminalNoteAuthority {
   }
 
   Future<void> _runMutation(_PendingAuthorityMutation pending) async {
+    if (pending.exportDestination != null) {
+      await _runExport(pending);
+      return;
+    }
     TerminalNoteAuthorityMutationPlan plan;
     try {
-      plan = pending.transition(_document.snapshot);
+      plan = pending.transition!(_document.snapshot);
     } on Object {
       pending.complete(
         _result(
@@ -2362,6 +2435,56 @@ final class TerminalNoteAuthority {
     _publish(TerminalNoteAuthorityPublicationKind.durable);
     pending.complete(
       _result(TerminalNoteAuthorityMutationDisposition.committed),
+    );
+  }
+
+  Future<void> _runExport(_PendingAuthorityMutation pending) async {
+    final BigInt expectedStoreRevision = pending.exportExpectedStoreRevision!;
+    if (_document.snapshot.storeRevision != expectedStoreRevision) {
+      pending.complete(
+        _result(
+          TerminalNoteAuthorityMutationDisposition.rejected,
+          mutationFailure: TerminalNoteMutationFailure.revisionConflict,
+        ),
+      );
+      return;
+    }
+    final TerminalNoteAuthorityStorePort? store = _store;
+    if (store == null) {
+      pending.complete(
+        _result(
+          TerminalNoteAuthorityMutationDisposition.unavailable,
+          storeFailure: TerminalNoteStoreFailure.invalidState,
+        ),
+      );
+      return;
+    }
+    TerminalNoteStoreResult exported;
+    try {
+      exported = await store.exportToApprovedPath(pending.exportDestination!);
+    } on Object {
+      exported = _storeFailureResult(TerminalNoteStoreFailure.unknown);
+    }
+    if (_discardLateCommit) {
+      pending.complete(
+        _result(TerminalNoteAuthorityMutationDisposition.unavailable),
+      );
+      return;
+    }
+    if (exported.disposition != TerminalNoteStoreDisposition.exported ||
+        exported.failure != null ||
+        exported.storeRevision != expectedStoreRevision) {
+      pending.complete(
+        _result(
+          TerminalNoteAuthorityMutationDisposition.failed,
+          storeFailure:
+              exported.failure ?? TerminalNoteStoreFailure.invariantViolation,
+        ),
+      );
+      return;
+    }
+    pending.complete(
+      _result(TerminalNoteAuthorityMutationDisposition.runtimeApplied),
     );
   }
 
@@ -2607,14 +2730,29 @@ final class _PendingAuthorityMutation {
     this.onBeforePublication,
     this.onResult,
     this.onFinished,
-  });
+  }) : exportDestination = null,
+       exportExpectedStoreRevision = null;
 
-  final TerminalNoteAuthorityTransition transition;
+  _PendingAuthorityMutation.export({
+    required TerminalNoteApprovedExportPath destination,
+    required BigInt expectedStoreRevision,
+  }) : transition = null,
+       bodyUtf8Bytes = 0,
+       countsTowardUserIntentLimit = true,
+       onBeforePublication = null,
+       onResult = null,
+       onFinished = null,
+       exportDestination = destination,
+       exportExpectedStoreRevision = expectedStoreRevision;
+
+  final TerminalNoteAuthorityTransition? transition;
   final int bodyUtf8Bytes;
   final bool countsTowardUserIntentLimit;
   final void Function()? onBeforePublication;
   final void Function(TerminalNoteAuthorityMutationResult result)? onResult;
   final void Function()? onFinished;
+  final TerminalNoteApprovedExportPath? exportDestination;
+  final BigInt? exportExpectedStoreRevision;
   final Completer<TerminalNoteAuthorityMutationResult> completer =
       Completer<TerminalNoteAuthorityMutationResult>();
   var _finished = false;

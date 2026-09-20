@@ -504,6 +504,66 @@ explicit exportをdurable authorityに接続する。Default-offではentry/surf
 - Exportはcopyと異なり全Note snapshotをworkerでportable v1へserializeする。Save panel承認前にstoreを読まず、path/contentをproduct statusや
   diagnosticsへ残さず、mutation queueと排他的に実行する必要がある。
 
+## 2026-09-21: sensitive warning、save panel、portable export着手
+
+- ROADMAPを再確認し、先頭未完了が「sensitive warning、save panel、portable exportを接続する」であることを確認した。
+- 目的は、明示`Export Notes…`操作に限り、Note本文を含むことをsave panel内の警告で利用者へ示し、利用者が承認した絶対pathへ
+  portable format version 1をdurableに一回だけ書き出すことである。
+- 範囲はnative Export intentのgeneration-bound検証、productへ注入するdestination chooser、authorityのmutationと共通の直列queue、
+  既存store workerのportable codec／exclusive sibling temp／flush／atomic rename、content-free success/failure resultである。
+  Import、共有、cloud/network送信、自動export、export履歴、recent path、一般diagnosticsへの本文・path追加は対象外とする。
+- Save panelを開く前、またはcancel時にauthority/storeへexport requestを送る案は、明示consent前のcontent readを許すため不採用とする。
+  Productはbody-free native intentを受けた後、既存の汎用`SavePanelConfiguration`へlocalized title、sensitive-content warning、default JSON名、
+  extensionを注入する。Cancelはstore access 0のfixed rejected result、選択されたpathだけを`TerminalNoteApprovedExportPath`で検証してauthorityへ渡す。
+- Exportをauthority mutation queue外からworkerへ直接送る案は、commitとexportの順序およびsnapshotの一貫性を保証できないため不採用とする。
+  Authorityはsurface/projection/event/draft/store revisionを検証後、export operationを既存queueへenqueueし、そのturnでworkerへ委譲する。
+  成功時もstore revisionとprojection generationは変更せず、path、byte count、Note ID、本文、timestampをresultへ返さない。
+- `dart_appkit`へNote固有codeを追加しない。既存の汎用save panel APIをproduction compositionからcallback注入し、Note portable encodingと
+  filesystem policyは`dart_terminal`の既存store worker内に維持する。
+- 完了条件はwarningを含むsave panel、cancel時store read/write 0、成功時portable fieldだけ、commit/exportのexact serialization、
+  invalid path／worker failureのfixed unavailable、path/content-free result・diagnostics、両runtime/full gate、個別commitである。
+
+## 2026-09-21: sensitive warning、save panel、portable export完了
+
+### 実装と判断
+
+- Product subsystemへlocaleだけを受ける`TerminalNoteExportDestinationChooser`を必須注入した。Native Export intentがlast accepted projectionの
+  surface/projection/store/draft generation、body-free/card-free payload、expanded/inactive stateと一致することを先に確認し、その後だけchooserを
+  一回呼ぶ。Cancelはauthority/storeへrequestを送らず、同じrevision/generationのfixed rejected resultで完了する。
+- `TerminalNoteExportPanel`をDart Terminal側へ追加し、既存の汎用`SavePanelConfiguration`へ英日localized title、本文をすべて含む旨の
+  sensitive-content warning、prompt、JSON default filename/extensionを注入した。Selected absolute pathだけをredacted
+  `TerminalNoteApprovedExportPath`へ変換し、panel failureとpath validation例外はproductでfixed unavailableへ畳む。
+- Authority store portへ既存worker exportを接続し、exportをdurable mutationと同じbounded serial queueで実行する。Queue turn開始時にも
+  expected store revisionを照合し、先行mutationでrevisionが変わった場合はcontentをencode/writeせずconflictにする。成功は
+  `runtimeApplied`として同じstore revision/projectionを返し、失敗してもdurable Note authority自体はpoisonしない。
+- Worker側の既存portable v1 codecとexclusive sibling temp、flush、atomic renameをそのまま再利用した。Export result/product statusにはpath、
+  byte count、Note/context ID、本文、timestamp、revision historyを保持せず、portable recordはbody/color/status/order/passive trigger intentだけである。
+- `dart_appkit`は変更していない。汎用save-panel primitiveは既存のままで、Dart Terminal固有の文言、Note path validation、authority/worker接続は
+  `dart_terminal`内に置いた。
+
+### 検証と判明事項
+
+- Focused analyzeはissue 0。Authority testはexport中に後続commitをqueueし、store eventが`export,commit`のexact順になること、同revisionでの
+  non-projecting success、permission failureのfixed/content-free result、authority継続を確認した。Product testは英日warning、cancel時file 0、
+  panel failure、real worker success、portable envelope version 1、3 Noteすべてがexact 5 fieldだけであることを確認した。
+- Sandbox内のfocused testはMetal/Clang module cacheとDart telemetry更新を拒否されたため、通常macOS権限の同一commandで成功した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: 成功。377 filesのformat変更0、root/package analyze issue 0、Notes native/Dart/host、
+  real store、security stress、privacy、compatibility、distributionを含めて`dart_terminal tests passed`まで完走した。Phase 7 freshnessの初回停止後、
+  正規generatorでPhase 7、compatibility regression、Ghostty gap、release-candidate matrixを再生成した。実差分はapplication sourceと連鎖artifactの
+  SHA-256だけで、criterion、count、classification、release blockerは変わっていない。
+- `make RUNTIME_ARCH=arm64 developer-jit-audit release-aot-audit`: 両mode成功。5 build assets、3 capabilities、Notes dylibを含むexact bundleを
+  受理した。`git diff --check`も成功した。
+- 追加の`make terminal-notes-acceptance`ではnative/Dart codec、両host mode、capability auditまで成功した後、product sanitizer harnessが
+  現行Notes headerのAppKit extension include pathを渡しておらずcompile前に停止した。さらにharnessはrenderer native header/libraryと実行引数も
+  現行composition testへ渡していない。Export実装や正規full gateのfailureではないが、CM-10のcomplete Note aggregateを復旧する必要があるため、
+  ROADMAPの次項へ「Notes native sanitizer harnessをcurrent composition contractへ追随させる」を追加した。
+
+### 次への引き継ぎ
+
+- 次の先頭未完了taskは、追加したNotes sanitizer harness追随である。`tool/native_sanitizer_gate.dart`のNotes suiteだけを、既存renderer sanitizer
+  artifactとAppKit includeへ接続し、5 suiteのinstrumentation/content-free markerを再度成立させる。
+- その完了後に、元から予定していた「hidden create/open actionとlocalized menu/palette projectionを接続する」へ進む。
+
 ## 2026-09-21: S1 mutation/Detached/export/action task分割
 
 - ROADMAPを再確認し、先頭未完了がCM-10の「S1 mutation、Detached、export、localized actionを接続する」であることを確認した。

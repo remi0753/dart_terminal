@@ -70,6 +70,7 @@ import 'terminal_memory_pressure.dart';
 import 'terminal_native_content.dart';
 import 'terminal_native_hierarchy.dart';
 import 'terminal_note_application_coordinator.dart';
+import 'terminal_note_export_panel.dart';
 import 'terminal_note_model.dart';
 import 'terminal_note_native_adapter.dart';
 import 'terminal_note_product_subsystem.dart';
@@ -5010,6 +5011,11 @@ final class TerminalApplication {
                 return false;
               }
             },
+            exportDestinationChooser: (TerminalNotesLocale locale) =>
+                TerminalNoteExportPanel.choose(
+                  application: application,
+                  locale: locale,
+                ),
             presentation: notePresentationForPane(initialPane.id),
             onError: recordAsynchronousError,
           );
