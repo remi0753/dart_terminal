@@ -1665,7 +1665,7 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （実施時に
   [`docs/phase7/context-dock-manual-switch-investigation.md`](docs/phase7/context-dock-manual-switch-investigation.md)
   を参照する）
-- [ ] ECHO-offのProcess Inspectorから保持済みDirectory Navigatorへ安全に手動切替できるよう修正する
+- [x] ECHO-offのProcess Inspectorから保持済みDirectory Navigatorへ安全に手動切替できるよう修正する
   （実施時に
   [`docs/phase7/context-dock-manual-switch-investigation.md`](docs/phase7/context-dock-manual-switch-investigation.md)
   の修正方針とregression testを参照する）

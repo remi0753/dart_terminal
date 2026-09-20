@@ -119,7 +119,9 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   focus変更では保持したpath／argvを即時破棄する。終了後はfreshな
   Directory Navigatorへ戻る。実行中もControl-Shift-Command-NでDirectory Navigatorへ表示だけを切り替え、
   同じ操作で同一jobのProcess Inspectorへ戻せる。切替はterminal inputを維持し、job／pane／privacy境界を
-  越えて保持しない。SSH先のremote process introspectionは対象外。視覚・VoiceOverの実機確認は
+  越えて保持しない。ECHO-offや手動Secure Keyboard Entry中はcommand開始前に確定したtreeをread-onlyで表示し、
+  snapshot更新、Search／Go To／Move、path操作を停止する。command終了後に一度だけfresh refreshする。
+  SSH先のremote process introspectionは対象外。視覚・VoiceOverの実機確認は
   [Process Inspector manual checklist](docs/phase7/context-dock-process-inspector-manual-checklist.md)を参照
 - View > Show Process Arguments（日本語: プロセスの引数を表示）は、入力保護とは独立して
   Process Inspectorのargvだけを表示／非表示にする。既定は表示で、menuのcheckが現在状態を示す。

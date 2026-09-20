@@ -3487,6 +3487,10 @@ final class TerminalApplication {
         contextDockCanObservePane(paneId) &&
         (contextDockProcessController?.canObserveDirectoryPane(paneId) ?? true);
 
+    bool contextDockCanDisplayDirectoryPane(PaneId paneId) =>
+        contextDockCanObservePane(paneId) ||
+        (contextDockDirectoryController?.hasRetainedSnapshot(paneId) ?? false);
+
     TerminalContextDockPathTarget? contextDockPathTarget(
       TerminalWindowId windowId,
       PaneId paneId,
@@ -4627,6 +4631,7 @@ final class TerminalApplication {
             },
             canObserveProcess: contextDockCanObserveProcess,
             canObserveDirectory: contextDockCanObservePane,
+            canDisplayDirectory: contextDockCanDisplayDirectoryPane,
             focusTerminal: (TerminalContextDockFocusRequest request) {
               final TerminalContextDockDirectoryPresenter? presenter =
                   contextDockPresenter;
@@ -4697,6 +4702,7 @@ final class TerminalApplication {
               );
             },
             canObservePane: contextDockCanObserveDirectoryPane,
+            canRetainPane: createdDockProcess.canRetainDirectoryPane,
             onChanged: () {
               reconcileRequest?.call();
               final TerminalAppKitMenuProjection? menu = menuProjection;
@@ -9887,9 +9893,21 @@ final class TerminalApplication {
                 false;
       }, 'rapid command flickered into a retained Process Inspector document');
 
+      await waitFor(
+        () =>
+            contextDockDirectory.hasRetainedSnapshot(initialPaneId) &&
+            contextDockDirectory.activeOperationCount == 0,
+        'protected-process fixture did not start from a settled Directory snapshot',
+      );
+      final TerminalContextDockDirectorySnapshot retainedBeforeProtectedJob =
+          contextDockDirectory.snapshotForWindow(initialWindow.id)!;
+      final List<String> retainedPathsBeforeProtectedJob =
+          retainedBeforeProtectedJob.rows
+              .map((TerminalContextDockDirectoryRow row) => row.entry.path)
+              .toList(growable: false);
       initialPane.insertText(
         "stty -echo; printf '\\r\\n__DT_NAV_ECHO_OFF__\\r\\n'; "
-        "sleep 4; stty echo; printf '\\r\\n__DT_NAV_ECHO_ON__\\r\\n'",
+        "sleep 8; stty echo; printf '\\r\\n__DT_NAV_ECHO_ON__\\r\\n'",
       );
       await initialPane.submit();
       await _waitForAsciiMarker(initialSession, '__DT_NAV_ECHO_OFF__');
@@ -9910,6 +9928,67 @@ final class TerminalApplication {
             content?.process?.executablePath?.endsWith('/sleep') == true &&
             processDocumentText()?.contains('Command (process argv)') == true;
       }, 'ECHO-off command did not retain the read-only Process Inspector');
+      menu.refresh();
+      final int protectedToggleWriteBaseline =
+          writeEnqueuedCounts[initialPaneId] ?? 0;
+      _expectLifecycle(
+        contentItem.isEnabled &&
+            contextDockDirectory
+                    .snapshotForWindow(initialWindow.id)
+                    ?.isFrozen ==
+                true &&
+            contextDockDirectory.activeOperationCount == 0,
+        'ECHO-off Process Inspector did not retain an immutable Directory toggle',
+      );
+      contentItem.performAction();
+      await waitFor(
+        () {
+          reconcile();
+          final TerminalContextDockDirectorySnapshot? directory =
+              contextDockDirectory.snapshotForWindow(initialWindow.id);
+          final String? document = contextDockPresenter
+              .nativeEditorSnapshotForWindow(initialWindow.id)
+              ?.text;
+          return contextDockProcess.snapshotForWindow(initialWindow.id)?.mode ==
+                  TerminalContextDockContentMode.directoryNavigator &&
+              directory?.isFrozen == true &&
+              directory?.workingDirectory ==
+                  retainedBeforeProtectedJob.workingDirectory &&
+              directory!.rows
+                      .map(
+                        (TerminalContextDockDirectoryRow row) => row.entry.path,
+                      )
+                      .join('\n') ==
+                  retainedPathsBeforeProtectedJob.join('\n') &&
+              contentItem.isChecked &&
+              document?.contains('Snapshot updates: Paused') == true &&
+              contextDockPresenter
+                      .nativeDetailsTextForWindow(initialWindow.id)
+                      ?.contains(
+                        'Insertion is unavailable while a process is running',
+                      ) ==
+                  true;
+        },
+        'ECHO-off content toggle did not show the retained Directory snapshot',
+      );
+      _expectLifecycle(
+        !contextDockState
+                .snapshotForWindow(initialWindow.id)!
+                .navigatorOwnsInput &&
+            contextDockWindow.keyEventRouting == KeyEventRouting.appKitOnly &&
+            contextDockDirectory.activeOperationCount == 0 &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) ==
+                protectedToggleWriteBaseline,
+        'retained Directory display moved input, observed the filesystem, or wrote to the PTY',
+      );
+      contentItem.performAction();
+      await waitFor(() {
+        reconcile();
+        return contextDockProcess.snapshotForWindow(initialWindow.id)?.mode ==
+                TerminalContextDockContentMode.foregroundJob &&
+            processDocumentText()?.contains('/sleep') == true &&
+            !contentItem.isChecked;
+      }, 'second ECHO-off content toggle did not restore Process Inspector');
       await dispatch(TerminalActionId.toggleSecureKeyboardEntry);
       reconcile();
       contextDockProcess.synchronize();
@@ -9918,6 +9997,25 @@ final class TerminalApplication {
         return secureKeyboardEntry.manualRequested &&
             secureKeyboardEntry.status.ownedEnabled;
       }, 'Process Inspector disabled manual Secure Keyboard Entry protection');
+      menu.refresh();
+      _expectLifecycle(
+        contentItem.isEnabled,
+        'manual Secure Keyboard Entry disabled retained Directory display',
+      );
+      contentItem.performAction();
+      await waitFor(
+        () =>
+            contextDockProcess.snapshotForWindow(initialWindow.id)?.mode ==
+            TerminalContextDockContentMode.directoryNavigator,
+        'manual Secure Keyboard Entry blocked retained Directory display',
+      );
+      contentItem.performAction();
+      await waitFor(
+        () =>
+            contextDockProcess.snapshotForWindow(initialWindow.id)?.mode ==
+            TerminalContextDockContentMode.foregroundJob,
+        'manual Secure Keyboard Entry did not restore Process Inspector',
+      );
       final int secureProcessWriteBaseline =
           writeEnqueuedCounts[initialPaneId] ?? 0;
       await dispatch(TerminalActionId.searchFilesAndFolders);
@@ -9935,14 +10033,21 @@ final class TerminalApplication {
             !contextDockState
                 .snapshotForWindow(initialWindow.id)!
                 .navigatorOwnsInput &&
-            protectedDirectory.status ==
+            protectedDirectory.isFrozen &&
+            protectedDirectory.status !=
                 TerminalContextDockDirectoryStatus.privacyUnavailable &&
-            protectedDirectory.workingDirectory == null &&
-            protectedDirectory.rows.isEmpty &&
+            protectedDirectory.workingDirectory ==
+                retainedBeforeProtectedJob.workingDirectory &&
+            protectedDirectory.rows
+                    .map(
+                      (TerminalContextDockDirectoryRow row) => row.entry.path,
+                    )
+                    .join('\n') ==
+                retainedPathsBeforeProtectedJob.join('\n') &&
             contextDockDirectory.activeOperationCount == 0 &&
             (writeEnqueuedCounts[initialPaneId] ?? 0) ==
                 secureProcessWriteBaseline,
-        'manual secure input hid process metadata or enabled Navigator input',
+        'manual secure input hid process metadata, discarded retained Directory content, or enabled Navigator input',
       );
       await dispatch(TerminalActionId.toggleSecureKeyboardEntry);
 

@@ -109,3 +109,52 @@ Directory controllerはforeground ECHO-offでsnapshotを破棄せず凍結し、
   `directory privacy veto disables switching away from Process Inspector`を明示的に受け入れており、
   報告された挙動を再現する証拠になっている。
 - 製品codeは変更していない。
+
+## 修正実装
+
+### 2026-09-20 — retained displayとfresh observationの分離
+
+調査後のfollow-up修正では、ECHO-offまたはmanual Secure Input中も、foreground開始前に確定した
+Directory snapshotだけをread-only表示へ切り替えられることを範囲とした。protected期間中のfilesystem再観測、
+Search／Go To／Move、path actionは対象外とし、job終了後の一回のrefreshで通常状態へ戻ることを完了条件とした。
+
+- process controllerへDirectoryのdisplay authorityを追加し、fresh filesystem observation authorityと分離した。
+  content toggleは、通常の観測権限または同じpaneの確定済みsnapshotがあれば利用できる。
+- foreground候補としてDirectory処理をsuspendした時点から、directory controllerは完成済みroot／subtree／Search
+  snapshotを破棄せず凍結する。Process Inspector確定後まで待つと75 msの候補期間にsnapshotを失うため、
+  `directorySuspended`をretention authorityとして使用する。
+- 凍結時はroot／child／search snapshotを保持しながら、root／subtree load、refresh、Search、Go Toの進行中operationを
+  cancelする。新規resolve／list／searchを開始せず、manual refreshとtree intentも拒否する。
+- 表示切替後もterminalがinputを所有するため、Search／Go To／Moveとpath selectionは有効にならない。
+  detailsにはprocess実行中のpath操作不可を表示する。
+- Directory documentは明示切替中だけ`Snapshot updates: Paused while process is running`を表示する。
+  75 ms未満のshort command候補では内部snapshotを保護するが、pause noticeを投影しない。
+- job終了後は既存のcommand-completion debounceで一回だけfresh refreshし、凍結状態を解除する。
+- Dock hide、pane／session変更、利用可能なretained snapshotがない場合は従来どおりfail closedとする。
+
+## 修正中に判明した事項
+
+- 最初の実PTY検証では、retentionを`foregroundJob` modeだけに限定したため、foreground確定前の候補期間に
+  Directory snapshotが先に`privacyUnavailable`へ置換された。retention開始を`directorySuspended`へ前倒しして解消した。
+- Developer JITは成功した後、最初のRelease AOT検証だけが直前のcommand-completion refreshと次のECHO-off fixtureの
+  開始順で競合した。fixtureを確定済みsnapshot／operation 0から開始するようにし、製品側の保持条件と検証前提を分離した。
+- sandbox内のformat／analyzeは処理自体に成功した後、`~/.dart-tool` telemetry sessionのmtime更新拒否で終了コード1に
+  なった。通常環境で再実行し、format変更0／analyze問題0を確認した。
+
+## 修正検証
+
+- `test/terminal_context_dock_test.dart`: 成功。候補期間からのretention、観測権限なしの表示、display authority失効、
+  privacy unavailable fallback、operation 0を固定した。
+- `test/terminal_localization_test.dart`: 成功。
+- `test/terminal_action_menu_test.dart`: 成功。
+- `dart analyze`: `No issues found!`。
+- `make RUNTIME_ARCH=arm64 runtime-native-content-integration`: Developer JIT／Release AOTとも成功した。
+  ECHO-offとmanual Secure Inputで保持treeを表示し、同一Process Inspectorへ復帰、terminal focus、operation 0、
+  PTY write 0を確認した。
+- `make phase7-appkit-acceptance terminal-compatibility-regression-coverage ghostty-p0-p1-gap-inventory
+  release-candidate-daily-use-matrix`: 成功し、関連する受け入れ証跡を再生成した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: 成功。format 351 files／変更0、静的解析問題0を含む
+  repository全体のtestを通過した。
+- `git diff --check`: 成功。
+
+未検証事項および残存するtask固有の阻害要因はない。

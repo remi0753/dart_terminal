@@ -220,6 +220,9 @@ final class TerminalLocalization {
   String get contextDockUnknown => _ja ? '不明' : 'Unknown';
   String get contextDockLoading => _ja ? '読み込み中…' : 'Loading…';
   String get contextDockLoadingInline => _ja ? '（読み込み中）' : '(loading)';
+  String get contextDockSnapshotPaused => _ja
+      ? 'スナップショット更新: プロセス実行中は停止'
+      : 'Snapshot updates: Paused while process is running';
   String get contextDockEmpty => _ja ? '項目はありません' : 'No items';
   String get contextDockUnavailable =>
       _ja ? 'このディレクトリを参照できません' : 'This directory is unavailable';

@@ -155,6 +155,7 @@ final class TerminalContextDockDirectorySnapshot {
     required Iterable<TerminalContextDockDirectoryRow> rows,
     required this.omittedEntryCount,
     required this.issueCount,
+    required this.isFrozen,
     this.searchCoverage = const <TerminalFileSearchCoverage>[],
     this.isSearch = false,
   }) : rows = List<TerminalContextDockDirectoryRow>.unmodifiable(rows);
@@ -168,6 +169,7 @@ final class TerminalContextDockDirectorySnapshot {
   final List<TerminalContextDockDirectoryRow> rows;
   final int omittedEntryCount;
   final int issueCount;
+  final bool isFrozen;
   final List<TerminalFileSearchCoverage> searchCoverage;
   final bool isSearch;
 }
@@ -184,12 +186,14 @@ final class TerminalContextDockDirectoryController {
     TerminalFileSearchService searchService = const TerminalFileSearchService(),
     Iterable<String> Function()? explicitSearchRoots,
     TerminalContextDockPaneObservationPolicy? canObservePane,
+    TerminalContextDockPaneObservationPolicy? canRetainPane,
     void Function()? onChanged,
   }) : _resolveWorkingDirectory = resolveWorkingDirectory,
        _snapshotService = snapshotService,
        _searchService = searchService,
        _explicitSearchRoots = explicitSearchRoots ?? _noSearchRoots,
        _canObservePane = canObservePane ?? _alwaysObservePane,
+       _canRetainPane = canRetainPane ?? _neverObservePane,
        _onChanged = onChanged;
 
   final TerminalApplicationState applicationState;
@@ -199,6 +203,7 @@ final class TerminalContextDockDirectoryController {
   final TerminalFileSearchService _searchService;
   final Iterable<String> Function() _explicitSearchRoots;
   final TerminalContextDockPaneObservationPolicy _canObservePane;
+  final TerminalContextDockPaneObservationPolicy _canRetainPane;
   final void Function()? _onChanged;
   final Map<TerminalWindowId, _TerminalContextDockDirectoryWindowState>
   _windows = <TerminalWindowId, _TerminalContextDockDirectoryWindowState>{};
@@ -235,6 +240,16 @@ final class TerminalContextDockDirectoryController {
     if (window == null) return null;
     return _project(window);
   }
+
+  bool hasRetainedSnapshot(PaneId paneId) =>
+      !_isDisposed &&
+      _windows.values.any(
+        (window) =>
+            window.paneId == paneId &&
+            !window.privacyRestricted &&
+            window.resolution?.isAvailable == true &&
+            window.rootSnapshot != null,
+      );
 
   bool canRefreshWindow(TerminalWindowId windowId, PaneId paneId) {
     if (_isDisposed || applicationState.isDisposed || dockState.isDisposed) {
@@ -437,6 +452,14 @@ final class TerminalContextDockDirectoryController {
           if (_commandRefreshPaneIds.contains(dock.targetPaneId)) {
             _processSuspendedRefreshPaneIds.add(dock.targetPaneId);
           }
+          if (_readCanRetainPane(dock.targetPaneId) &&
+              _freezeRetained(
+                logicalWindow.id,
+                dock.targetPaneId,
+                dock.pane.showHiddenEntries,
+              )) {
+            continue;
+          }
           _replacePrivacyUnavailable(
             logicalWindow.id,
             dock.targetPaneId,
@@ -447,14 +470,15 @@ final class TerminalContextDockDirectoryController {
         final _TerminalContextDockDirectoryWindowState? suspended =
             _windows[logicalWindow.id];
         if (suspended?.paneId == dock.targetPaneId &&
-            suspended?.privacyRestricted == true &&
+            (suspended?.privacyRestricted == true ||
+                suspended?.isFrozen == true) &&
             _processSuspendedRefreshPaneIds.contains(dock.targetPaneId) &&
             !refreshPaneIds.contains(dock.targetPaneId) &&
             !_deferredRefreshPaneIds.contains(dock.targetPaneId)) {
           // A general hierarchy reconcile may observe one transient idle
           // sample before the command-completion debounce has established a
-          // stable shell. Keep the content-free privacy projection and let the
-          // owned completion timer perform the single fresh load.
+          // stable shell. Keep the privacy projection or retained immutable
+          // tree and let the owned completion timer perform one fresh load.
           continue;
         }
         TerminalWorkingDirectoryResolution? resolution;
@@ -500,6 +524,8 @@ final class TerminalContextDockDirectoryController {
           }
         }
         if (retained != null && retained.matches(dock, resolution)) {
+          final bool resumed = retained.isFrozen;
+          retained.isFrozen = false;
           retained.resolution = resolution;
           _synchronizeHiddenVisibility(retained, dock.pane.showHiddenEntries);
           if (resolution.isAvailable) _recordRecentRoot(resolution.path!);
@@ -511,6 +537,7 @@ final class TerminalContextDockDirectoryController {
           _ensureSearch(retained, dock);
           _publishResultCount(retained);
           _ensureGoTo(retained, dock);
+          if (resumed) _onChanged?.call();
           continue;
         }
         retained?.cancel();
@@ -553,6 +580,7 @@ final class TerminalContextDockDirectoryController {
     if (dock == null || window == null) {
       return false;
     }
+    if (window.isFrozen) return false;
     if (dock.pane.navigatorMode == TerminalContextDockNavigatorMode.search &&
         dock.pane.searchQuery.isNotEmpty) {
       return intent != TerminalContextDockTreeIntent.collapse &&
@@ -709,6 +737,38 @@ final class TerminalContextDockDirectoryController {
     } on Object {
       return false;
     }
+  }
+
+  bool _readCanRetainPane(PaneId paneId) {
+    try {
+      return _canRetainPane(paneId);
+    } on Object {
+      return false;
+    }
+  }
+
+  bool _freezeRetained(
+    TerminalWindowId windowId,
+    PaneId paneId,
+    bool showHiddenEntries,
+  ) {
+    final _TerminalContextDockDirectoryWindowState? retained =
+        _windows[windowId];
+    if (retained == null ||
+        retained.paneId != paneId ||
+        retained.privacyRestricted ||
+        retained.resolution?.isAvailable != true ||
+        retained.rootSnapshot == null) {
+      return false;
+    }
+    final bool changed = !retained.isFrozen;
+    retained
+      ..freeze()
+      ..isFrozen = true;
+    _synchronizeHiddenVisibility(retained, showHiddenEntries);
+    _publishResultCount(retained);
+    if (changed) _onChanged?.call();
+    return true;
   }
 
   void _synchronizeHiddenVisibility(
@@ -1528,6 +1588,7 @@ final class TerminalContextDockDirectoryController {
                 )
                 .length ??
             0,
+        isFrozen: window.isFrozen,
         searchCoverage:
             search?.coverage ?? const <TerminalFileSearchCoverage>[],
         isSearch: true,
@@ -1586,6 +1647,7 @@ final class TerminalContextDockDirectoryController {
       rows: rows,
       omittedEntryCount: omitted,
       issueCount: issues,
+      isFrozen: window.isFrozen,
     );
   }
 
@@ -1677,6 +1739,7 @@ final class TerminalContextDockDirectoryController {
 
   static Iterable<String> _noSearchRoots() => const <String>[];
   static bool _alwaysObservePane(PaneId _) => true;
+  static bool _neverObservePane(PaneId _) => false;
 }
 
 final class _TerminalContextDockDirectoryWindowState {
@@ -1695,6 +1758,7 @@ final class _TerminalContextDockDirectoryWindowState {
   TerminalWorkingDirectoryResolution? resolution;
   bool showHiddenEntries;
   final bool privacyRestricted;
+  bool isFrozen = false;
   TerminalDirectorySnapshot? rootSnapshot;
   _TerminalContextDockDirectoryRefresh? refresh;
   final Map<String, TerminalDirectorySnapshot> childSnapshots =
@@ -1732,6 +1796,22 @@ final class _TerminalContextDockDirectoryWindowState {
     operations.clear();
     childSnapshots.clear();
     rootSnapshot = null;
+  }
+
+  void freeze() {
+    cancelRefresh();
+    for (final TerminalDirectorySnapshotOperation operation
+        in operations.values) {
+      operation.cancel();
+    }
+    operations.clear();
+    searchOperation?.cancel();
+    searchOperation = null;
+    searchGeneration = null;
+    goToOperation?.cancel();
+    goToOperation = null;
+    goToGeneration = null;
+    pendingReveal = null;
   }
 
   void cancelRefresh() {
@@ -2222,6 +2302,9 @@ final class TerminalContextDockDirectoryPresenter {
             dock,
             directory,
             _pathHandoffSnapshot(dock.windowId),
+            showFrozenNotice:
+                directory?.isFrozen == true &&
+                content?.directorySuspended == false,
           )
         : _TerminalContextDockDocument.buildProcess(localization, content);
     _setEditorEditable(
@@ -2528,8 +2611,9 @@ final class _TerminalContextDockDocument {
     TerminalLocalization localization,
     TerminalContextDockWindowSnapshot dock,
     TerminalContextDockDirectorySnapshot? directory,
-    TerminalContextDockPathHandoffSnapshot? handoff,
-  ) {
+    TerminalContextDockPathHandoffSnapshot? handoff, {
+    required bool showFrozenNotice,
+  }) {
     final StringBuffer navigator = StringBuffer();
     void line([String value = '']) => navigator.writeln(value);
     line(localization.contextDockTitle);
@@ -2542,6 +2626,9 @@ final class _TerminalContextDockDocument {
       '${localization.contextDockWorkingDirectory}: '
       '${directory?.workingDirectory ?? localization.contextDockUnknown}',
     );
+    if (showFrozenNotice) {
+      line(localization.contextDockSnapshotPaused);
+    }
     final String displayedMode = dock.navigatorOwnsInput
         ? switch (dock.pane.navigatorMode) {
             TerminalContextDockNavigatorMode.search =>
@@ -2620,7 +2707,11 @@ final class _TerminalContextDockDocument {
     }
     final StringBuffer details = StringBuffer();
     void detailLine([String value = '']) => details.writeln(value);
-    if (handoff != null) {
+    if (showFrozenNotice) {
+      detailLine(localization.contextDockPathActions);
+      detailLine(localization.contextDockPathActionsForeground);
+      detailLine();
+    } else if (handoff != null) {
       detailLine(localization.contextDockPathActions);
       if (handoff.canCopy) detailLine(localization.contextDockCopyPathHint);
       if (handoff.canInsert) {

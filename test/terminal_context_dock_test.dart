@@ -539,6 +539,7 @@ Future<void> _testProcessCoordinatorRefreshPrivacyAndCancellation() async {
   var owningShellCommand = false;
   var privacyAllowed = true;
   var directoryAllowed = true;
+  var directoryDisplayAllowed = true;
   var canPresent = true;
   var activeSession = firstSession;
   var focusCount = 0;
@@ -581,6 +582,7 @@ Future<void> _testProcessCoordinatorRefreshPrivacyAndCancellation() async {
             privacyAllowed &&
             TerminalContextDockPrivacyPolicy.canObserveProcess(process),
         canObserveDirectory: (_) => directoryAllowed,
+        canDisplayDirectory: (_) => directoryDisplayAllowed,
         focusTerminal: (TerminalContextDockFocusRequest request) {
           focusCount++;
           return request.windowId == window.id &&
@@ -614,6 +616,7 @@ Future<void> _testProcessCoordinatorRefreshPrivacyAndCancellation() async {
   scheduler.elapse(TerminalContextDockProcessLimits.terminalChangeDebounce);
   _expect(
     controller.snapshotForWindow(window.id)!.directorySuspended &&
+        controller.canRetainDirectoryPane(firstPane) &&
         richRequests.isEmpty &&
         dock.snapshotForWindow(window.id)!.navigatorOwnsInput,
     'foreground candidate immediately suspends directory work without rich observation',
@@ -624,6 +627,7 @@ Future<void> _testProcessCoordinatorRefreshPrivacyAndCancellation() async {
   _expect(
     controller.snapshotForWindow(window.id)!.mode ==
             TerminalContextDockContentMode.directoryNavigator &&
+        !controller.canRetainDirectoryPane(firstPane) &&
         controller.canObserveDirectoryPane(firstPane) &&
         richRequests.isEmpty &&
         focusCount == 0,
@@ -643,6 +647,7 @@ Future<void> _testProcessCoordinatorRefreshPrivacyAndCancellation() async {
   )!;
   _expect(
     content.mode == TerminalContextDockContentMode.foregroundJob &&
+        controller.canRetainDirectoryPane(firstPane) &&
         content.process?.status == TerminalContextDockProcessStatus.loading &&
         controller.activeOperationCount == 1 &&
         richRequests.length == 1 &&
@@ -713,16 +718,26 @@ Future<void> _testProcessCoordinatorRefreshPrivacyAndCancellation() async {
   );
   directoryAllowed = false;
   _expect(
-    !contentToggle.isAvailable(),
-    'directory privacy veto disables switching away from Process Inspector',
+    contentToggle.isAvailable(),
+    'retained Directory display remains available when fresh observation is private',
   );
   contentToggle.handler();
   _expect(
     controller.snapshotForWindow(window.id)!.mode ==
-        TerminalContextDockContentMode.foregroundJob,
-    'unavailable content toggle cannot bypass directory privacy',
+            TerminalContextDockContentMode.directoryNavigator &&
+        !controller.canObserveDirectoryPane(firstPane),
+    'content toggle projects a retained Directory without granting observation authority',
+  );
+  directoryDisplayAllowed = false;
+  controller.synchronize();
+  _expect(
+    !contentToggle.isAvailable() &&
+        controller.snapshotForWindow(window.id)!.mode ==
+            TerminalContextDockContentMode.foregroundJob,
+    'losing retained display authority revokes the Directory override',
   );
   directoryAllowed = true;
+  directoryDisplayAllowed = true;
 
   scheduler.elapse(const Duration(milliseconds: 500));
   _expect(
@@ -770,17 +785,21 @@ Future<void> _testProcessCoordinatorRefreshPrivacyAndCancellation() async {
   directoryAllowed = false;
   controller.synchronize();
   _expect(
-    !controller.activeWindowShowsDirectoryDuringProcess &&
+    controller.activeWindowShowsDirectoryDuringProcess &&
         controller.snapshotForWindow(window.id)!.mode ==
-            TerminalContextDockContentMode.foregroundJob,
-    'directory privacy loss revokes an active display override',
+            TerminalContextDockContentMode.directoryNavigator &&
+        !controller.canObserveDirectoryPane(firstPane),
+    'directory observation loss preserves an authorized retained display override',
+  );
+  directoryDisplayAllowed = false;
+  controller.synchronize();
+  _expect(
+    !controller.activeWindowShowsDirectoryDuringProcess,
+    'retained display authority loss revokes the active override',
   );
   directoryAllowed = true;
+  directoryDisplayAllowed = true;
   contentToggle.handler();
-  _expect(
-    controller.activeWindowShowsDirectoryDuringProcess,
-    'Directory override can be reacquired after privacy recovery',
-  );
   foregroundGroup = firstPane.value + 20;
   controller.synchronize();
   _expect(
@@ -1175,6 +1194,7 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
   String root = '/root';
   bool remote = false;
   bool canObserve = true;
+  bool canRetain = false;
   var resolutionCount = 0;
   var projectionChangeCount = 0;
   final TerminalContextDockDirectoryController controller =
@@ -1211,6 +1231,7 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
           );
         },
         canObservePane: (_) => canObserve,
+        canRetainPane: (_) => canRetain,
         onChanged: () => projectionChangeCount++,
       );
 
@@ -1747,6 +1768,64 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
   );
 
   final int resolutionBaseline = resolutionCount;
+  final int retainedListBaseline = files.listCount('/other');
+  canObserve = false;
+  canRetain = true;
+  controller.synchronize();
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
+    snapshot.isFrozen &&
+        snapshot.status == TerminalContextDockDirectoryStatus.ready &&
+        snapshot.workingDirectory == '/other' &&
+        snapshot.rows.single.entry.name == 'other.txt' &&
+        controller.hasRetainedSnapshot(secondPane.id) &&
+        controller.activeOperationCount == 0 &&
+        !controller.canRefreshWindow(window.id, secondPane.id) &&
+        !controller.refreshWindow(window.id, secondPane.id) &&
+        resolutionCount == resolutionBaseline &&
+        files.listCount('/other') == retainedListBaseline,
+    'process suspension freezes the immutable tree without granting fresh filesystem observation',
+  );
+  canObserve = true;
+  canRetain = false;
+  controller.synchronize();
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
+    !snapshot.isFrozen && snapshot.workingDirectory == '/other',
+    'observation recovery resumes a retained tree when no command refresh is pending',
+  );
+  final int completionRefreshBaseline = controller.refreshCommitCount;
+  final int completionListBaseline = files.listCount('/other');
+  dock.focusTerminal(window.id, secondPane.id);
+  controller.noteCommandSubmitted(secondPane.id);
+  canObserve = false;
+  canRetain = true;
+  controller.synchronize();
+  canObserve = true;
+  canRetain = false;
+  controller.synchronize();
+  _expect(
+    controller.snapshotForWindow(window.id)!.isFrozen &&
+        controller.activeOperationCount == 0,
+    'transient idle state keeps the retained tree frozen until command-completion debounce',
+  );
+  await Future<void>.delayed(
+    TerminalContextDockDirectoryLimits.processCompletionDebounce +
+        const Duration(milliseconds: 25),
+  );
+  await _waitUntil(
+    () =>
+        !controller.snapshotForWindow(window.id)!.isFrozen &&
+        controller.activeOperationCount == 0,
+  );
+  _expect(
+    controller.refreshCommitCount == completionRefreshBaseline + 1 &&
+        files.listCount('/other') == completionListBaseline + 1,
+    'command completion replaces the frozen tree with exactly one fresh snapshot '
+    '(commits ${controller.refreshCommitCount - completionRefreshBaseline}, '
+    'lists ${files.listCount('/other') - completionListBaseline})',
+  );
+  final int privacyResolutionBaseline = resolutionCount;
   canObserve = false;
   controller.synchronize();
   snapshot = controller.snapshotForWindow(window.id)!;
@@ -1757,7 +1836,7 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
         controller.activeOperationCount == 0 &&
         !controller.canRefreshWindow(window.id, secondPane.id) &&
         !controller.refreshWindow(window.id, secondPane.id) &&
-        resolutionCount == resolutionBaseline,
+        resolutionCount == privacyResolutionBaseline,
     'protected input cancels work and exposes neither cwd nor retained rows',
   );
   canObserve = true;

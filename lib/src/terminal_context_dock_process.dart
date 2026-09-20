@@ -320,6 +320,9 @@ typedef TerminalContextDockProcessPrivacyPolicy = bool Function(
 typedef TerminalContextDockDirectoryPrivacyPolicy = bool Function(
   PaneId paneId,
 );
+typedef TerminalContextDockDirectoryDisplayPolicy = bool Function(
+  PaneId paneId,
+);
 typedef TerminalContextDockProcessTerminalFocus = bool Function(
   TerminalContextDockFocusRequest request,
 );
@@ -338,6 +341,7 @@ final class TerminalContextDockProcessController {
     TerminalContextDockWindowPresentationPolicy? canPresentWindow,
     TerminalContextDockProcessPrivacyPolicy? canObserveProcess,
     TerminalContextDockDirectoryPrivacyPolicy? canObserveDirectory,
+    TerminalContextDockDirectoryDisplayPolicy? canDisplayDirectory,
     TerminalContextDockProcessTerminalFocus? focusTerminal,
     TerminalContextDockScheduleTask? scheduleTask,
     int Function()? monotonicMicros,
@@ -347,6 +351,10 @@ final class TerminalContextDockProcessController {
        _canPresentWindow = canPresentWindow ?? _alwaysPresentWindow,
        _canObserveProcess = canObserveProcess ?? _alwaysObserveProcess,
        _canObserveDirectory = canObserveDirectory ?? _alwaysObserveDirectory,
+       _canDisplayDirectory =
+           canDisplayDirectory ??
+           canObserveDirectory ??
+           _alwaysObserveDirectory,
        _focusTerminal = focusTerminal ?? _acceptTerminalFocus,
        _scheduleTask = scheduleTask ?? _scheduleTimerTask,
        _onChanged = onChanged {
@@ -363,6 +371,7 @@ final class TerminalContextDockProcessController {
   final TerminalContextDockWindowPresentationPolicy _canPresentWindow;
   final TerminalContextDockProcessPrivacyPolicy _canObserveProcess;
   final TerminalContextDockDirectoryPrivacyPolicy _canObserveDirectory;
+  final TerminalContextDockDirectoryDisplayPolicy _canDisplayDirectory;
   final TerminalContextDockProcessTerminalFocus _focusTerminal;
   final TerminalContextDockScheduleTask _scheduleTask;
   final void Function()? _onChanged;
@@ -433,7 +442,7 @@ final class TerminalContextDockProcessController {
       return;
     }
     if (!state.directoryNavigatorOverride &&
-        !_safeCanObserveDirectory(state.paneId)) {
+        !_safeCanDisplayDirectory(state.paneId)) {
       return;
     }
     state.directoryNavigatorOverride = !state.directoryNavigatorOverride;
@@ -506,6 +515,12 @@ final class TerminalContextDockProcessController {
                     !state.directorySuspended) ||
                 (state.mode == TerminalContextDockContentMode.foregroundJob &&
                     state.directoryNavigatorOverride)),
+      );
+
+  bool canRetainDirectoryPane(PaneId paneId) =>
+      !_isDisposed &&
+      _windows.values.any(
+        (state) => state.paneId == paneId && state.directorySuspended,
       );
 
   void scheduleSynchronize() {
@@ -620,7 +635,7 @@ final class TerminalContextDockProcessController {
       case TerminalPaneProcessDisposition.foregroundProcess:
         var overrideChanged = false;
         if (state.directoryNavigatorOverride &&
-            !_safeCanObserveDirectory(state.paneId)) {
+            !_safeCanDisplayDirectory(state.paneId)) {
           state.directoryNavigatorOverride = false;
           overrideChanged = true;
         }
@@ -965,6 +980,14 @@ final class TerminalContextDockProcessController {
     }
   }
 
+  bool _safeCanDisplayDirectory(PaneId paneId) {
+    try {
+      return _canDisplayDirectory(paneId);
+    } on Object {
+      return false;
+    }
+  }
+
   bool _canToggleActiveWindowContent() {
     if (_isDisposed || applicationState.isDisposed || dockState.isDisposed) {
       return false;
@@ -983,7 +1006,7 @@ final class TerminalContextDockProcessController {
         state.paneId == dock.targetPaneId &&
         state.mode == TerminalContextDockContentMode.foregroundJob &&
         (state.directoryNavigatorOverride ||
-            _safeCanObserveDirectory(state.paneId));
+            _safeCanDisplayDirectory(state.paneId));
   }
 
   void _ensurePoll() {

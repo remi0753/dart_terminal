@@ -46,6 +46,9 @@ architecture、Developer JIT／Release AOT、pass/failとcontent-freeな失敗�
   terminalへ文字やescape sequenceを送らない。command終了後は同じshortcutでNavigatorへ移れる。
 - [ ] foreground job実行中にControl-Shift-Command-Nを押すとterminal inputを維持したままDirectory Navigatorへ
   切り替わり、同じキーで同一jobのProcess Inspectorへ戻る。job終了後と次のjobでは自動表示policyへ戻る。
+- [ ] `node` REPLなどECHO-offのProcess InspectorでもControl-Shift-Command-Nが有効で、command開始前のtreeを
+  `Snapshot updates: Paused while process is running`付きで表示する。Search／Go To／Move、展開、更新、path操作は
+  新しいfilesystem処理を開始せず、終了後の一回refreshで最新状態へ戻る。
 - [ ] Option-Shift-CはProcess Inspector表示中もDockだけを開閉し、foreground commandを停止・変更しない。
 - [ ] View > Show Process Arguments（日本語: プロセスの引数を表示）のcheckを外すとargvだけが非表示となり、
   process名、実行ファイル、PID／PGID、経過時間は維持される。Shift-Command-Pから同じactionを検索し、
