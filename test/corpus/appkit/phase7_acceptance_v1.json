@@ -14,7 +14,7 @@
         },
         {
           "path": "lib/src/terminal_restoration.dart",
-          "sha256": "6a19602d0076de2db7de460b9579f0837e9f0994746efc6c68453f46306f326f"
+          "sha256": "2c495827f47f53ba6676961e3dedfe4bf2b74ad4d30ee152259a8512148a9e11"
         },
         {
           "path": "lib/src/terminal_native_hierarchy.dart",
@@ -30,7 +30,7 @@
         {
           "path": "test/terminal_restoration_test.dart",
           "entrypoint": "runTerminalRestorationTests",
-          "sha256": "b477c1f85c4b609b24daa457d6b59d6f79bf9480739e04a1708f284a0f0011f5"
+          "sha256": "80d8e0ac79e29348cdbafa54089e08d2d354dbb4f4600102c9539cd08dddde72"
         }
       ],
       "integration_tests": [

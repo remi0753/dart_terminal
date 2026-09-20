@@ -923,9 +923,38 @@ typedef TerminalRestorationWorkingDirectoryProvider = String? Function(
 typedef TerminalRestoredPaneConfigurationFactory =
     TerminalPaneConfiguration Function(TerminalRestorablePane pane);
 
+final class TerminalRestorationCaptureResult {
+  TerminalRestorationCaptureResult({
+    required this.snapshot,
+    required Iterable<PaneId> paneIdsInTraversalOrder,
+  }) : paneIdsInTraversalOrder = List<PaneId>.unmodifiable(
+         paneIdsInTraversalOrder,
+       ) {
+    if (this.paneIdsInTraversalOrder.length != snapshot.paneCount ||
+        this.paneIdsInTraversalOrder.toSet().length !=
+            this.paneIdsInTraversalOrder.length) {
+      throw StateError('restoration pane traversal is inconsistent');
+    }
+  }
+
+  final TerminalRestorationSnapshot snapshot;
+  final List<PaneId> paneIdsInTraversalOrder;
+}
+
 /// Captures only bounded presentation and fresh-session launch state.
 abstract final class TerminalApplicationRestorationCapture {
   static TerminalRestorationSnapshot capture(
+    TerminalApplicationState state, {
+    required TerminalRestorationPlacementProvider placementForWindow,
+    required TerminalRestorationWorkingDirectoryProvider
+    workingDirectoryForPane,
+  }) => captureWithTraversal(
+    state,
+    placementForWindow: placementForWindow,
+    workingDirectoryForPane: workingDirectoryForPane,
+  ).snapshot;
+
+  static TerminalRestorationCaptureResult captureWithTraversal(
     TerminalApplicationState state, {
     required TerminalRestorationPlacementProvider placementForWindow,
     required TerminalRestorationWorkingDirectoryProvider
@@ -945,10 +974,12 @@ abstract final class TerminalApplicationRestorationCapture {
       throw StateError('cannot capture without a restorable terminal window');
     }
     final List<TerminalRestorableWindow> windows = <TerminalRestorableWindow>[];
+    final List<PaneId> paneIdsInTraversalOrder = <PaneId>[];
     for (final TerminalWindowState window in restorableWindows) {
       final List<TerminalRestorableTab> tabs = <TerminalRestorableTab>[];
       for (final TerminalTabState tab in window.tabs) {
         final List<PaneId> paneIds = tab.paneIds;
+        paneIdsInTraversalOrder.addAll(paneIds);
         tabs.add(
           TerminalRestorableTab(
             splitTree: _captureNode(
@@ -975,9 +1006,13 @@ abstract final class TerminalApplicationRestorationCapture {
     final int activeWindowIndex = restorableWindows.indexWhere(
       (TerminalWindowState window) => window.id == state.activeWindowId,
     );
-    return TerminalRestorationSnapshot(
+    final TerminalRestorationSnapshot snapshot = TerminalRestorationSnapshot(
       windows: windows,
       activeWindowIndex: activeWindowIndex < 0 ? 0 : activeWindowIndex,
+    );
+    return TerminalRestorationCaptureResult(
+      snapshot: snapshot,
+      paneIdsInTraversalOrder: paneIdsInTraversalOrder,
     );
   }
 
@@ -1008,16 +1043,27 @@ final class TerminalRestorationResult {
     required this.applicationState,
     required Map<TerminalWindowId, TerminalWindowPlacement> placements,
     required Map<PaneId, String?> launchWorkingDirectories,
+    required Iterable<PaneId> paneIdsInTraversalOrder,
   }) : placements = Map<TerminalWindowId, TerminalWindowPlacement>.unmodifiable(
          placements,
        ),
        launchWorkingDirectories = Map<PaneId, String?>.unmodifiable(
          launchWorkingDirectories,
-       );
+       ),
+       paneIdsInTraversalOrder = List<PaneId>.unmodifiable(
+         paneIdsInTraversalOrder,
+       ) {
+    if (this.paneIdsInTraversalOrder.length != applicationState.paneCount ||
+        this.paneIdsInTraversalOrder.toSet().length !=
+            this.paneIdsInTraversalOrder.length) {
+      throw StateError('restored pane traversal is inconsistent');
+    }
+  }
 
   final TerminalApplicationState applicationState;
   final Map<TerminalWindowId, TerminalWindowPlacement> placements;
   final Map<PaneId, String?> launchWorkingDirectories;
+  final List<PaneId> paneIdsInTraversalOrder;
 }
 
 /// Reconstructs snapshot topology with fresh pane/session/native-independent IDs.
@@ -1035,6 +1081,7 @@ abstract final class TerminalApplicationRestorer {
         <TerminalWindowId, TerminalWindowPlacement>{};
     final Map<PaneId, String?> workingDirectories = <PaneId, String?>{};
     final List<TerminalWindowId> windowIds = <TerminalWindowId>[];
+    final List<PaneId> paneIdsInTraversalOrder = <PaneId>[];
     try {
       for (final TerminalRestorableWindow savedWindow in snapshot.windows) {
         final TerminalRestorableTab firstSavedTab = savedWindow.tabs.first;
@@ -1045,12 +1092,14 @@ abstract final class TerminalApplicationRestorer {
         windowIds.add(window.id);
         placements[window.id] = savedWindow.placement;
         final List<TerminalTabId> tabIds = <TerminalTabId>[];
-        await _restoreTab(
-          state,
-          window.selectedTab,
-          firstSavedTab,
-          configurationForPane,
-          workingDirectories,
+        paneIdsInTraversalOrder.addAll(
+          await _restoreTab(
+            state,
+            window.selectedTab,
+            firstSavedTab,
+            configurationForPane,
+            workingDirectories,
+          ),
         );
         tabIds.add(window.selectedTab.id);
         for (final TerminalRestorableTab savedTab in savedWindow.tabs.skip(1)) {
@@ -1059,12 +1108,14 @@ abstract final class TerminalApplicationRestorer {
             window.id,
             configurationForPane(firstPane),
           );
-          await _restoreTab(
-            state,
-            tab,
-            savedTab,
-            configurationForPane,
-            workingDirectories,
+          paneIdsInTraversalOrder.addAll(
+            await _restoreTab(
+              state,
+              tab,
+              savedTab,
+              configurationForPane,
+              workingDirectories,
+            ),
           );
           tabIds.add(tab.id);
         }
@@ -1076,6 +1127,7 @@ abstract final class TerminalApplicationRestorer {
         applicationState: state,
         placements: placements,
         launchWorkingDirectories: workingDirectories,
+        paneIdsInTraversalOrder: paneIdsInTraversalOrder,
       );
     } on Object catch (error, stackTrace) {
       if (!state.isDisposed) await state.shutdown();
@@ -1083,7 +1135,7 @@ abstract final class TerminalApplicationRestorer {
     }
   }
 
-  static Future<void> _restoreTab(
+  static Future<List<PaneId>> _restoreTab(
     TerminalApplicationState state,
     TerminalTabState tab,
     TerminalRestorableTab saved,
@@ -1111,6 +1163,9 @@ abstract final class TerminalApplicationRestorer {
     }
     if (saved.customTitle != null) state.renameTab(tab.id, saved.customTitle);
     if (saved.color != null) state.setTabColor(tab.id, saved.color);
+    return List<PaneId>.unmodifiable(
+      savedPanes.map((TerminalRestorablePane pane) => paneIds[pane]!),
+    );
   }
 
   static Future<void> _restoreNode(

@@ -3,16 +3,121 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dart_terminal/dart_terminal.dart';
+import 'package:dart_terminal/src/terminal_sha256.dart';
 
 Future<void> main() => runTerminalRestorationTests();
 
 Future<void> runTerminalRestorationTests() async {
+  _testSecureContextIdentity();
+  _testExactRestorationArtifact();
   _testWindowPlacementPolicy();
   _testStrictCodecRejection();
   await _testBoundedFileStore();
   await _testQuickTerminalRestorationExclusion();
   await _testHierarchyRoundTripAndFreshOwnership();
+  await _testMaximumPaneTraversal();
   await _testRestoreFailureIsAtomic();
+}
+
+void _testSecureContextIdentity() {
+  final TerminalNoteContextIdGenerator secure =
+      TerminalNoteContextIdGenerator.secure();
+  final Set<String> issued = <String>{};
+  for (var index = 0; index < 64; index++) {
+    final TerminalNoteContextId id = secure.next();
+    _expect(
+      RegExp(r'^[0-9a-f]{32}$').hasMatch(id.canonicalValue) &&
+          issued.add(id.canonicalValue) &&
+          !id.toString().contains(id.canonicalValue),
+      'secure context IDs are unique canonical opaque 128-bit values',
+    );
+  }
+
+  final TerminalNoteContextId reserved = TerminalNoteContextId.fromHex(
+    List<String>.filled(16, '11').join(),
+  );
+  var collisionCalls = 0;
+  final TerminalNoteContextIdGenerator recovering =
+      TerminalNoteContextIdGenerator.forTesting(() {
+        collisionCalls++;
+        return List<int>.filled(16, collisionCalls == 1 ? 0x11 : 0x22);
+      });
+  _expect(
+    recovering.next(excluding: <TerminalNoteContextId>[reserved]) ==
+            TerminalNoteContextId.fromHex(
+              List<String>.filled(16, '22').join(),
+            ) &&
+        collisionCalls == 2,
+    'context ID generation retries a collision without reusing an identity',
+  );
+
+  var exhaustedCalls = 0;
+  final TerminalNoteContextIdGenerator exhausted =
+      TerminalNoteContextIdGenerator.forTesting(() {
+        exhaustedCalls++;
+        return List<int>.filled(16, 0x11);
+      });
+  try {
+    exhausted.next(excluding: <TerminalNoteContextId>[reserved]);
+    throw StateError('context ID collision bound was not enforced');
+  } on TerminalNoteContextIdentityException catch (error) {
+    _expect(
+      error.failure == TerminalNoteContextIdentityFailure.collisionLimit &&
+          exhaustedCalls ==
+              TerminalNoteContextIdentityLimits.maximumCollisionAttempts &&
+          !error.toString().contains(reserved.canonicalValue),
+      'collision exhaustion is bounded and content-free',
+    );
+  }
+  try {
+    const TerminalNoteContextIdGenerator.forTesting(_invalidContextEntropy)
+        .next();
+    throw StateError('invalid entropy was not rejected');
+  } on TerminalNoteContextIdentityException catch (error) {
+    _expect(
+      error.failure == TerminalNoteContextIdentityFailure.entropyRejected,
+      'invalid entropy shape is rejected before ID construction',
+    );
+  }
+}
+
+List<int> _invalidContextEntropy() => const <int>[1, 2, 3];
+
+void _testExactRestorationArtifact() {
+  const String preNotesVersionOne =
+      '{"version":1,"activeWindow":0,"windows":[{"placement":'
+      '{"windowedFrame":[100.0,90.0,920.0,580.0],"screen":null,'
+      '"fullscreen":false},"selectedTab":0,"tabs":[{"focusedPane":0,'
+      '"zoomedPane":null,"title":null,"color":null,"tree":'
+      '{"kind":"pane","cwd":"/private/tmp"}}]}]}';
+  final TerminalNoteRestorationArtifact artifact =
+      TerminalNoteRestorationArtifact.fromExactEncoded(preNotesVersionOne);
+  _expect(
+    artifact.snapshot.paneCount == 1 &&
+        artifact.snapshot.windows.length == 1 &&
+        artifact.exactEncoded == preNotesVersionOne &&
+        utf8.decode(artifact.exactUtf8Bytes) == preNotesVersionOne &&
+        artifact.restorationSha256 ==
+            terminalSha256(utf8.encode(preNotesVersionOne)) &&
+        TerminalRestorationCodec.encode(artifact.snapshot) ==
+            preNotesVersionOne,
+    'pre-Notes restoration v1 bytes and schema remain exactly unchanged',
+  );
+  _expectThrows<UnsupportedError>(
+    () => artifact.exactUtf8Bytes[0] = 0,
+    'exact restoration bytes are immutable',
+  );
+
+  final String padded = '\n$preNotesVersionOne\n';
+  final TerminalNoteRestorationArtifact exactPadded =
+      TerminalNoteRestorationArtifact.fromExactEncoded(padded);
+  _expect(
+    exactPadded.snapshot.paneCount == 1 &&
+        exactPadded.exactEncoded == padded &&
+        exactPadded.restorationSha256 == terminalSha256(utf8.encode(padded)) &&
+        exactPadded.restorationSha256 != artifact.restorationSha256,
+    'binding digest uses loaded exact UTF-8 rather than re-encoded JSON',
+  );
 }
 
 Future<void> _testQuickTerminalRestorationExclusion() async {
@@ -26,8 +131,8 @@ Future<void> _testQuickTerminalRestorationExclusion() async {
     role: TerminalWindowRole.quickTerminal,
   );
   final List<TerminalWindowId> placementRequests = <TerminalWindowId>[];
-  final TerminalRestorationSnapshot snapshot =
-      TerminalApplicationRestorationCapture.capture(
+  final TerminalRestorationCaptureResult captured =
+      TerminalApplicationRestorationCapture.captureWithTraversal(
         state,
         placementForWindow: (TerminalWindowId id) {
           placementRequests.add(id);
@@ -35,9 +140,13 @@ Future<void> _testQuickTerminalRestorationExclusion() async {
         },
         workingDirectoryForPane: (PaneId id) => null,
       );
+  final TerminalRestorationSnapshot snapshot = captured.snapshot;
   _expect(
     snapshot.windows.length == 1 &&
         snapshot.activeWindowIndex == 0 &&
+        captured.paneIdsInTraversalOrder.length == 1 &&
+        captured.paneIdsInTraversalOrder.single ==
+            standard.selectedTab.focusedPaneId &&
         placementRequests.length == 1 &&
         placementRequests.single == standard.id,
     'restoration excludes the active Quick Terminal and its placement',
@@ -378,12 +487,21 @@ Future<void> _testHierarchyRoundTripAndFreshOwnership() async {
         ),
         secondWindow.id: _minimalPlacement(),
       };
-  final TerminalRestorationSnapshot captured =
-      TerminalApplicationRestorationCapture.capture(
+  final TerminalRestorationCaptureResult capture =
+      TerminalApplicationRestorationCapture.captureWithTraversal(
         original,
         placementForWindow: (TerminalWindowId id) => placements[id]!,
         workingDirectoryForPane: (PaneId id) => workingDirectories[id],
       );
+  final TerminalRestorationSnapshot captured = capture.snapshot;
+  _expect(
+    capture.paneIdsInTraversalOrder
+            .map((PaneId id) => id.value)
+            .toList()
+            .join(',') ==
+        '1,3,4,2,5,6',
+    'capture exposes window/tab/first-second DFS pane order exactly',
+  );
   final String encoded = TerminalRestorationCodec.encode(captured);
   final TerminalRestorationSnapshot decoded = TerminalRestorationCodec.decode(
     encoded,
@@ -412,6 +530,11 @@ Future<void> _testHierarchyRoundTripAndFreshOwnership() async {
         restoredState.windowIds.first.value == 101 &&
         restoredState.windows.first.tabIds.first.value == 201 &&
         restoredState.paneIds.first.value == 401 &&
+        restored.paneIdsInTraversalOrder
+                .map((PaneId id) => id.value)
+                .toList()
+                .join(',') ==
+            '401,402,404,403,405,406' &&
         restoredState.activeWindowId == restoredState.windowIds.first &&
         restoredSessions.length == 6 &&
         restoredSessions.every(
@@ -464,6 +587,50 @@ Future<void> _testHierarchyRoundTripAndFreshOwnership() async {
           (_RestorationFakeSession session) => session.shutdownCount == 1,
         ),
     'original and restored fresh sessions each shut down exactly once',
+  );
+}
+
+Future<void> _testMaximumPaneTraversal() async {
+  final List<_RestorationFakeSession> sessions = <_RestorationFakeSession>[];
+  final TerminalApplicationState state = TerminalApplicationState();
+  final TerminalWindowState window = await state.createWindow(
+    _configuration(sessions, null),
+  );
+  PaneId target = window.selectedTab.focusedPaneId;
+  for (
+    var index = 1;
+    index < TerminalRestorationLimits.maximumTotalPanes;
+    index++
+  ) {
+    target = (await state.splitPane(
+      target,
+      _configuration(sessions, null),
+      axis: index.isEven
+          ? TerminalSplitAxis.horizontal
+          : TerminalSplitAxis.vertical,
+    )).id;
+  }
+  final TerminalNoteRestorationCaptureArtifact captured =
+      TerminalNoteRestorationCaptureArtifact.capture(
+        state,
+        placementForWindow: (TerminalWindowId id) => _minimalPlacement(),
+        workingDirectoryForPane: (PaneId id) => null,
+      );
+  _expect(
+    captured.restoration.snapshot.paneCount == 64 &&
+        captured.paneIdsInTraversalOrder.length == 64 &&
+        captured.paneIdsInTraversalOrder.toSet().length == 64 &&
+        captured.restoration.exactEncoded ==
+            TerminalRestorationCodec.encode(captured.restoration.snapshot),
+    'exact maximum 64-pane capture preserves a unique bounded traversal',
+  );
+  await state.shutdown();
+  _expect(
+    sessions.length == 64 &&
+        sessions.every(
+          (_RestorationFakeSession session) => session.shutdownCount == 1,
+        ),
+    'maximum traversal fixture releases every pane session',
   );
 }
 
