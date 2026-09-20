@@ -10644,6 +10644,105 @@ final class TerminalApplication {
                 TerminalActionDispatchDisposition.executed,
         'context Split Right did not retain native invocation ownership',
       );
+      await dispatch(TerminalActionId.focusPaneLeft);
+      await waitFor(
+        () => initialTab.focusedPaneId == initialPaneId,
+        'pane-focus Directory fixture did not return to its source pane',
+      );
+      reconcile();
+      await waitFor(
+        () =>
+            contextDockDirectory.hasRetainedSnapshot(initialPaneId) &&
+            contextDockDirectory.activeOperationCount == 0,
+        'pane-focus Directory fixture did not start from a settled snapshot',
+      );
+      final String? paneFocusRetainedRoot = contextDockDirectory
+          .snapshotForWindow(initialWindow.id)
+          ?.workingDirectory;
+      initialPane.insertText(
+        "printf '\\r\\n__DT_PANE_FOCUS_JOB__\\r\\n'; /bin/cat; "
+        "printf '\\r\\n__DT_PANE_FOCUS_DONE__\\r\\n'",
+      );
+      await initialPane.submit();
+      await _waitForAsciiMarker(initialSession, '__DT_PANE_FOCUS_JOB__');
+      await waitFor(
+        () =>
+            contextDockProcess
+                .snapshotForWindow(initialWindow.id)
+                ?.process
+                ?.executablePath
+                ?.endsWith('/cat') ==
+            true,
+        'pane-focus fixture did not enter Process Inspector',
+      );
+      final int paneFocusWriteBaseline =
+          writeEnqueuedCounts[initialPaneId] ?? 0;
+      await dispatch(TerminalActionId.focusPaneRight);
+      await waitFor(
+        () {
+          reconcile();
+          final TerminalContextDockContentSnapshot? content = contextDockProcess
+              .snapshotForWindow(initialWindow.id);
+          return initialTab.focusedPaneId == splitPaneId &&
+              contextDockProcess.canRetainDirectoryPane(initialPaneId) &&
+              contextDockDirectory.hasRetainedSnapshot(initialPaneId) &&
+              content?.paneId == splitPaneId &&
+              content?.mode ==
+                  TerminalContextDockContentMode.directoryNavigator &&
+              content?.process == null;
+        },
+        'another split pane did not freeze the process pane without projecting its details',
+      );
+      await dispatch(TerminalActionId.focusPaneLeft);
+      await waitFor(() {
+        reconcile();
+        menu.refresh();
+        final TerminalContextDockContentSnapshot? content = contextDockProcess
+            .snapshotForWindow(initialWindow.id);
+        return initialTab.focusedPaneId == initialPaneId &&
+            content?.mode == TerminalContextDockContentMode.foregroundJob &&
+            content?.process?.executablePath?.endsWith('/cat') == true &&
+            contentItem.isEnabled &&
+            contextDockDirectory.hasRetainedSnapshot(initialPaneId);
+      }, 'returning to the process pane did not restore the Directory toggle');
+      contentItem.performAction();
+      await waitFor(
+        () =>
+            contextDockProcess.snapshotForWindow(initialWindow.id)?.mode ==
+                TerminalContextDockContentMode.directoryNavigator &&
+            contextDockDirectory
+                    .snapshotForWindow(initialWindow.id)
+                    ?.workingDirectory ==
+                paneFocusRetainedRoot &&
+            contextDockState
+                .snapshotForWindow(initialWindow.id)!
+                .navigatorOwnsInput,
+        'pane-focus round trip could not project the retained Directory',
+      );
+      _expectLifecycle(
+        (writeEnqueuedCounts[initialPaneId] ?? 0) == paneFocusWriteBaseline,
+        'pane focus and retained Directory toggle wrote to the foreground PTY',
+      );
+      contentItem.performAction();
+      await waitFor(
+        () =>
+            contextDockProcess.snapshotForWindow(initialWindow.id)?.mode ==
+            TerminalContextDockContentMode.foregroundJob,
+        'pane-focus Directory did not return to Process Inspector',
+      );
+      initialPane.sendEndOfFile();
+      await _waitForAsciiMarker(initialSession, '__DT_PANE_FOCUS_DONE__');
+      await waitFor(
+        () =>
+            initialPane.processSnapshot().disposition ==
+            TerminalPaneProcessDisposition.idleShell,
+        'pane-focus foreground fixture did not return to its shell',
+      );
+      await dispatch(TerminalActionId.focusPaneRight);
+      await waitFor(
+        () => initialTab.focusedPaneId == splitPaneId,
+        'pane-focus fixture did not return to the temporary split for cleanup',
+      );
       await dispatch(TerminalActionId.closeWindow);
       await waitFor(
         () =>

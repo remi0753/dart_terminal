@@ -339,8 +339,9 @@ typedef TerminalContextDockProcessNavigatorFocus = bool Function(
 /// Selects one Context Dock document from focused-pane process authority.
 ///
 /// Rich path/argv observation is delayed until a foreground group remains
-/// stable, refreshed at most once per second, and discarded whenever any
-/// window, pane, session, PGID, visibility, or privacy identity changes.
+/// stable and refreshed at most once per second. A same-tab split focus round
+/// trip retains only a content-free session/PGID authority; window, tab,
+/// session, PGID, visibility, or privacy identity changes discard it.
 final class TerminalContextDockProcessController {
   TerminalContextDockProcessController({
     required this.applicationState,
@@ -402,6 +403,8 @@ final class TerminalContextDockProcessController {
   late final int Function() _monotonicMicros;
   final Map<TerminalWindowId, _TerminalContextDockProcessWindowState> _windows =
       <TerminalWindowId, _TerminalContextDockProcessWindowState>{};
+  final Map<PaneId, _TerminalContextDockProcessWindowState>
+  _paneFocusSuspended = <PaneId, _TerminalContextDockProcessWindowState>{};
   final Set<_TerminalContextDockRichRequest> _requests =
       <_TerminalContextDockRichRequest>{};
   TerminalContextDockScheduledTask? _pollTask;
@@ -550,7 +553,10 @@ final class TerminalContextDockProcessController {
 
   bool canRetainDirectoryPane(PaneId paneId) =>
       !_isDisposed &&
-      _windows.values.any(
+      <_TerminalContextDockProcessWindowState>[
+        ..._windows.values,
+        ..._paneFocusSuspended.values,
+      ].any(
         (state) =>
             state.paneId == paneId &&
             state.directorySuspended &&
@@ -583,6 +589,17 @@ final class TerminalContextDockProcessController {
         return;
       }
       dockState.synchronize(applicationState);
+      final Set<PaneId> livePaneIds = <PaneId>{
+        for (final TerminalWindowState window in applicationState.windows)
+          for (final TerminalTabState tab in window.tabs) ...tab.paneIds,
+      };
+      for (final PaneId stale
+          in _paneFocusSuspended.keys
+              .where((PaneId paneId) => !livePaneIds.contains(paneId))
+              .toList(growable: false)) {
+        _discardPaneFocusSuspended(stale, invalidateDirectory: true);
+        changed = true;
+      }
       final Set<TerminalWindowId> eligible = <TerminalWindowId>{};
       for (final TerminalWindowState logicalWindow
           in applicationState.windows.where(
@@ -595,6 +612,8 @@ final class TerminalContextDockProcessController {
           continue;
         }
         if (!_safeCanPresentWindow(logicalWindow.id)) {
+          changed =
+              _discardPaneFocusSuspendedForWindow(logicalWindow.id) || changed;
           final _TerminalContextDockProcessWindowState? retained =
               _windows[logicalWindow.id];
           final bool wasSuspended = retained?.presentationSuspended ?? false;
@@ -619,12 +638,39 @@ final class TerminalContextDockProcessController {
             state.paneId != dock.targetPaneId ||
             state.sessionId != process.sessionId) {
           if (state != null) {
-            if (state.presentationSuspended) {
-              _safeInvalidateRetainedDirectory(state.paneId);
+            _windows.remove(logicalWindow.id);
+            final TerminalPaneLocation? priorLocation = applicationState
+                .locationForPane(state.paneId);
+            final bool sameSelectedTab =
+                priorLocation?.windowId == logicalWindow.id &&
+                priorLocation?.tabId == logicalWindow.selectedTabId;
+            if (state.paneId != dock.targetPaneId &&
+                sameSelectedTab &&
+                _suspendUnpresented(state)) {
+              final _TerminalContextDockProcessWindowState? replaced =
+                  _paneFocusSuspended.remove(state.paneId);
+              if (replaced != null && !identical(replaced, state)) {
+                _safeInvalidateRetainedDirectory(replaced.paneId);
+                _cancelState(replaced);
+              }
+              _paneFocusSuspended[state.paneId] = state;
+            } else {
+              if (state.presentationSuspended ||
+                  state.paneId == dock.targetPaneId) {
+                _safeInvalidateRetainedDirectory(state.paneId);
+              }
+              _cancelState(state);
             }
-            _cancelState(state);
           }
-          state = _TerminalContextDockProcessWindowState(
+          state = _paneFocusSuspended.remove(dock.targetPaneId);
+          if (state != null &&
+              (state.windowId != logicalWindow.id ||
+                  state.sessionId != process.sessionId)) {
+            _safeInvalidateRetainedDirectory(state.paneId);
+            _cancelState(state);
+            state = null;
+          }
+          state ??= _TerminalContextDockProcessWindowState(
             windowId: logicalWindow.id,
             paneId: dock.targetPaneId,
             sessionId: process.sessionId,
@@ -1210,8 +1256,9 @@ final class TerminalContextDockProcessController {
     final _TerminalContextDockProcessWindowState? state = _windows.remove(
       windowId,
     );
-    if (state == null) return false;
-    if (state.presentationSuspended) {
+    var changed = _discardPaneFocusSuspendedForWindow(windowId);
+    if (state == null) return changed;
+    if (state.presentationSuspended || state.directoryRetentionEligible) {
       _safeInvalidateRetainedDirectory(state.paneId);
     }
     _cancelState(state);
@@ -1219,16 +1266,44 @@ final class TerminalContextDockProcessController {
   }
 
   bool _clearWindows() {
-    if (_windows.isEmpty) return false;
+    if (_windows.isEmpty && _paneFocusSuspended.isEmpty) return false;
     for (final _TerminalContextDockProcessWindowState state
         in _windows.values) {
-      if (state.presentationSuspended) {
+      if (state.presentationSuspended || state.directoryRetentionEligible) {
         _safeInvalidateRetainedDirectory(state.paneId);
       }
       _cancelState(state);
     }
     _windows.clear();
+    for (final _TerminalContextDockProcessWindowState state
+        in _paneFocusSuspended.values) {
+      _safeInvalidateRetainedDirectory(state.paneId);
+      _cancelState(state);
+    }
+    _paneFocusSuspended.clear();
     return true;
+  }
+
+  bool _discardPaneFocusSuspendedForWindow(TerminalWindowId windowId) {
+    final List<PaneId> paneIds = _paneFocusSuspended.entries
+        .where((entry) => entry.value.windowId == windowId)
+        .map((entry) => entry.key)
+        .toList(growable: false);
+    for (final PaneId paneId in paneIds) {
+      _discardPaneFocusSuspended(paneId, invalidateDirectory: true);
+    }
+    return paneIds.isNotEmpty;
+  }
+
+  void _discardPaneFocusSuspended(
+    PaneId paneId, {
+    required bool invalidateDirectory,
+  }) {
+    final _TerminalContextDockProcessWindowState? state = _paneFocusSuspended
+        .remove(paneId);
+    if (state == null) return;
+    if (invalidateDirectory) _safeInvalidateRetainedDirectory(state.paneId);
+    _cancelState(state);
   }
 
   void _cancelState(_TerminalContextDockProcessWindowState state) {

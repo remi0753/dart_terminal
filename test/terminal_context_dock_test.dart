@@ -19,6 +19,7 @@ Future<void> runTerminalContextDockTests() async {
   await _testDirectoryRevealRejectsExpansionCap();
   await _testProcessCoordinatorRefreshPrivacyAndCancellation();
   await _testProcessFocusReactivationRetainsDirectoryToggle();
+  await _testProcessPaneFocusRoundTripRetainsDirectoryToggle();
   await _testProcessArgumentVisibility();
   _testPrivacyPolicyDistinguishesIdleLineEditing();
   await _testPathHandoffPolicyAndExactPayload();
@@ -1110,6 +1111,134 @@ Future<void> _testProcessFocusReactivationRetainsDirectoryToggle() async {
   await harness.state.shutdown();
 }
 
+Future<void> _testProcessPaneFocusRoundTripRetainsDirectoryToggle() async {
+  final _Harness harness = _Harness();
+  final TerminalWindowState window = await harness.createWindow();
+  final PaneId firstPane = window.selectedTab.focusedPaneId;
+  final TerminalContextDockState dock = TerminalContextDockState()
+    ..synchronize(harness.state)
+    ..toggleVisibility(window.id, firstPane);
+  final _ProcessScheduler scheduler = _ProcessScheduler();
+  final Map<PaneId, int> foregroundGroups = <PaneId, int>{
+    firstPane: firstPane.value,
+  };
+  final Set<PaneId> retainedDirectories = <PaneId>{firstPane};
+  var invalidationCount = 0;
+  final List<Completer<PtyForegroundJobSnapshot?>> requests =
+      <Completer<PtyForegroundJobSnapshot?>>[];
+  final TerminalContextDockProcessController controller =
+      TerminalContextDockProcessController(
+        applicationState: harness.state,
+        dockState: dock,
+        resolveProcessSnapshot: (PaneId paneId) {
+          final TerminalPane pane = harness.state.paneForId(paneId)!;
+          return TerminalPaneProcessSnapshot.available(
+            sessionId: pane.sessionId,
+            childProcessId: paneId.value,
+            owningProcessGroup: paneId.value,
+            foregroundProcessGroup: foregroundGroups[paneId] ?? paneId.value,
+            terminalEchoEnabled: false,
+          );
+        },
+        resolveForegroundJob: (_, _) {
+          final Completer<PtyForegroundJobSnapshot?> request =
+              Completer<PtyForegroundJobSnapshot?>();
+          requests.add(request);
+          return request.future;
+        },
+        canObserveDirectory: (PaneId paneId) =>
+            foregroundGroups[paneId] == paneId.value,
+        canDisplayDirectory: retainedDirectories.contains,
+        invalidateRetainedDirectory: (PaneId paneId) {
+          invalidationCount++;
+          retainedDirectories.remove(paneId);
+        },
+        scheduleTask: scheduler.schedule,
+        monotonicMicros: () => scheduler.nowMicros,
+      );
+  final TerminalActionRegistration contentToggle = controller
+      .registrations()
+      .singleWhere(
+        (TerminalActionRegistration registration) =>
+            registration.id == TerminalActionId.toggleContextDockContent,
+      );
+
+  controller.synchronize();
+  final int firstForegroundGroup = firstPane.value + 100;
+  foregroundGroups[firstPane] = firstForegroundGroup;
+  controller.synchronize();
+  scheduler.elapse(TerminalContextDockProcessLimits.foregroundActivationDelay);
+  _expect(
+    requests.length == 1 && controller.canRetainDirectoryPane(firstPane),
+    'first split pane enters a foreground job with Directory retention authority',
+  );
+  requests[0].complete(
+    _foregroundJobFixture(
+      sessionId: harness.state.paneForId(firstPane)!.sessionId,
+      foregroundProcessGroup: firstForegroundGroup,
+      memberCount: 1,
+      elapsedMicroseconds: 1000,
+    ),
+  );
+  await Future<void>.delayed(Duration.zero);
+
+  final TerminalPane secondPane = await harness.state.splitPane(
+    firstPane,
+    harness.configuration(),
+    axis: TerminalSplitAxis.horizontal,
+  );
+  await secondPane.start();
+  foregroundGroups[secondPane.id] = secondPane.id.value;
+  controller.synchronize();
+  _expect(
+    controller.snapshotForWindow(window.id)!.paneId == secondPane.id &&
+        controller.canRetainDirectoryPane(firstPane) &&
+        controller.activeOperationCount == 0 &&
+        requests.length == 1 &&
+        invalidationCount == 0,
+    'focus departure freezes the process pane identity without background rich observation',
+  );
+
+  harness.state.focusPane(window.selectedTab.id, firstPane);
+  controller.synchronize();
+  scheduler.elapse(TerminalContextDockProcessLimits.foregroundActivationDelay);
+  _expect(
+    controller.snapshotForWindow(window.id)!.paneId == firstPane &&
+        controller.snapshotForWindow(window.id)!.mode ==
+            TerminalContextDockContentMode.foregroundJob &&
+        controller.canRetainDirectoryPane(firstPane) &&
+        contentToggle.isAvailable() &&
+        requests.length == 2 &&
+        invalidationCount == 0,
+    'returning to the same pane, session, and PGID restores the Directory content toggle',
+  );
+  contentToggle.handler();
+  _expect(
+    controller.snapshotForWindow(window.id)!.mode ==
+        TerminalContextDockContentMode.directoryNavigator,
+    'restored process pane can project its retained Directory Navigator',
+  );
+  contentToggle.handler();
+
+  harness.state.focusPane(window.selectedTab.id, secondPane.id);
+  controller.synchronize();
+  foregroundGroups[firstPane] = firstForegroundGroup + 1;
+  harness.state.focusPane(window.selectedTab.id, firstPane);
+  controller.synchronize();
+  scheduler.elapse(TerminalContextDockProcessLimits.foregroundActivationDelay);
+  _expect(
+    invalidationCount == 1 &&
+        !retainedDirectories.contains(firstPane) &&
+        !controller.canRetainDirectoryPane(firstPane) &&
+        !contentToggle.isAvailable(),
+    'PGID replacement while another pane is focused invalidates the retained Directory before return',
+  );
+
+  controller.dispose();
+  dock.dispose();
+  await harness.state.shutdown();
+}
+
 PtyForegroundJobSnapshot _foregroundJobFixture({
   required TerminalSessionId sessionId,
   required int foregroundProcessGroup,
@@ -1339,7 +1468,7 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
   String root = '/root';
   bool remote = false;
   bool canObserve = true;
-  bool canRetain = false;
+  final Set<PaneId> retainedPaneIds = <PaneId>{};
   bool canResolveWorkingDirectory = true;
   var resolutionCount = 0;
   var projectionChangeCount = 0;
@@ -1380,7 +1509,7 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
           );
         },
         canObservePane: (_) => canObserve,
-        canRetainPane: (_) => canRetain,
+        canRetainPane: retainedPaneIds.contains,
         onChanged: () => projectionChangeCount++,
       );
 
@@ -1898,6 +2027,10 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
     'hiding a selected hidden target clamps selection to the visible tree',
   );
 
+  final List<String> retainedFirstPanePaths = snapshot.rows
+      .map((TerminalContextDockDirectoryRow row) => row.entry.path)
+      .toList(growable: false);
+  retainedPaneIds.add(firstPane);
   final TerminalPane secondPane = await harness.state.splitPane(
     firstPane,
     harness.configuration(),
@@ -1912,14 +2045,44 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
     snapshot.paneId == secondPane.id &&
         snapshot.workingDirectory == '/other' &&
         snapshot.rows.single.entry.name == 'other.txt' &&
-        dock.snapshotForWindow(window.id)!.pane.showHiddenEntries,
-    'focused pane change projects the new pane cwd with independent hidden visibility',
+        dock.snapshotForWindow(window.id)!.pane.showHiddenEntries &&
+        controller.hasRetainedSnapshot(firstPane),
+    'focused pane change projects the new pane cwd while freezing the retained process pane',
+  );
+
+  final int paneReturnResolutionBaseline = resolutionCount;
+  canResolveWorkingDirectory = false;
+  harness.state.focusPane(window.selectedTab.id, firstPane);
+  controller.synchronize();
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
+    snapshot.paneId == firstPane &&
+        snapshot.workingDirectory == '/root' &&
+        snapshot.isFrozen == false &&
+        snapshot.rows
+                .map((TerminalContextDockDirectoryRow row) => row.entry.path)
+                .join('\n') ==
+            retainedFirstPanePaths.join('\n') &&
+        resolutionCount == paneReturnResolutionBaseline,
+    'returning to the process pane resumes its retained root without resolving foreground cwd',
+  );
+  canResolveWorkingDirectory = true;
+  retainedPaneIds.remove(firstPane);
+  harness.state.focusPane(window.selectedTab.id, secondPane.id);
+  controller.synchronize();
+  await _waitUntil(() => controller.activeOperationCount == 0);
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
+    snapshot.paneId == secondPane.id &&
+        snapshot.workingDirectory == '/other' &&
+        snapshot.rows.single.entry.name == 'other.txt',
+    'returning to the ordinary pane restores its independent Directory root',
   );
 
   final int resolutionBaseline = resolutionCount;
   final int retainedListBaseline = files.listCount('/other');
   canObserve = false;
-  canRetain = true;
+  retainedPaneIds.add(secondPane.id);
   controller.synchronize();
   snapshot = controller.snapshotForWindow(window.id)!;
   _expect(
@@ -1963,7 +2126,7 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
   );
   canResolveWorkingDirectory = true;
   canObserve = true;
-  canRetain = false;
+  retainedPaneIds.remove(secondPane.id);
   controller.synchronize();
   snapshot = controller.snapshotForWindow(window.id)!;
   _expect(
@@ -1975,10 +2138,10 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
   dock.focusTerminal(window.id, secondPane.id);
   controller.noteCommandSubmitted(secondPane.id);
   canObserve = false;
-  canRetain = true;
+  retainedPaneIds.add(secondPane.id);
   controller.synchronize();
   canObserve = true;
-  canRetain = false;
+  retainedPaneIds.remove(secondPane.id);
   controller.synchronize();
   _expect(
     controller.snapshotForWindow(window.id)!.isFrozen &&

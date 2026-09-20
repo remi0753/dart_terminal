@@ -207,6 +207,8 @@ final class TerminalContextDockDirectoryController {
   final void Function()? _onChanged;
   final Map<TerminalWindowId, _TerminalContextDockDirectoryWindowState>
   _windows = <TerminalWindowId, _TerminalContextDockDirectoryWindowState>{};
+  final Map<PaneId, _TerminalContextDockDirectoryWindowState>
+  _paneFocusRetained = <PaneId, _TerminalContextDockDirectoryWindowState>{};
   final Map<PaneId, Set<String>> _expandedByPane = <PaneId, Set<String>>{};
   final List<String> _recentRoots = <String>[];
   final Set<PaneId> _commandRefreshPaneIds = <PaneId>{};
@@ -222,15 +224,15 @@ final class TerminalContextDockDirectoryController {
 
   bool get isDisposed => _isDisposed;
   int get refreshCommitCount => _refreshCommitCount;
-  int get activeOperationCount => _windows.values.fold<int>(
-    0,
-    (int count, _TerminalContextDockDirectoryWindowState window) =>
-        count +
-        window.operations.length +
-        (window.refresh?.activeOperationCount ?? 0) +
-        (window.searchOperation == null ? 0 : 1) +
-        (window.goToOperation == null ? 0 : 1),
-  );
+  int get activeOperationCount =>
+      <_TerminalContextDockDirectoryWindowState>[
+        ..._windows.values,
+        ..._paneFocusRetained.values,
+      ].fold<int>(
+        0,
+        (int count, _TerminalContextDockDirectoryWindowState window) =>
+            count + _operationCount(window),
+      );
 
   TerminalContextDockDirectorySnapshot? snapshotForWindow(
     TerminalWindowId windowId,
@@ -243,7 +245,10 @@ final class TerminalContextDockDirectoryController {
 
   bool hasRetainedSnapshot(PaneId paneId) =>
       !_isDisposed &&
-      _windows.values.any(
+      <_TerminalContextDockDirectoryWindowState>[
+        ..._windows.values,
+        ..._paneFocusRetained.values,
+      ].any(
         (window) =>
             window.paneId == paneId &&
             !window.privacyRestricted &&
@@ -252,7 +257,7 @@ final class TerminalContextDockDirectoryController {
       );
 
   /// Drops a frozen snapshot whose pane, session, or foreground-job authority
-  /// changed while its native window was not presentable.
+  /// changed while its native window or split pane was not presenting it.
   void invalidateRetainedSnapshot(PaneId paneId) {
     if (_isDisposed) return;
     var changed = false;
@@ -262,6 +267,12 @@ final class TerminalContextDockDirectoryController {
             .map((entry) => entry.key)
             .toList(growable: false)) {
       _windows.remove(windowId)!.cancel();
+      changed = true;
+    }
+    final _TerminalContextDockDirectoryWindowState? paneFocusRetained =
+        _paneFocusRetained.remove(paneId);
+    if (paneFocusRetained != null) {
+      paneFocusRetained.cancel();
       changed = true;
     }
     _commandRefreshPaneIds.remove(paneId);
@@ -437,6 +448,12 @@ final class TerminalContextDockDirectoryController {
       _deferredRefreshPaneIds.removeWhere(
         (PaneId paneId) => !livePaneIds.contains(paneId),
       );
+      for (final PaneId stale
+          in _paneFocusRetained.keys
+              .where((PaneId paneId) => !livePaneIds.contains(paneId))
+              .toList(growable: false)) {
+        _paneFocusRetained.remove(stale)!.cancel();
+      }
       final List<TerminalWindowState> standardWindows = applicationState.windows
           .where(
             (TerminalWindowState window) =>
@@ -455,6 +472,16 @@ final class TerminalContextDockDirectoryController {
               .toList(growable: false)) {
         _windows.remove(stale)!.cancel();
       }
+      for (final TerminalWindowId stale
+          in _paneFocusRetained.values
+              .map((window) => window.windowId)
+              .where(
+                (TerminalWindowId windowId) =>
+                    !liveWindowIds.contains(windowId),
+              )
+              .toSet()) {
+        _discardPaneFocusRetainedForWindow(stale);
+      }
       for (final TerminalWindowState logicalWindow in standardWindows) {
         final TerminalContextDockWindowSnapshot? dock = dockState
             .snapshotForWindow(logicalWindow.id);
@@ -466,8 +493,10 @@ final class TerminalContextDockDirectoryController {
             _deferredRefreshPaneIds.remove(dock.targetPaneId);
           }
           _windows.remove(logicalWindow.id)?.cancel();
+          _discardPaneFocusRetainedForWindow(logicalWindow.id);
           continue;
         }
+        final bool retargeted = _retargetWindow(dock);
         if (!_readCanObservePane(dock.targetPaneId)) {
           if (_commandRefreshPaneIds.contains(dock.targetPaneId)) {
             _processSuspendedRefreshPaneIds.add(dock.targetPaneId);
@@ -478,6 +507,7 @@ final class TerminalContextDockDirectoryController {
                 dock.targetPaneId,
                 dock.pane.showHiddenEntries,
               )) {
+            if (retargeted) _onChanged?.call();
             continue;
           }
           _replacePrivacyUnavailable(
@@ -507,6 +537,7 @@ final class TerminalContextDockDirectoryController {
           // sample before the command-completion debounce has established a
           // stable shell. Keep the privacy projection or retained immutable
           // tree and let the owned completion timer perform one fresh load.
+          if (retargeted) _onChanged?.call();
           continue;
         }
         TerminalWorkingDirectoryResolution? resolution;
@@ -797,6 +828,62 @@ final class TerminalContextDockDirectoryController {
     _publishResultCount(retained);
     if (changed) _onChanged?.call();
     return true;
+  }
+
+  /// Moves a command-start snapshot out of the single visible window slot
+  /// while another split pane owns the Context Dock. Parked snapshots are
+  /// immutable and operation-free until the same pane becomes focused again.
+  bool _retargetWindow(TerminalContextDockWindowSnapshot dock) {
+    final _TerminalContextDockDirectoryWindowState? current =
+        _windows[dock.windowId];
+    if (current?.paneId == dock.targetPaneId) return false;
+    if (current != null) {
+      _windows.remove(dock.windowId);
+      final TerminalPaneLocation? priorLocation = applicationState
+          .locationForPane(current.paneId);
+      final TerminalWindowState? logicalWindow = applicationState.windowForId(
+        dock.windowId,
+      );
+      final bool sameSelectedTab =
+          priorLocation?.windowId == dock.windowId &&
+          priorLocation?.tabId == logicalWindow?.selectedTabId;
+      if (sameSelectedTab &&
+          _readCanRetainPane(current.paneId) &&
+          !current.privacyRestricted &&
+          current.resolution?.isAvailable == true &&
+          current.rootSnapshot != null) {
+        current
+          ..freeze()
+          ..isFrozen = true;
+        _paneFocusRetained.remove(current.paneId)?.cancel();
+        _paneFocusRetained[current.paneId] = current;
+      } else {
+        current.cancel();
+      }
+    }
+    final _TerminalContextDockDirectoryWindowState? retained =
+        _paneFocusRetained.remove(dock.targetPaneId);
+    if (retained != null) {
+      if (retained.windowId == dock.windowId &&
+          !retained.privacyRestricted &&
+          retained.resolution?.isAvailable == true &&
+          retained.rootSnapshot != null) {
+        _windows[dock.windowId] = retained;
+      } else {
+        retained.cancel();
+      }
+    }
+    return current != null || retained != null;
+  }
+
+  void _discardPaneFocusRetainedForWindow(TerminalWindowId windowId) {
+    for (final PaneId paneId
+        in _paneFocusRetained.entries
+            .where((entry) => entry.value.windowId == windowId)
+            .map((entry) => entry.key)
+            .toList(growable: false)) {
+      _paneFocusRetained.remove(paneId)!.cancel();
+    }
   }
 
   /// Resumes the command-start root selected by an explicit foreground-job
@@ -1814,7 +1901,18 @@ final class TerminalContextDockDirectoryController {
       window.cancel();
     }
     _windows.clear();
+    for (final _TerminalContextDockDirectoryWindowState window
+        in _paneFocusRetained.values) {
+      window.cancel();
+    }
+    _paneFocusRetained.clear();
   }
+
+  static int _operationCount(_TerminalContextDockDirectoryWindowState window) =>
+      window.operations.length +
+      (window.refresh?.activeOperationCount ?? 0) +
+      (window.searchOperation == null ? 0 : 1) +
+      (window.goToOperation == null ? 0 : 1);
 
   static Iterable<String> _noSearchRoots() => const <String>[];
   static bool _alwaysObservePane(PaneId _) => true;

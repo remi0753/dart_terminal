@@ -1681,6 +1681,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （実施時に
   [`docs/phase7/context-dock-foreground-directory-override-stability.md`](docs/phase7/context-dock-foreground-directory-override-stability.md)
   を参照する）
+- [x] split paneのfocus round trip後も実行中Process InspectorからDirectory Navigatorへ切替可能にする
+  （実施時に
+  [`docs/phase7/context-dock-pane-focus-directory-retention.md`](docs/phase7/context-dock-pane-focus-directory-retention.md)
+  を参照する）
 - [ ] native-content acceptanceのmanual Secure Keyboard Entry foreground activationを安定化する
   （実施時に
   [`docs/phase10/native-content-secure-input-activation.md`](docs/phase10/native-content-secure-input-activation.md)
