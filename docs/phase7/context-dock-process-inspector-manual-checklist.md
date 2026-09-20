@@ -44,11 +44,14 @@ architecture、Developer JIT／Release AOT、pass/failとcontent-freeな失敗�
   Control-Dで終了するとDirectory Navigatorへ戻る。
 - [ ] Process Inspector表示中のShift-Command-F、Shift-Command-G、Shift-Command-Mはbeepせず、query caretを出さず、
   terminalへ文字やescape sequenceを送らない。command終了後は同じshortcutでNavigatorへ移れる。
-- [ ] foreground job実行中にControl-Shift-Command-Nを押すとterminal inputを維持したままDirectory Navigatorへ
-  切り替わり、同じキーで同一jobのProcess Inspectorへ戻る。job終了後と次のjobでは自動表示policyへ戻る。
+- [ ] foreground job実行中にControl-Shift-Command-Nを押すとDirectory NavigatorのMove modeへfocusし、上下／Page移動、
+  ReturnまたはCommand-Right／Leftによるfolder展開・折り畳み、Shift-Command-F／G／M、hidden切替、手動refreshが
+  terminal write 0で動作する。同じキーで同一jobのProcess Inspectorへ戻り、terminal inputも復元する。
+  job終了後と次のjobでは自動表示policyへ戻る。
 - [ ] `node` REPLなどECHO-offのProcess InspectorでもControl-Shift-Command-Nが有効で、command開始前のtreeを
-  `Snapshot updates: Paused while process is running`付きで表示する。Search／Go To／Move、展開、更新、path操作は
-  新しいfilesystem処理を開始せず、終了後の一回refreshで最新状態へ戻る。
+  interactiveに再開する。表示中だけSearch／Go To／Move、展開、hidden切替、手動refreshがboundedに動き、
+  Process Inspectorへ戻るとfilesystem operationを停止する。foreground processへのOption-Return挿入は拒否し、
+  終了後の一回refreshで最新状態へ戻る。
 - [ ] ECHO-offのProcess Inspector表示中に別applicationへfocusを移して戻っても、同じjobなら
   Control-Shift-Command-Nで保持treeへ切り替わる。非active中にDirectory内容を投影せず、別pane／session／PGIDへ
   変わった場合は古いtreeを表示しない。
@@ -68,7 +71,8 @@ architecture、Developer JIT／Release AOT、pass/failとcontent-freeな失敗�
   executable／argv／process listを確認できる。終了後はDirectory Navigatorを再取得する。
   Nodeを利用できる場合は`node`のREPLでも同じ表示を確認する。
 - [ ] manual Secure Keyboard Entryを有効にしても実行中process情報は表示され、入力保護indicatorは維持される。
-  秘密入力中にNavigator shortcutで入力を奪ったり、pathを挿入したりしない。
+  Process Inspector表示中のNavigator shortcutは入力を奪わない。Control-Shift-Command-Nで明示的にDirectoryへ
+  切り替えた時だけNavigatorがinputを所有し、path挿入は引き続き拒否する。
 - [ ] command実行中に別pane、tab、windowへfocusを移すと、Dockは新しいfocused paneだけを反映し、旧jobの
   executable／argvを表示しない。appを非activeにした間も旧contentを保持・再表示しない。
 - [ ] pipeline leaderが先に終了する、process数が上限を超える、権限によりpath／argvの一部が読めない場合も、

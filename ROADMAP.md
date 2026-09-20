@@ -1673,6 +1673,14 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （実施時に
   [`docs/phase7/context-dock-focus-reactivation-switch.md`](docs/phase7/context-dock-focus-reactivation-switch.md)
   を参照する）
+- [x] foreground process中に手動表示したDirectory Navigatorでtree移動と展開を操作できるようにする
+  （実施時に
+  [`docs/phase7/context-dock-foreground-directory-interaction.md`](docs/phase7/context-dock-foreground-directory-interaction.md)
+  を参照する）
+- [ ] native-content acceptanceのmanual Secure Keyboard Entry foreground activationを安定化する
+  （実施時に
+  [`docs/phase10/native-content-secure-input-activation.md`](docs/phase10/native-content-secure-input-activation.md)
+  を参照する）
 - [ ] 既存PTYのcompeting-reaper回帰fixtureの非決定性を調査し、実external-reap検証を安定化する
   （実施時に
   [`docs/phase2/pty-competing-reaper-fixture-determinism.md`](docs/phase2/pty-competing-reaper-fixture-determinism.md)

@@ -119,10 +119,13 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   path／argvとpollを即時破棄するが、同じvisible window／pane／session／PGIDへ戻るfocus round tripに限り、
   command前のDirectory snapshotを非投影のまま凍結保持する。Dock非表示、別windowへのfocus変更、
   pane／session／PGID変更では保持snapshotも破棄する。終了後はfreshな
-  Directory Navigatorへ戻る。実行中もControl-Shift-Command-NでDirectory Navigatorへ表示だけを切り替え、
-  同じ操作で同一jobのProcess Inspectorへ戻せる。切替はterminal inputを維持し、job／pane／privacy境界を
-  越えて保持しない。ECHO-offや手動Secure Keyboard Entry中はcommand開始前に確定したtreeをread-onlyで表示し、
-  snapshot更新、Search／Go To／Move、path操作を停止する。command終了後に一度だけfresh refreshする。
+  Directory Navigatorへ戻る。実行中もControl-Shift-Command-NでDirectory Navigatorへ切り替えるとMove modeへ
+  focusし、矢印／Page移動、folder展開・折り畳み、Search／Go To／Move、hidden切替、手動refreshを通常時と同じ
+  bounded operationとして使える。同じ操作で同一jobのProcess Inspectorへ戻り、terminal inputも復元する。
+  ECHO-offや手動Secure Keyboard Entry中も、利用者が明示的にDirectoryを表示している期間だけcommand開始前の
+  treeを再開してlocal filesystemを観測する。Process Inspector表示中のbackground filesystem処理は行わず、
+  foreground processへのpath挿入はfail closedのままにする。job／pane／display authorityを越えて保持せず、
+  command終了後に一度だけfresh refreshする。
   SSH先のremote process introspectionは対象外。視覚・VoiceOverの実機確認は
   [Process Inspector manual checklist](docs/phase7/context-dock-process-inspector-manual-checklist.md)を参照
 - View > Show Process Arguments（日本語: プロセスの引数を表示）は、入力保護とは独立して

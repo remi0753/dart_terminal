@@ -543,6 +543,7 @@ Future<void> _testProcessCoordinatorRefreshPrivacyAndCancellation() async {
   var directoryDisplayAllowed = true;
   var canPresent = true;
   var activeSession = firstSession;
+  var navigatorFocusCount = 0;
   var focusCount = 0;
   var changedCount = 0;
   final List<Completer<PtyForegroundJobSnapshot?>> richRequests =
@@ -584,6 +585,11 @@ Future<void> _testProcessCoordinatorRefreshPrivacyAndCancellation() async {
             TerminalContextDockPrivacyPolicy.canObserveProcess(process),
         canObserveDirectory: (_) => directoryAllowed,
         canDisplayDirectory: (_) => directoryDisplayAllowed,
+        focusNavigator: (TerminalContextDockFocusRequest request) {
+          navigatorFocusCount++;
+          return request.windowId == window.id &&
+              request.paneId == activeSession.paneId;
+        },
         focusTerminal: (TerminalContextDockFocusRequest request) {
           focusCount++;
           return request.windowId == window.id &&
@@ -695,17 +701,11 @@ Future<void> _testProcessCoordinatorRefreshPrivacyAndCancellation() async {
         content.process == null &&
         controller.canObserveDirectoryPane(firstPane) &&
         focusCount == focusBeforeDirectoryToggle &&
-        !dock.snapshotForWindow(window.id)!.navigatorOwnsInput,
-    'manual toggle projects Directory Navigator without moving terminal input or discarding process observation',
-  );
-  final TerminalContextDockFocusRequest move = dock.requestNavigatorFocus(
-    window.id,
-    firstPane,
-    TerminalContextDockNavigatorMode.move,
-  );
-  _expect(
-    dock.confirmNavigatorInput(move),
-    'manual Directory projection can explicitly receive Navigator input',
+        navigatorFocusCount == 1 &&
+        dock.snapshotForWindow(window.id)!.navigatorOwnsInput &&
+        dock.snapshotForWindow(window.id)!.pane.navigatorMode ==
+            TerminalContextDockNavigatorMode.move,
+    'manual toggle projects Directory Navigator and transfers input to Move mode without discarding process observation',
   );
   contentToggle.handler();
   content = controller.snapshotForWindow(window.id)!;
@@ -726,8 +726,10 @@ Future<void> _testProcessCoordinatorRefreshPrivacyAndCancellation() async {
   _expect(
     controller.snapshotForWindow(window.id)!.mode ==
             TerminalContextDockContentMode.directoryNavigator &&
-        !controller.canObserveDirectoryPane(firstPane),
-    'content toggle projects a retained Directory without granting observation authority',
+        controller.canObserveDirectoryPane(firstPane) &&
+        dock.snapshotForWindow(window.id)!.navigatorOwnsInput &&
+        navigatorFocusCount == 2,
+    'explicit content toggle grants bounded Directory interaction despite the automatic observation veto',
   );
   directoryDisplayAllowed = false;
   controller.synchronize();
@@ -789,8 +791,9 @@ Future<void> _testProcessCoordinatorRefreshPrivacyAndCancellation() async {
     controller.activeWindowShowsDirectoryDuringProcess &&
         controller.snapshotForWindow(window.id)!.mode ==
             TerminalContextDockContentMode.directoryNavigator &&
-        !controller.canObserveDirectoryPane(firstPane),
-    'directory observation loss preserves an authorized retained display override',
+        controller.canObserveDirectoryPane(firstPane) &&
+        dock.snapshotForWindow(window.id)!.navigatorOwnsInput,
+    'automatic observation loss preserves the explicit interactive Directory override',
   );
   directoryDisplayAllowed = false;
   controller.synchronize();
@@ -807,8 +810,9 @@ Future<void> _testProcessCoordinatorRefreshPrivacyAndCancellation() async {
     controller.activeOperationCount == 0 &&
         !controller.activeWindowShowsDirectoryDuringProcess &&
         controller.snapshotForWindow(window.id)!.directorySuspended &&
-        controller.snapshotForWindow(window.id)!.process == null,
-    'PGID replacement cancels and clears the prior content generation',
+        controller.snapshotForWindow(window.id)!.process == null &&
+        !dock.snapshotForWindow(window.id)!.navigatorOwnsInput,
+    'PGID replacement cancels the prior content generation and returns input to Terminal',
   );
   richRequests[2].complete(
     _foregroundJobFixture(

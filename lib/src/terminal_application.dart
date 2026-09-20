@@ -3484,8 +3484,8 @@ final class TerminalApplication {
     ) => TerminalContextDockPrivacyPolicy.canObserveProcess(process);
 
     bool contextDockCanObserveDirectoryPane(PaneId paneId) =>
-        contextDockCanObservePane(paneId) &&
-        (contextDockProcessController?.canObserveDirectoryPane(paneId) ?? true);
+        contextDockProcessController?.canObserveDirectoryPane(paneId) ??
+        contextDockCanObservePane(paneId);
 
     bool contextDockCanDisplayDirectoryPane(PaneId paneId) =>
         contextDockCanObservePane(paneId) ||
@@ -3608,7 +3608,7 @@ final class TerminalApplication {
           .snapshotForWindow(window.id);
       if (snapshot == null ||
           !snapshot.navigatorOwnsInput ||
-          contextDockCanObservePane(snapshot.targetPaneId)) {
+          contextDockCanObserveDirectoryPane(snapshot.targetPaneId)) {
         return;
       }
       final TerminalContextDockFocusRequest request =
@@ -4674,6 +4674,17 @@ final class TerminalApplication {
         invalidateRetainedDirectory: (PaneId paneId) {
           contextDockDirectoryController?.invalidateRetainedSnapshot(paneId);
         },
+        focusNavigator: (TerminalContextDockFocusRequest request) {
+          final TerminalContextDockDirectoryPresenter? presenter =
+              contextDockPresenter;
+          if (presenter == null || presenter.isDisposed) return false;
+          try {
+            presenter.focusNavigator(request);
+            return true;
+          } on Object {
+            return false;
+          }
+        },
         focusTerminal: (TerminalContextDockFocusRequest request) {
           final TerminalContextDockDirectoryPresenter? presenter =
               contextDockPresenter;
@@ -5075,7 +5086,7 @@ final class TerminalApplication {
               final TerminalWindowState? activeWindow = state.activeWindow;
               return productResourceDisposalFuture == null &&
                   activeWindow != null &&
-                  contextDockCanObservePane(
+                  contextDockCanObserveDirectoryPane(
                     activeWindow.selectedTab.focusedPaneId,
                   ) &&
                   createdDockPresenter.canFocusNavigator;
@@ -9795,13 +9806,18 @@ final class TerminalApplication {
                 true;
       }, 'native content toggle did not project Directory Navigator');
       _expectLifecycle(
-        !contextDockState
+        contextDockState
                 .snapshotForWindow(initialWindow.id)!
                 .navigatorOwnsInput &&
-            contextDockWindow.keyEventRouting == KeyEventRouting.appKitOnly &&
+            contextDockState
+                    .snapshotForWindow(initialWindow.id)!
+                    .pane
+                    .navigatorMode ==
+                TerminalContextDockNavigatorMode.move &&
+            contextDockWindow.keyEventRouting == KeyEventRouting.dartOnly &&
             (writeEnqueuedCounts[initialPaneId] ?? 0) ==
                 processShortcutWriteBaseline,
-        'Directory display toggle changed terminal input or wrote to the PTY',
+        'Directory toggle did not transfer input to Move mode with zero PTY writes',
       );
       contentItem.performAction();
       await waitFor(() {
@@ -9984,42 +10000,222 @@ final class TerminalApplication {
       await waitFor(
         () {
           reconcile();
+          final TerminalContextDockContentSnapshot? content = contextDockProcess
+              .snapshotForWindow(initialWindow.id);
           final TerminalContextDockDirectorySnapshot? directory =
               contextDockDirectory.snapshotForWindow(initialWindow.id);
+          final TerminalContextDockWindowSnapshot? dock = contextDockState
+              .snapshotForWindow(initialWindow.id);
           final String? document = contextDockPresenter
               .nativeEditorSnapshotForWindow(initialWindow.id)
               ?.text;
-          return contextDockProcess.snapshotForWindow(initialWindow.id)?.mode ==
+          final TerminalContextDockPathHandoffSnapshot handoff =
+              contextDockPathHandoff.snapshotForWindow(initialWindow.id);
+          final bool pathsMatch =
+              directory?.rows
+                  .map((TerminalContextDockDirectoryRow row) => row.entry.path)
+                  .join('\n') ==
+              retainedPathsBeforeProtectedJob.join('\n');
+          final bool accepted =
+              content?.mode ==
                   TerminalContextDockContentMode.directoryNavigator &&
-              directory?.isFrozen == true &&
+              directory?.isFrozen == false &&
               directory?.workingDirectory ==
                   retainedBeforeProtectedJob.workingDirectory &&
-              directory!.rows
-                      .map(
-                        (TerminalContextDockDirectoryRow row) => row.entry.path,
-                      )
-                      .join('\n') ==
-                  retainedPathsBeforeProtectedJob.join('\n') &&
+              pathsMatch &&
+              dock?.navigatorOwnsInput == true &&
+              dock?.pane.navigatorMode ==
+                  TerminalContextDockNavigatorMode.move &&
               contentItem.isChecked &&
-              document?.contains('Snapshot updates: Paused') == true &&
-              contextDockPresenter
-                      .nativeDetailsTextForWindow(initialWindow.id)
-                      ?.contains(
-                        'Insertion is unavailable while a process is running',
-                      ) ==
-                  true;
+              document?.contains('Snapshot updates: Paused') == false &&
+              document?.contains('Mode: Move') == true &&
+              !handoff.canInsert &&
+              (handoff.block ==
+                      TerminalContextDockPathInsertionBlock.secureInput ||
+                  handoff.block ==
+                      TerminalContextDockPathInsertionBlock.foregroundProcess);
+          return accepted;
         },
         'ECHO-off content toggle did not show the retained Directory snapshot',
       );
+      await waitFor(
+        () => contextDockDirectory.activeOperationCount == 0,
+        'interactive ECHO-off Directory did not settle its bounded filesystem operations',
+      );
       _expectLifecycle(
-        !contextDockState
+        contextDockState
                 .snapshotForWindow(initialWindow.id)!
                 .navigatorOwnsInput &&
-            contextDockWindow.keyEventRouting == KeyEventRouting.appKitOnly &&
+            contextDockWindow.keyEventRouting == KeyEventRouting.dartOnly &&
             contextDockDirectory.activeOperationCount == 0 &&
             (writeEnqueuedCounts[initialPaneId] ?? 0) ==
                 protectedToggleWriteBaseline,
-        'retained Directory display moved input, observed the filesystem, or wrote to the PTY',
+        'interactive ECHO-off Directory did not own input or wrote to the PTY',
+      );
+      TerminalContextDockDirectorySnapshot protectedInteractiveDirectory =
+          contextDockDirectory.snapshotForWindow(initialWindow.id)!;
+      final int protectedFolderIndex = protectedInteractiveDirectory.rows
+          .indexWhere(
+            (TerminalContextDockDirectoryRow row) =>
+                row.entry.path == hiddenFixtureDirectory.path,
+          );
+      _expectLifecycle(
+        protectedFolderIndex >= 0 &&
+            protectedInteractiveDirectory
+                .rows[protectedFolderIndex]
+                .isDirectory,
+        'ECHO-off Directory did not retain the folder expansion fixture',
+      );
+      while (contextDockState
+              .snapshotForWindow(initialWindow.id)!
+              .pane
+              .selectedResultIndex !=
+          protectedFolderIndex) {
+        final int selected = contextDockState
+            .snapshotForWindow(initialWindow.id)!
+            .pane
+            .selectedResultIndex;
+        final bool moveDown = selected < protectedFolderIndex;
+        final int expectedSelection = selected + (moveDown ? 1 : -1);
+        _injectKeyEventForTesting(
+          application,
+          contextDockWindow,
+          keyCode: moveDown ? 125 : 126,
+          modifiers: 0,
+          characters: moveDown ? '\uF701' : '\uF700',
+          charactersIgnoringModifiers: moveDown ? '\uF701' : '\uF700',
+          monotonicNanoseconds: eventTimestamp++,
+        );
+        await waitFor(
+          () =>
+              contextDockState
+                  .snapshotForWindow(initialWindow.id)!
+                  .pane
+                  .selectedResultIndex ==
+              expectedSelection,
+          'ECHO-off Directory arrow navigation did not advance one row',
+        );
+      }
+      _injectKeyEventForTesting(
+        application,
+        contextDockWindow,
+        keyCode: 36,
+        modifiers: 0,
+        characters: '\r',
+        charactersIgnoringModifiers: '\r',
+        monotonicNanoseconds: eventTimestamp++,
+      );
+      await waitFor(() {
+        protectedInteractiveDirectory = contextDockDirectory.snapshotForWindow(
+          initialWindow.id,
+        )!;
+        return protectedInteractiveDirectory.rows.any(
+              (TerminalContextDockDirectoryRow row) =>
+                  row.entry.path == hiddenFixtureDirectory.path &&
+                  row.isExpanded,
+            ) &&
+            protectedInteractiveDirectory.rows.any(
+              (TerminalContextDockDirectoryRow row) =>
+                  row.entry.path == '${hiddenFixtureDirectory.path}/inside.txt',
+            );
+      }, 'ECHO-off Directory Return did not lazily expand the selected folder');
+      _injectKeyEventForTesting(
+        application,
+        contextDockWindow,
+        keyCode: 36,
+        modifiers: 0,
+        characters: '\r',
+        charactersIgnoringModifiers: '\r',
+        monotonicNanoseconds: eventTimestamp++,
+      );
+      await waitFor(
+        () => contextDockDirectory
+            .snapshotForWindow(initialWindow.id)!
+            .rows
+            .any(
+              (TerminalContextDockDirectoryRow row) =>
+                  row.entry.path == hiddenFixtureDirectory.path &&
+                  !row.isExpanded,
+            ),
+        'second ECHO-off Directory Return did not collapse the selected folder',
+      );
+      _expectLifecycle(
+        (writeEnqueuedCounts[initialPaneId] ?? 0) ==
+            protectedToggleWriteBaseline,
+        'ECHO-off Directory navigation or folder toggle wrote to the PTY',
+      );
+      await dispatch(TerminalActionId.searchFilesAndFolders);
+      _expectLifecycle(
+        contextDockState
+                    .snapshotForWindow(initialWindow.id)!
+                    .pane
+                    .navigatorMode ==
+                TerminalContextDockNavigatorMode.search &&
+            contextDockState
+                .snapshotForWindow(initialWindow.id)!
+                .navigatorOwnsInput,
+        'ECHO-off interactive Directory did not enter Search mode',
+      );
+      await dispatch(TerminalActionId.goToFileOrFolder);
+      _expectLifecycle(
+        contextDockState
+                .snapshotForWindow(initialWindow.id)!
+                .pane
+                .navigatorMode ==
+            TerminalContextDockNavigatorMode.goTo,
+        'ECHO-off interactive Directory did not enter Go To mode',
+      );
+      await dispatch(TerminalActionId.moveInDirectoryNavigator);
+      _expectLifecycle(
+        contextDockState
+                .snapshotForWindow(initialWindow.id)!
+                .pane
+                .navigatorMode ==
+            TerminalContextDockNavigatorMode.move,
+        'ECHO-off interactive Directory did not return to Move mode',
+      );
+      final int protectedRefreshCommitCount =
+          contextDockDirectory.refreshCommitCount;
+      await dispatch(TerminalActionId.refreshDirectoryNavigator);
+      await waitFor(
+        () =>
+            contextDockDirectory.refreshCommitCount ==
+                protectedRefreshCommitCount + 1 &&
+            contextDockDirectory.activeOperationCount == 0,
+        'ECHO-off interactive Directory manual refresh did not commit once',
+      );
+      final int protectedHandoffResultCount =
+          contextDockPathHandoffResults.length;
+      _injectKeyEventForTesting(
+        application,
+        contextDockWindow,
+        keyCode: 36,
+        modifiers: ModifierKeys.optionBit,
+        characters: '\r',
+        charactersIgnoringModifiers: '\r',
+        monotonicNanoseconds: eventTimestamp++,
+      );
+      await waitFor(
+        () =>
+            contextDockPathHandoffResults.length ==
+            protectedHandoffResultCount + 1,
+        'ECHO-off interactive Directory did not consume Option-Return',
+      );
+      final TerminalContextDockPathHandoffResult protectedHandoff =
+          contextDockPathHandoffResults.last;
+      _expectLifecycle(
+        protectedHandoff.disposition ==
+                TerminalContextDockPathHandoffDisposition.unavailable &&
+            (protectedHandoff.block ==
+                    TerminalContextDockPathInsertionBlock.secureInput ||
+                protectedHandoff.block ==
+                    TerminalContextDockPathInsertionBlock.foregroundProcess) &&
+            contextDockState
+                .snapshotForWindow(initialWindow.id)!
+                .navigatorOwnsInput &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) ==
+                protectedToggleWriteBaseline,
+        'foreground Directory path insertion did not fail closed with zero PTY writes',
       );
       contentItem.performAction();
       await waitFor(() {
@@ -10126,8 +10322,10 @@ final class TerminalApplication {
                     .snapshotForWindow(initialWindow.id)
                     ?.workingDirectory ==
                 retainedBeforeProtectedJob.workingDirectory &&
-            contextDockDirectory.activeOperationCount == 0,
-        'focus-reactivated Process Inspector could not show the retained Directory',
+            contextDockState
+                .snapshotForWindow(initialWindow.id)!
+                .navigatorOwnsInput,
+        'focus-reactivated Process Inspector could not focus the retained Directory',
       );
       contentItem.performAction();
       await waitFor(
@@ -10143,7 +10341,7 @@ final class TerminalApplication {
             contextDockWindow.keyEventRouting == KeyEventRouting.appKitOnly &&
             (writeEnqueuedCounts[initialPaneId] ?? 0) ==
                 focusRoundTripWriteBaseline,
-        'focus round trip moved Navigator input or wrote to the PTY',
+        'focus round trip did not restore terminal input with zero PTY writes',
       );
       await dispatch(TerminalActionId.toggleSecureKeyboardEntry);
       reconcile();
@@ -10162,8 +10360,15 @@ final class TerminalApplication {
       await waitFor(
         () =>
             contextDockProcess.snapshotForWindow(initialWindow.id)?.mode ==
-            TerminalContextDockContentMode.directoryNavigator,
-        'manual Secure Keyboard Entry blocked retained Directory display',
+                TerminalContextDockContentMode.directoryNavigator &&
+            contextDockState
+                .snapshotForWindow(initialWindow.id)!
+                .navigatorOwnsInput &&
+            contextDockDirectory
+                    .snapshotForWindow(initialWindow.id)
+                    ?.isFrozen ==
+                false,
+        'manual Secure Keyboard Entry blocked interactive Directory focus',
       );
       contentItem.performAction();
       await waitFor(
