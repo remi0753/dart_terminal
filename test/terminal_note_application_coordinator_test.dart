@@ -88,33 +88,75 @@ Future<void> _testTopologySurfaceInteractionAndShutdown() async {
           return true;
         },
       );
-  final TerminalWindowNoteInteractionAdapter standardInteraction = coordinator
-      .interactionForPane(standardPane)!;
-  final TerminalWindowInteractionTransferResult noteFocus = standardInteraction
-      .requestRailFocus();
   _expect(
     attached.isAccepted &&
         coordinator.liveSurfaceCount == 1 &&
         coordinator.liveInteractionAdapterCount == 1 &&
         TerminalNoteApplicationCoordinator.debugLiveInteractionAdapterCount ==
-            interactionBaseline + 1 &&
-        standardInteraction
-                .confirmNativeFocus(noteFocus.request!)
-                .disposition ==
-            TerminalWindowInteractionTransferDisposition.confirmed,
+            interactionBaseline + 1,
     'attached surface joins the sole window interaction authority',
   );
-  final TerminalWindowInteractionTransferResult editorFocus =
-      standardInteraction.requestEditorFocus(draftGeneration: 1);
   _expect(
-    standardInteraction.confirmNativeFocus(editorFocus.request!).disposition ==
-            TerminalWindowInteractionTransferDisposition.confirmed &&
-        standardInteraction.synchronizeEditorPhase(
-          dirty: true,
-          confirmingDiscard: false,
-        ),
-    'dirty Note editor becomes the window input owner',
+    coordinator.handlePointerEvent(
+          paneId: standardPane,
+          phase: TerminalNoteApplicationPointerPhase.down,
+          x: 750,
+          y: 250,
+        ) &&
+        coordinator.handlePointerEvent(
+          paneId: standardPane,
+          phase: TerminalNoteApplicationPointerPhase.drag,
+          x: 100,
+          y: 100,
+        ) &&
+        coordinator.handlePointerEvent(
+          paneId: standardPane,
+          phase: TerminalNoteApplicationPointerPhase.up,
+          x: 100,
+          y: 100,
+        ) &&
+        router.activeConsumedGestureCount == 0 &&
+        authority.snapshotForWindow(standard.id)?.owner.kind ==
+            TerminalWindowInteractionOwnerKind.noteRail &&
+        runtime.focusRequests.last ==
+            (standardPane, TerminalNoteProductFocusTarget.rail),
+    'collapsed badge owns its complete pointer sequence without terminal replay',
   );
+  final int pumpsBeforeCreate = runtime.pumpCount;
+  final int generation = runtime.surfaces[standardPane]!;
+  runtime.notify(
+    standardPane,
+    TerminalNoteProductInteractionSnapshot(
+      surfaceGeneration: generation,
+      visibility: TerminalNoteSurfaceVisibility.expanded,
+      editorMode: TerminalNoteEditorMode.creating,
+      draftGeneration: 1,
+      editorDirty: false,
+      confirmingDiscard: false,
+    ),
+  );
+  runtime.surfaceEventHandler?.call(standardPane);
+  await _drainSurfaceEvents();
+  _expect(
+    runtime.pumpCount == pumpsBeforeCreate + 1 &&
+        runtime.focusRequests.last ==
+            (standardPane, TerminalNoteProductFocusTarget.editor) &&
+        authority.snapshotForWindow(standard.id)?.owner.kind ==
+            TerminalWindowInteractionOwnerKind.noteEditor,
+    'coalesced native wake-up pumps once then transfers focus to the editor',
+  );
+  runtime.notify(
+    standardPane,
+    TerminalNoteProductInteractionSnapshot(
+      surfaceGeneration: generation,
+      visibility: TerminalNoteSurfaceVisibility.expanded,
+      editorMode: TerminalNoteEditorMode.creating,
+      draftGeneration: 1,
+      editorDirty: true,
+      confirmingDiscard: false,
+    ),
+  );
+  await _drainSurfaceEvents();
   final TerminalPaneCloseCoordinator close = TerminalPaneCloseCoordinator(
     state: state,
     canRemovePane: (PaneId paneId) =>
@@ -133,11 +175,88 @@ Future<void> _testTopologySurfaceInteractionAndShutdown() async {
     'dirty Note ownership blocks pane, window, and application destruction',
   );
   _expect(
-    standardInteraction.synchronizeEditorPhase(
-      dirty: false,
+    coordinator.handlePointerEvent(
+          paneId: standardPane,
+          phase: TerminalNoteApplicationPointerPhase.down,
+          x: 100,
+          y: 100,
+        ) &&
+        runtime.discardConfirmationCount == 1 &&
+        standardFocusCount == 0 &&
+        authority.snapshotForWindow(standard.id)?.noteEditorPhase ==
+            TerminalWindowNoteEditorPhase.confirmDiscard,
+    'outside dirty click opens native confirmation and is never replayed',
+  );
+  await _drainSurfaceEvents();
+  runtime.notify(
+    standardPane,
+    TerminalNoteProductInteractionSnapshot(
+      surfaceGeneration: generation,
+      visibility: TerminalNoteSurfaceVisibility.expanded,
+      editorMode: TerminalNoteEditorMode.creating,
+      draftGeneration: 1,
+      editorDirty: true,
       confirmingDiscard: false,
     ),
-    'clean Note editor releases destructive-operation admission',
+  );
+  await _drainSurfaceEvents();
+  _expect(
+    authority.snapshotForWindow(standard.id)?.noteEditorPhase ==
+        TerminalWindowNoteEditorPhase.dirty,
+    'Keep Editing restores the dirty editor phase',
+  );
+  runtime.notify(
+    standardPane,
+    TerminalNoteProductInteractionSnapshot(
+      surfaceGeneration: generation,
+      visibility: TerminalNoteSurfaceVisibility.expanded,
+      editorMode: TerminalNoteEditorMode.inactive,
+      draftGeneration: 0,
+      editorDirty: false,
+      confirmingDiscard: false,
+    ),
+  );
+  await _drainSurfaceEvents();
+  _expect(
+    authority.snapshotForWindow(standard.id)?.owner.kind ==
+        TerminalWindowInteractionOwnerKind.noteRail,
+    'resolved editor returns focus ownership to the expanded rail',
+  );
+  runtime.notify(
+    standardPane,
+    TerminalNoteProductInteractionSnapshot(
+      surfaceGeneration: generation,
+      visibility: TerminalNoteSurfaceVisibility.collapsed,
+      editorMode: TerminalNoteEditorMode.inactive,
+      draftGeneration: 0,
+      editorDirty: false,
+      confirmingDiscard: false,
+    ),
+  );
+  await _drainSurfaceEvents();
+  _expect(
+    authority.snapshotForWindow(standard.id)?.owner.kind ==
+            TerminalWindowInteractionOwnerKind.terminal &&
+        standardFocusCount == 1 &&
+        !coordinator.handlePointerEvent(
+          paneId: standardPane,
+          phase: TerminalNoteApplicationPointerPhase.down,
+          x: 100,
+          y: 100,
+        ) &&
+        !coordinator.handlePointerEvent(
+          paneId: standardPane,
+          phase: TerminalNoteApplicationPointerPhase.drag,
+          x: 750,
+          y: 250,
+        ) &&
+        !coordinator.handlePointerEvent(
+          paneId: standardPane,
+          phase: TerminalNoteApplicationPointerPhase.up,
+          x: 750,
+          y: 250,
+        ),
+    'collapsed surface returns the input owner and preserves terminal-started pointer sequences',
   );
 
   final TerminalWindowState quick = await state.createWindow(
@@ -262,6 +381,12 @@ TerminalNoteProductSurfaceConfiguration _surfaceConfiguration(int identity) =>
       occluded: false,
     );
 
+Future<void> _drainSurfaceEvents() async {
+  for (var turn = 0; turn < 6; turn++) {
+    await Future<void>.delayed(Duration.zero);
+  }
+}
+
 final class _FakeNoteTopologyRuntime
     implements TerminalNoteProductTopologyPort {
   _FakeNoteTopologyRuntime(Set<PaneId> initialPanes) {
@@ -275,8 +400,15 @@ final class _FakeNoteTopologyRuntime
   final Map<PaneId, int> surfaces = <PaneId, int>{};
   final Map<PaneId, int> closed = <PaneId, int>{};
   final Set<PaneId> prepared = <PaneId>{};
+  final Map<PaneId, TerminalNoteProductInteractionSnapshot> interactions =
+      <PaneId, TerminalNoteProductInteractionSnapshot>{};
+  final List<(PaneId, TerminalNoteProductFocusTarget)> focusRequests =
+      <(PaneId, TerminalNoteProductFocusTarget)>[];
   final List<TerminalNoteFeatureConfiguration> configurations =
       <TerminalNoteFeatureConfiguration>[];
+  TerminalNoteProductSurfaceEventHandler? surfaceEventHandler;
+  int pumpCount = 0;
+  int discardConfirmationCount = 0;
   var _nextSurfaceGeneration = 10;
   var _stopped = false;
 
@@ -319,6 +451,7 @@ final class _FakeNoteTopologyRuntime
   }) async {
     bindings.remove(paneId);
     surfaces.remove(paneId);
+    interactions.remove(paneId);
     closed[paneId] = updatedAtUtcMicros;
     return const TerminalNoteProductTopologyResult(
       TerminalNoteProductTopologyDisposition.applied,
@@ -332,6 +465,14 @@ final class _FakeNoteTopologyRuntime
   }) async {
     final int generation = _nextSurfaceGeneration++;
     surfaces[paneId] = generation;
+    interactions[paneId] = TerminalNoteProductInteractionSnapshot(
+      surfaceGeneration: generation,
+      visibility: TerminalNoteSurfaceVisibility.collapsed,
+      editorMode: TerminalNoteEditorMode.inactive,
+      draftGeneration: 0,
+      editorDirty: false,
+      confirmingDiscard: false,
+    );
     return TerminalNoteProductTopologyResult(
       TerminalNoteProductTopologyDisposition.applied,
       surfaceGeneration: generation,
@@ -350,6 +491,7 @@ final class _FakeNoteTopologyRuntime
   @override
   Future<TerminalNoteProductTopologyResult> detachSurface(PaneId paneId) async {
     surfaces.remove(paneId);
+    interactions.remove(paneId);
     return const TerminalNoteProductTopologyResult(
       TerminalNoteProductTopologyDisposition.applied,
     );
@@ -358,10 +500,60 @@ final class _FakeNoteTopologyRuntime
   @override
   Future<TerminalNoteProductTopologyResult> pumpSurfaceIntent(
     PaneId paneId,
-  ) async => TerminalNoteProductTopologyResult(
-    TerminalNoteProductTopologyDisposition.noChange,
-    surfaceGeneration: surfaces[paneId],
-  );
+  ) async {
+    pumpCount++;
+    return TerminalNoteProductTopologyResult(
+      TerminalNoteProductTopologyDisposition.noChange,
+      surfaceGeneration: surfaces[paneId],
+    );
+  }
+
+  @override
+  void setSurfaceEventHandler(TerminalNoteProductSurfaceEventHandler? handler) {
+    surfaceEventHandler = handler;
+  }
+
+  @override
+  TerminalNoteProductInteractionSnapshot? interactionSnapshotForPane(
+    PaneId paneId,
+  ) => interactions[paneId];
+
+  @override
+  bool focusSurface(PaneId paneId, TerminalNoteProductFocusTarget target) {
+    if (!surfaces.containsKey(paneId)) return false;
+    focusRequests.add((paneId, target));
+    return true;
+  }
+
+  @override
+  bool presentDiscardConfirmation(PaneId paneId) {
+    if (!surfaces.containsKey(paneId)) return false;
+    discardConfirmationCount++;
+    final TerminalNoteProductInteractionSnapshot current =
+        interactions[paneId]!;
+    interactions[paneId] = TerminalNoteProductInteractionSnapshot(
+      surfaceGeneration: current.surfaceGeneration,
+      visibility: current.visibility,
+      editorMode: current.editorMode,
+      draftGeneration: current.draftGeneration,
+      editorDirty: current.editorDirty,
+      confirmingDiscard: true,
+    );
+    surfaceEventHandler?.call(paneId);
+    return true;
+  }
+
+  @override
+  bool surfaceContainsPoint(
+    PaneId paneId, {
+    required double x,
+    required double y,
+  }) => surfaces.containsKey(paneId) && x >= 700 && y >= 200 && y < 300;
+
+  void notify(PaneId paneId, TerminalNoteProductInteractionSnapshot snapshot) {
+    interactions[paneId] = snapshot;
+    surfaceEventHandler?.call(paneId);
+  }
 
   @override
   bool prepareSurfaceForHostTeardown(PaneId paneId) {
@@ -374,6 +566,8 @@ final class _FakeNoteTopologyRuntime
     _stopped = true;
     bindings.clear();
     surfaces.clear();
+    interactions.clear();
+    surfaceEventHandler = null;
   }
 }
 

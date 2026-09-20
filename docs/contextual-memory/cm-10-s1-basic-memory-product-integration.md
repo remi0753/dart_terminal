@@ -519,3 +519,66 @@ explicit exportをdurable authorityに接続する。Default-offではentry/surf
 - 次の先頭未完了は「applicationのrail/editor interaction lifecycleへ接続する」。Native Note操作がwindow interaction authorityを経由した直後に
   対象paneのpumpを一度だけ呼び、rail/editor focusとterminal input suppression、dirty close admissionをapplication ownerへ接続する。
 - Detached collection/reattach、copy/export、hidden create/open actionとmenu/palette localizationは順番どおり後続taskで行う。
+
+## 2026-09-21: application rail/editor interaction lifecycle着手
+
+- ROADMAPを再確認し、先頭未完了が「applicationのrail/editor interaction lifecycleへ接続する」であることを確認した。
+- 目的は実native controlのeventをtimerなしでapplicationへ通知し、対象surfaceのintentを一回だけpumpした後、authority projectionに応じて
+  sole window interaction ownerをterminal/Note rail/Note editorへ二段階transferすることである。Native dirty/confirm flagsもcontent-free snapshotから
+  同期し、pane/window/quit close admissionへ反映する。
+- 範囲はNotes capabilityのprocess-lifetime scalar notification、product subsystemのsurface event/focus/interaction snapshot、application
+  coordinatorのserialized pump/focus/dirty lifecycle、Note内外pointerのno-replay処理、expanded visibilityのtopology update保持である。
+- 対象外はDetached/reattach、copy/export、menu/palette action、restart aggregateであり、後続ROADMAP項目まで実装しない。
+- Native callbackへpane ID、Note ID、body、pathを渡す案は不採用とする。Dart側が発行するprocess-localなopaque notification IDだけを渡し、
+  listenerは即時returnして既存のbounded take APIから状態を取得する。`dart_appkit`のservice ABIやevent型は変更しない。
+- Accepted navigation後のfocus policyは、expanded+inactiveをrail、expanded+active editorをeditor、collapsedをterminalとする。Dirty/confirmはnative
+  本文をmirrorせず2 bitだけ同期し、Save/Cancel projection後はphaseをcleanにしてからrailへ移す。
+- Application layout更新が常にcollapsedを再注入するとOpen直後のrailを閉じるため、attach時のinitial visibilityとauthority-owned live
+  visibilityを分離する。Resize/appearance/renderer recoveryはlast accepted authority visibilityを維持する。
+- 完了条件は通知あたり最大1 intent、通知coalescing、native focus成功後だけowner confirm、inside/outside pointerのterminal replay 0、dirty
+  close/quit block、failure/teardown owner 0、disabled callback/surface owner 0、両runtime/full gate passとする。
+
+## 2026-09-21: application rail/editor interaction lifecycle完了
+
+### 実装と判断
+
+- Notes native capabilityへprocess-lifetime callbackとsurfaceごとのopaque notification IDを追加した。Callback payloadは正のscalar IDだけで、
+  pane ID、Note/Card ID、本文、path、timestampを含まない。Dart listenerは同期処理を行わず、application coordinatorが同一paneの通知を
+  microtask単位でcoalesceして、通知対象surfaceの既存bounded intent APIを最大1回だけdrainする。
+- Badge、New、Close、card selection、Edit、Save、Cancel、color/action、editor text/IME、discard/Keep Editingの実native controlからwake-upする。
+  Accepted mutationは従来どおりauthority projectionをnativeへ適用した後だけresultを返し、その後のcontent-free snapshotで
+  rail/editor/terminal focusとdirty/confirm phaseを同期する。Idle polling timerは追加していない。
+- Product subsystemはnative snapshotのsurface/projection generationをlast accepted authority projectionとexact照合し、visibility、editor mode、
+  draft generation、dirty/confirmの必要最小状態だけをapplicationへ返す。Native focus、discard confirmation、badge/rail hit-testもproduct-owned
+  portに閉じ、`dart_appkit`へNote型、event、Dart Terminal固有codeを追加していない。
+- Application coordinatorはnative first responder取得成功後だけsole window interaction authorityのtransferをconfirmする。Collapsed badge clickは
+  rail、expanded read modeはrail、create/editはeditor、user Close後はterminalがownerになる。Dirty editorはpane/window/application quitをblockし、
+  outside clickはinline discard confirmationを出してterminalへ再送しない。
+- Pointer ownershipはdownだけでなくdrag/up/cancelまで保持する。Note上で開始したsequenceは外へ出ても全eventをconsumeし、terminal上で開始した
+  sequenceはNote上へ入っても横取りしない。Window内でpane境界をまたいでも開始surfaceを追跡する。
+- Layout/appearance更新の初期`collapsed`値がlive Open/editor stateを上書きしないよう、authorityのlast accepted visibilityを再投影する。
+  Renderer host teardownもuser Closeとは区別してauthority visibility/editor stateを保持し、replacement host接続後にfocus/dirty stateを再同期する。
+- Callback、handler map、pointer gesture、interaction adapterはsurface dispose/shutdown前に解除する。Native/result faultでsurface ownerが失われた場合は
+  application interaction ownerもretireし、disabled branchはcallback、surface、storeを生成しない。
+
+### 検証
+
+- Focused format/analyze: application coordinator/product subsystem/native adapter、Notes packageと全更新testでissue 0。
+- Focused Dart tests: opaque wake-up forwarding、projection generation照合、live visibility保持、host replacement、通知coalescing、1通知1pump、
+  badge→rail→editor→dirty→confirm→Keep Editing→rail→terminal、pane/window/quit block、Note/terminal開始pointer sequenceのno-replay、shutdown owner 0がpass。
+- `make terminal-notes-native-test terminal-notes-dart-test terminal-notes-capability-audit`: actual AppKit control、scalar callback、dirty confirmation、
+  callback immutability、Dart facade、header/export inventoryがpass。Capability auditは`exports=20`、`snapshot=content-free`、`dart_appkit=generic`。
+- 最初のfull gateは`terminal_application.dart`変更によりPhase 7 acceptance source hashがstaleとして停止した。正規
+  `make phase7-appkit-acceptance`で同sourceの2 hashだけを更新した。次のrunはその入力を持つGhostty gap inventoryで停止したため、
+  `make ghostty-p0-p1-gap-inventory release-candidate-daily-use-matrix`を依存順に再生成した。Classification、件数、release blockerは変更していない。
+- 最終`CI=true DART_SUPPRESS_ANALYTICS=true make test`: 成功。376 Dart filesのformat変更0、root/package analyze issue 0、
+  native capability、実filesystem store、security stress、privacy、application、distributionと全freshness gateを完走し、
+  `dart_terminal tests passed`を確認した。
+- `make RUNTIME_ARCH=arm64 developer-jit-audit release-aot-audit`: 両方成功。Notesを含む5 native assets、3 capabilitiesのexact bundleを受理した。
+- `git diff --check`: 成功。隣接`dart_appkit`の差分は着手前から存在する3 fileだけで、本サブタスクによる追加差分は0。
+
+### 次への引き継ぎ
+
+- Current collectionのdurable create/edit/reorder/resolve/reopen/deleteとrail/editor navigationはapplication lifecycleまで接続済みである。
+- 次のROADMAP項目はDetached collection、reattach、explicit copy/exportである。現時点のnative semantic intentは存在するが、Detached selectionや
+  export destination/pasteboard effectをproductへ接続しておらず、先行実装していない。

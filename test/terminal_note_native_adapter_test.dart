@@ -97,6 +97,9 @@ Future<void> _testNativeIntentResultAndTeardown() async {
     body: 'changed',
   );
   channel.intent = intent;
+  var notifications = 0;
+  adapter.setNotificationHandler(() => notifications++);
+  channel.notify();
   _expect(identical(adapter.takeIntent(), intent), 'intent is consumed once');
   channel.intent = null;
   final TerminalNotesNativeResult result = TerminalNotesNativeResult(
@@ -109,7 +112,9 @@ Future<void> _testNativeIntentResultAndTeardown() async {
     adapter.applyResult(result) ==
             TerminalNotesResultApplyDisposition.accepted &&
         identical(channel.result, result) &&
-        adapter.focus(TerminalNotesNativeFocusTarget.editor),
+        adapter.focus(TerminalNotesNativeFocusTarget.editor) &&
+        adapter.presentDiscardConfirmation() &&
+        notifications == 1,
     'result and bounded focus use the same native channel',
   );
   adapter.updateLayout(
@@ -193,6 +198,79 @@ final class _FakeNativeChannel implements TerminalNoteNativeSurfaceChannel {
   int layoutCount = 0;
   int detachCount = 0;
   int disposeCount = 0;
+  int discardConfirmationCount = 0;
+  void Function()? notificationHandler;
+
+  @override
+  TerminalNotesNativeSnapshot get snapshot {
+    final TerminalNotesProjection projection = projections.last;
+    return TerminalNotesNativeSnapshot(
+      paneId: projection.paneId,
+      surfaceGeneration: projection.surfaceGeneration,
+      projectionGeneration: projection.projectionGeneration,
+      storeRevision: projection.storeRevision,
+      acceptedProjectionCount: projections.length,
+      rejectedProjectionCount: 0,
+      draftGeneration: projection.draftGeneration,
+      activeCount: projection.activeCount,
+      dueCount: projection.dueCount,
+      projectedCardCount: projection.cards.length,
+      materializedCardCount: projection.cards.length,
+      packetBytes: 0,
+      visibility: projection.visibility,
+      presentationEligible: projection.presentationEligible,
+      initialized: true,
+      readyCue: projection.readyCue,
+      darkAppearance: projection.darkAppearance,
+      increaseContrast: projection.increaseContrast,
+      differentiateWithoutColor: projection.differentiateWithoutColor,
+      reduceMotion: projection.reduceMotion,
+      systemBadgeVisible: projection.systemBadgeVisible,
+      featureState: projection.featureState,
+      surfaceState: projection.surfaceState,
+      section: projection.section,
+      editorMode: projection.editorMode,
+      messageKey: projection.messageKey,
+      pageStart: projection.pageStart,
+      totalCount: projection.totalCount,
+      bodyFontMilliPoints: projection.bodyFontMilliPoints,
+      outstandingIntent: intent != null,
+      emittedIntentCount: 0,
+      appliedResultCount: result == null ? 0 : 1,
+      editorDirty: false,
+      confirmingDiscard: false,
+      focusTarget: TerminalNotesNativeFocusTarget.none,
+    );
+  }
+
+  @override
+  TerminalNotesNativePresentation get presentation =>
+      const TerminalNotesNativePresentation(
+        projectionGeneration: 1,
+        paneWidth: 900,
+        paneHeight: 600,
+        backingScale: 2,
+        badgeHit: TerminalNotesRect(x: 840, y: 270, width: 44, height: 44),
+        badgeVisual: TerminalNotesRect(x: 840, y: 278, width: 44, height: 28),
+        rail: TerminalNotesRect(x: 568, y: 12, width: 320, height: 576),
+        firstCard: TerminalNotesRect(x: 580, y: 74, width: 284, height: 88),
+        flags: 3,
+        materializedCardCount: 1,
+        accessibilityNodeCount: 1,
+        accessibilityBodyCount: 1,
+        visibleAcknowledgementEligibleGeneration: 1,
+        accessibilityAnnouncementCount: 0,
+        animationMilliseconds: 0,
+        bodyFontMilliPoints: 15000,
+        badgeDisplayCount: 1,
+      );
+
+  @override
+  void setNotificationHandler(void Function()? handler) {
+    notificationHandler = handler;
+  }
+
+  void notify() => notificationHandler?.call();
 
   @override
   TerminalNotesAttachDisposition attachToRenderer({
@@ -225,6 +303,12 @@ final class _FakeNativeChannel implements TerminalNoteNativeSurfaceChannel {
   @override
   bool focus(TerminalNotesNativeFocusTarget target) =>
       target == TerminalNotesNativeFocusTarget.editor;
+
+  @override
+  bool presentDiscardConfirmation() {
+    discardConfirmationCount++;
+    return true;
+  }
 
   @override
   void updateLayout({

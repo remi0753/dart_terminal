@@ -6,12 +6,19 @@ import 'terminal_note_context_restoration.dart';
 import 'terminal_note_model.dart';
 import 'terminal_note_native_adapter.dart';
 import 'terminal_note_product_subsystem.dart';
+import 'terminal_note_projection.dart';
 import 'terminal_pane.dart';
 import 'terminal_product_configuration.dart';
 import 'terminal_window_interaction.dart';
 
 typedef TerminalNoteApplicationClock = int Function();
 typedef TerminalNoteTerminalFocusHandler = bool Function();
+typedef TerminalNoteApplicationErrorHandler = void Function(
+  Object error,
+  StackTrace stackTrace,
+);
+
+enum TerminalNoteApplicationPointerPhase { down, drag, up, moved, cancel }
 
 /// Content-free logical placement of one pane in the application hierarchy.
 final class TerminalNoteApplicationPaneBinding {
@@ -38,14 +45,17 @@ final class TerminalNoteApplicationCoordinator {
     required TerminalNoteProductTopologyPort? runtime,
     required Iterable<TerminalNoteApplicationPaneBinding> initialBindings,
     required TerminalNoteApplicationClock clock,
+    TerminalNoteApplicationErrorHandler? onError,
   }) : _root = root,
        _runtime = runtime,
-       _clock = clock {
+       _clock = clock,
+       _onError = onError {
     if (runtime != null) {
       for (final TerminalNoteApplicationPaneBinding binding
           in initialBindings) {
         _bindings[binding.paneId] = binding;
       }
+      runtime.setSurfaceEventHandler(_scheduleSurfaceEvent);
     }
   }
 
@@ -54,6 +64,7 @@ final class TerminalNoteApplicationCoordinator {
     required Iterable<TerminalNoteApplicationPaneBinding> initialBindings,
     required TerminalNoteSubsystemFactory factory,
     TerminalNoteApplicationClock clock = _systemClock,
+    TerminalNoteApplicationErrorHandler? onError,
   }) async {
     final List<TerminalNoteApplicationPaneBinding> bindings = _validateBindings(
       initialBindings,
@@ -92,6 +103,7 @@ final class TerminalNoteApplicationCoordinator {
       runtime: runtime,
       initialBindings: bindings,
       clock: clock,
+      onError: onError,
     );
   }
 
@@ -108,6 +120,7 @@ final class TerminalNoteApplicationCoordinator {
     TerminalNoteNativePresentationState presentation =
         const TerminalNoteNativePresentationState(),
     TerminalNoteApplicationClock clock = _systemClock,
+    TerminalNoteApplicationErrorHandler? onError,
   }) {
     final List<TerminalNoteApplicationPaneBinding> bindings = _validateBindings(
       initialBindings,
@@ -122,6 +135,7 @@ final class TerminalNoteApplicationCoordinator {
       launchConfiguration: launchConfiguration,
       initialBindings: bindings,
       clock: clock,
+      onError: onError,
       factory: (TerminalNoteFeatureConfiguration configuration) =>
           TerminalNoteProductSubsystem.start(
             configuration: configuration,
@@ -133,6 +147,7 @@ final class TerminalNoteApplicationCoordinator {
             ),
             ensureQuickTerminalContext: ensureQuickTerminalContext,
             updatedAtUtcMicros: clock(),
+            clock: clock,
             initializeNativeCapability: initializeNativeCapability,
             surfaceFactory: surfaceFactory,
             locationResolver: locationResolver,
@@ -149,6 +164,7 @@ final class TerminalNoteApplicationCoordinator {
   final TerminalNoteCompositionRoot _root;
   final TerminalNoteProductTopologyPort? _runtime;
   final TerminalNoteApplicationClock _clock;
+  final TerminalNoteApplicationErrorHandler? _onError;
   final Map<PaneId, TerminalNoteApplicationPaneBinding> _bindings =
       <PaneId, TerminalNoteApplicationPaneBinding>{};
   final Map<PaneId, _TerminalNoteApplicationSurface> _surfaces =
@@ -156,6 +172,9 @@ final class TerminalNoteApplicationCoordinator {
   Future<void> _tail = Future<void>.value();
   Future<TerminalNoteCompositionShutdownDisposition>? _shutdownFuture;
   bool _stopping = false;
+  final Set<PaneId> _pendingSurfaceEvents = <PaneId>{};
+  bool _surfaceEventDrainScheduled = false;
+  var _nextPointerEventSequence = 1;
 
   TerminalNoteApplicationCapability get capability => _root.capability;
   bool get ownsRuntime => _runtime != null;
@@ -170,6 +189,113 @@ final class TerminalNoteApplicationCoordinator {
 
   TerminalWindowNoteInteractionAdapter? interactionForPane(PaneId paneId) =>
       _surfaces[paneId]?.interaction;
+
+  /// Routes one window pointer event without replaying Note-owned input to the
+  /// terminal. Coordinates are pane-local and contain no Note content.
+  bool handlePointerEvent({
+    required PaneId paneId,
+    required TerminalNoteApplicationPointerPhase phase,
+    required double x,
+    required double y,
+  }) {
+    final TerminalNoteProductTopologyPort? runtime = _runtime;
+    final TerminalNoteApplicationPaneBinding? binding = _bindings[paneId];
+    _TerminalNoteApplicationSurface? surface = _surfaces[paneId];
+    if (phase != TerminalNoteApplicationPointerPhase.down && binding != null) {
+      for (final _TerminalNoteApplicationSurface candidate
+          in _surfaces.values) {
+        if (candidate.windowId == binding.windowId &&
+            (candidate.pointerGesture != null ||
+                candidate.pointerSequenceConsumed != null)) {
+          surface = candidate;
+          break;
+        }
+      }
+    }
+    if (runtime == null ||
+        binding == null ||
+        surface == null ||
+        surface.interaction.isDisposed ||
+        _stopping) {
+      return false;
+    }
+    final TerminalWindowConsumedGestureIdentity? active =
+        surface.pointerGesture;
+    if (active != null) {
+      final TerminalWindowConsumedGesturePhase gesturePhase = switch (phase) {
+        TerminalNoteApplicationPointerPhase.down =>
+          TerminalWindowConsumedGesturePhase.down,
+        TerminalNoteApplicationPointerPhase.drag =>
+          TerminalWindowConsumedGesturePhase.drag,
+        TerminalNoteApplicationPointerPhase.up =>
+          TerminalWindowConsumedGesturePhase.up,
+        TerminalNoteApplicationPointerPhase.moved =>
+          TerminalWindowConsumedGesturePhase.drag,
+        TerminalNoteApplicationPointerPhase.cancel =>
+          TerminalWindowConsumedGesturePhase.cancel,
+      };
+      surface.interaction.consumeGesture(active, gesturePhase);
+      if (phase == TerminalNoteApplicationPointerPhase.up ||
+          phase == TerminalNoteApplicationPointerPhase.cancel) {
+        surface.pointerGesture = null;
+        surface.pointerSequenceConsumed = null;
+      }
+      return true;
+    }
+    final bool? sequenceConsumed = surface.pointerSequenceConsumed;
+    if (phase != TerminalNoteApplicationPointerPhase.down &&
+        sequenceConsumed != null) {
+      if (phase == TerminalNoteApplicationPointerPhase.up ||
+          phase == TerminalNoteApplicationPointerPhase.cancel) {
+        surface.pointerSequenceConsumed = null;
+      }
+      return sequenceConsumed;
+    }
+    final bool inside = runtime.surfaceContainsPoint(paneId, x: x, y: y);
+    if (phase != TerminalNoteApplicationPointerPhase.down) return inside;
+    surface.pointerSequenceConsumed = null;
+    if (inside) {
+      surface.pointerSequenceConsumed = true;
+      final TerminalNoteProductInteractionSnapshot? snapshot = runtime
+          .interactionSnapshotForPane(paneId);
+      if (snapshot == null ||
+          !_synchronizeInteraction(
+            surface,
+            snapshot,
+            forceRailWhenCollapsed: true,
+          )) {
+        return true;
+      }
+      final TerminalWindowConsumedGestureResult gesture = surface.interaction
+          .beginGesture(eventSequence: _takePointerEventSequence());
+      surface.pointerGesture = gesture.identity;
+      return true;
+    }
+    final TerminalWindowNoteOutsideResult outside = surface.interaction
+        .handleOutsidePointerDown();
+    final TerminalWindowInteractionTransferRequest? request = outside.request;
+    if (outside.disposition ==
+        TerminalWindowNoteOutsideDisposition.discardConfirmation) {
+      surface.pointerSequenceConsumed = true;
+      if (!runtime.presentDiscardConfirmation(paneId)) {
+        surface.interaction.keepEditingAfterDiscardConfirmation();
+      }
+      return true;
+    }
+    if (request != null) {
+      surface.pointerSequenceConsumed = true;
+      if (!surface.focusTerminal()) {
+        surface.interaction.cancelNativeFocus(request);
+      } else {
+        surface.interaction.confirmNativeFocus(request);
+      }
+      return true;
+    }
+    final bool consumed =
+        outside.disposition != TerminalWindowNoteOutsideDisposition.stale;
+    surface.pointerSequenceConsumed = consumed;
+    return consumed;
+  }
 
   TerminalNoteLiveConfigurationDisposition applyLiveConfiguration(
     TerminalNoteFeatureConfiguration configuration,
@@ -262,6 +388,11 @@ final class TerminalNoteApplicationCoordinator {
       }
       _surfaces[paneId] = surface;
       _debugLiveInteractionAdapterCount++;
+      final TerminalNoteProductInteractionSnapshot? snapshot = runtime
+          .interactionSnapshotForPane(paneId);
+      if (snapshot != null && !_synchronizeInteraction(surface, snapshot)) {
+        return _busy;
+      }
       return result;
     }
     if (surface.windowId != windowId || surface.interaction.isDisposed) {
@@ -290,6 +421,12 @@ final class TerminalNoteApplicationCoordinator {
     if (!result.isAccepted &&
         runtime.surfaceGenerationForPane(paneId) == null) {
       _retireSurface(paneId);
+    } else if (result.isAccepted) {
+      final TerminalNoteProductInteractionSnapshot? snapshot = runtime
+          .interactionSnapshotForPane(paneId);
+      if (snapshot != null && !_synchronizeInteraction(surface, snapshot)) {
+        return _busy;
+      }
     }
     return result;
   });
@@ -309,6 +446,8 @@ final class TerminalNoteApplicationCoordinator {
         _shutdownFuture;
     if (existing != null) return existing;
     _stopping = true;
+    _runtime?.setSurfaceEventHandler(null);
+    _pendingSurfaceEvents.clear();
     for (final PaneId paneId in _surfaces.keys.toList(growable: false)) {
       preparePaneForViewTeardown(paneId);
     }
@@ -353,6 +492,132 @@ final class TerminalNoteApplicationCoordinator {
     } on Object {
       return false;
     }
+  }
+
+  void _scheduleSurfaceEvent(PaneId paneId) {
+    if (_stopping || !_surfaces.containsKey(paneId)) return;
+    _pendingSurfaceEvents.add(paneId);
+    if (_surfaceEventDrainScheduled) return;
+    _surfaceEventDrainScheduled = true;
+    scheduleMicrotask(() {
+      _surfaceEventDrainScheduled = false;
+      final Set<PaneId> pending = Set<PaneId>.of(_pendingSurfaceEvents);
+      _pendingSurfaceEvents.clear();
+      for (final PaneId pendingPaneId in pending) {
+        unawaited(
+          _serialize(() => _handleSurfaceEvent(pendingPaneId)).then<void>(
+            (_) {},
+            onError: (Object error, StackTrace stackTrace) {
+              final TerminalNoteApplicationErrorHandler? onError = _onError;
+              if (onError != null) {
+                onError(error, stackTrace);
+              } else {
+                Zone.current.handleUncaughtError(error, stackTrace);
+              }
+            },
+          ),
+        );
+      }
+    });
+  }
+
+  Future<void> _handleSurfaceEvent(PaneId paneId) async {
+    final TerminalNoteProductTopologyPort? runtime = _runtime;
+    final _TerminalNoteApplicationSurface? surface = _surfaces[paneId];
+    if (runtime == null || surface == null || _stopping) return;
+    final TerminalNoteProductTopologyResult result = await runtime
+        .pumpSurfaceIntent(paneId);
+    if (result.disposition ==
+            TerminalNoteProductTopologyDisposition.nativeUnavailable ||
+        runtime.surfaceGenerationForPane(paneId) == null) {
+      _retireSurface(paneId);
+      return;
+    }
+    final TerminalNoteProductInteractionSnapshot? snapshot = runtime
+        .interactionSnapshotForPane(paneId);
+    if (snapshot == null || !_synchronizeInteraction(surface, snapshot)) {
+      throw StateError('Note surface interaction reconciliation failed');
+    }
+  }
+
+  bool _synchronizeInteraction(
+    _TerminalNoteApplicationSurface surface,
+    TerminalNoteProductInteractionSnapshot snapshot, {
+    bool forceRailWhenCollapsed = false,
+  }) {
+    final TerminalWindowNoteInteractionAdapter interaction =
+        surface.interaction;
+    final TerminalWindowInteractionSnapshot? owner = interaction.authority
+        .snapshotForWindow(surface.windowId);
+    if (owner?.owner.kind == TerminalWindowInteractionOwnerKind.noteEditor &&
+        owner?.owner.paneId == surface.paneId &&
+        owner?.owner.surfaceGeneration == snapshot.surfaceGeneration &&
+        !interaction.synchronizeEditorPhase(
+          dirty: snapshot.editorDirty,
+          confirmingDiscard: snapshot.confirmingDiscard,
+        )) {
+      return false;
+    }
+    if (snapshot.visibility == TerminalNoteSurfaceVisibility.collapsed &&
+        !forceRailWhenCollapsed) {
+      final bool ownsThisSurface =
+          owner?.owner.isNoteOwner == true &&
+          owner?.owner.paneId == surface.paneId &&
+          owner?.owner.surfaceGeneration == snapshot.surfaceGeneration;
+      if (!ownsThisSurface) return true;
+      final TerminalWindowInteractionTransferResult transfer = interaction
+          .requestTerminalAfterResolution();
+      return _completeFocusTransfer(surface, transfer, surface.focusTerminal);
+    }
+    final bool editorActive =
+        snapshot.editorMode != TerminalNoteEditorMode.inactive;
+    final TerminalWindowInteractionTransferResult transfer = editorActive
+        ? interaction.requestEditorFocus(
+            draftGeneration: snapshot.draftGeneration,
+          )
+        : interaction.requestRailFocus();
+    final bool focused = _completeFocusTransfer(
+      surface,
+      transfer,
+      () => _runtime!.focusSurface(
+        surface.paneId,
+        editorActive
+            ? TerminalNoteProductFocusTarget.editor
+            : TerminalNoteProductFocusTarget.rail,
+      ),
+    );
+    if (!focused) return false;
+    return !editorActive ||
+        interaction.synchronizeEditorPhase(
+          dirty: snapshot.editorDirty,
+          confirmingDiscard: snapshot.confirmingDiscard,
+        );
+  }
+
+  static bool _completeFocusTransfer(
+    _TerminalNoteApplicationSurface surface,
+    TerminalWindowInteractionTransferResult transfer,
+    bool Function() focus,
+  ) {
+    final TerminalWindowInteractionTransferRequest? request = transfer.request;
+    if (request == null) {
+      return transfer.disposition ==
+          TerminalWindowInteractionTransferDisposition.noChange;
+    }
+    if (!focus()) {
+      surface.interaction.cancelNativeFocus(request);
+      return false;
+    }
+    return surface.interaction.confirmNativeFocus(request).disposition ==
+        TerminalWindowInteractionTransferDisposition.confirmed;
+  }
+
+  int _takePointerEventSequence() {
+    if (_nextPointerEventSequence >
+        TerminalWindowInteractionLimits.maximumGeneration) {
+      throw StateError('Note pointer event sequence exhausted');
+    }
+    return _nextPointerEventSequence++;
   }
 
   void _retireSurface(PaneId paneId) {
@@ -424,4 +689,6 @@ final class _TerminalNoteApplicationSurface {
   TerminalWindowId windowId;
   TerminalWindowNoteInteractionAdapter interaction;
   TerminalNoteTerminalFocusHandler focusTerminal;
+  TerminalWindowConsumedGestureIdentity? pointerGesture;
+  bool? pointerSequenceConsumed;
 }

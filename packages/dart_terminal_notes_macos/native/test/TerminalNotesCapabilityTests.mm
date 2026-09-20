@@ -24,6 +24,17 @@ da_custom_view_factory_v1 g_renderer_view_factory = nullptr;
 void* g_renderer_view_factory_context = nullptr;
 da_custom_view_operation_v1 g_renderer_view_operation = nullptr;
 void* g_renderer_view_operation_context = nullptr;
+uint64_t g_surface_notification_count = 0u;
+uint64_t g_last_surface_notification_id = 0u;
+
+void SurfaceNotification(uint64_t notification_id) {
+  ++g_surface_notification_count;
+  g_last_surface_notification_id = notification_id;
+}
+
+void OtherSurfaceNotification(uint64_t notification_id) {
+  g_last_surface_notification_id = notification_id;
+}
 
 int32_t RegisterRendererViewProvider(
     const uint8_t* provider_identifier, size_t provider_identifier_length,
@@ -270,6 +281,15 @@ int main(int argc, const char* argv[]) {
       24u, 80u, 640u, 480u, 24u, 80u, 0u, 1u, 41u};
   TerminalGeometrySentinel terminal = terminal_before;
   ok &= expect(dtn_abi_version() == 1u, "ABI version");
+  ok &= expect(
+      dtn_set_surface_notify_callback(nullptr) == DTN_STATUS_INVALID_ARGUMENT &&
+          dtn_set_surface_notify_callback(SurfaceNotification) ==
+              DTN_STATUS_OK &&
+          dtn_set_surface_notify_callback(SurfaceNotification) ==
+              DTN_STATUS_OK &&
+          dtn_set_surface_notify_callback(OtherSurfaceNotification) ==
+              DTN_STATUS_INVALID_ARGUMENT,
+      "process-lifetime scalar notification callback is immutable");
   ok &= expect(dtn_debug_live_surfaces() == 0u, "initial owner count");
   DtnSurface* surface = dtn_surface_create();
   ok &= expect(surface != nullptr, "surface creation");
@@ -939,7 +959,13 @@ int main(int argc, const char* argv[]) {
 
   DtnSurface* editor_surface = dtn_surface_create();
   ok &= expect(editor_surface != nullptr &&
-                   dtn_debug_live_surfaces() == 2u,
+                   dtn_debug_live_surfaces() == 2u &&
+                   dtn_surface_set_notification_id(editor_surface, 201u) ==
+                       DTN_STATUS_OK &&
+                   dtn_surface_set_notification_id(editor_surface, 201u) ==
+                       DTN_STATUS_OK &&
+                   dtn_surface_set_notification_id(editor_surface, 202u) ==
+                       DTN_STATUS_INVALID_ARGUMENT,
                "isolated editor surface creation");
   NSWindow* editor_window = [[NSWindow alloc]
       initWithContentRect:NSMakeRect(0, 0, 640, 480)
@@ -1226,6 +1252,15 @@ int main(int argc, const char* argv[]) {
   [keep_editing_button performClick:nil];
   ok &= expect(discard_confirmation.hidden && text_view.editable,
                "Keep Editing returns to unchanged draft");
+  const uint64_t discard_notifications_before = g_surface_notification_count;
+  ok &= expect(
+      dtn_surface_present_discard_confirmation(editor_surface) ==
+              DTN_STATUS_OK &&
+          g_surface_notification_count == discard_notifications_before + 1u &&
+          g_last_surface_notification_id == 201u &&
+          !discard_confirmation.hidden && !text_view.editable,
+      "outside-pointer discard confirmation emits one scalar wake-up");
+  [keep_editing_button performClick:nil];
   [cancel_button performClick:nil];
   [discard_button performClick:nil];
   editor_taken = {};
@@ -1390,6 +1425,8 @@ int main(int argc, const char* argv[]) {
   write_u32(navigation_collapsed, 56u, 1u);
   ok &= expect(
       navigation_surface != nullptr &&
+          dtn_surface_set_notification_id(navigation_surface, 301u) ==
+              DTN_STATUS_OK &&
           dtn_surface_apply_projection(navigation_surface,
                                        navigation_collapsed.data(),
                                        navigation_collapsed.size()) ==
@@ -1442,7 +1479,13 @@ int main(int argc, const char* argv[]) {
 
   NSButton* navigation_badge =
       (NSButton*)find_view_named(navigation_view, @"DtnNoteBadgeButton");
+  const uint64_t navigation_notifications_before =
+      g_surface_notification_count;
   [navigation_badge performClick:nil];
+  ok &= expect(
+      g_surface_notification_count == navigation_notifications_before + 1u &&
+          g_last_surface_notification_id == 301u,
+      "actual navigation control emits one scalar wake-up");
   DtnSurfaceIntentV1 open_intent =
       take_navigation_intent(DTN_INTENT_OPEN, 1u, 0u);
   std::vector<uint8_t> navigation_open =

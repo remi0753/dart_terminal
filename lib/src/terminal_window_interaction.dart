@@ -649,6 +649,14 @@ final class TerminalWindowNoteInteractionAdapter {
     );
   }
 
+  TerminalWindowConsumedGestureResult consumeGesture(
+    TerminalWindowConsumedGestureIdentity identity,
+    TerminalWindowConsumedGesturePhase phase,
+  ) {
+    _ensureAlive();
+    return router.consumeGesture(identity, phase);
+  }
+
   TerminalWindowNoteOutsideResult handleOutsidePointerDown() {
     _ensureAlive();
     if (_pendingFocus != null) {

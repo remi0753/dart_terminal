@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 
+import 'projection.dart';
+
 const String _assetId =
     'package:dart_terminal_notes_macos/dart_terminal_notes_macos.dart';
 
@@ -177,6 +179,8 @@ abstract interface class TerminalNotesNativeBindings {
 
   Object createSurface();
 
+  void setNotificationHandler(Object handle, void Function()? handler);
+
   int applyProjection(Object handle, Uint8List bytes);
 
   TerminalNotesNativeRawSnapshot snapshot(Object handle);
@@ -199,6 +203,8 @@ abstract interface class TerminalNotesNativeBindings {
 
   int focus(Object handle, int target);
 
+  int presentDiscardConfirmation(Object handle);
+
   int attachToRenderer(
     Object handle, {
     required int rendererHandle,
@@ -214,6 +220,12 @@ abstract interface class TerminalNotesNativeBindings {
 
 final class TerminalNotesNativeFfiBindings
     implements TerminalNotesNativeBindings {
+  static int _nextNotificationId = 1;
+  static bool _notificationInitialized = false;
+  static final Map<int, int> _notificationIdsByAddress = <int, int>{};
+  static final Map<int, void Function()> _notificationHandlers =
+      <int, void Function()>{};
+
   @override
   int get abiVersion => _abiVersion();
 
@@ -222,6 +234,41 @@ final class TerminalNotesNativeFfiBindings
     final Pointer<Void> handle = _surfaceCreate();
     if (handle == nullptr) throw StateError('native Note surface unavailable');
     return handle;
+  }
+
+  @override
+  void setNotificationHandler(Object handle, void Function()? handler) {
+    final Pointer<Void> nativeHandle = _handle(handle);
+    final int address = nativeHandle.address;
+    int? notificationId = _notificationIdsByAddress[address];
+    if (handler == null) {
+      if (notificationId != null) _notificationHandlers.remove(notificationId);
+      return;
+    }
+    if (!_notificationInitialized) {
+      final int status = _setSurfaceNotifyCallback(
+        _surfaceNotification.nativeFunction,
+      );
+      if (status != nativeStatusOk) {
+        throw StateError('native Note notification setup failed: $status');
+      }
+      _notificationInitialized = true;
+    }
+    if (notificationId == null) {
+      if (_nextNotificationId > TerminalNotesLimits.maximumSignedGeneration) {
+        throw StateError('native Note notification ID space is exhausted');
+      }
+      notificationId = _nextNotificationId++;
+      final int status = _surfaceSetNotificationId(
+        nativeHandle,
+        notificationId,
+      );
+      if (status != nativeStatusOk) {
+        throw StateError('native Note notification binding failed: $status');
+      }
+      _notificationIdsByAddress[address] = notificationId;
+    }
+    _notificationHandlers[notificationId] = handler;
   }
 
   @override
@@ -280,6 +327,10 @@ final class TerminalNotesNativeFfiBindings
       calloc.free(native);
     }
   }
+
+  @override
+  int presentDiscardConfirmation(Object handle) =>
+      _surfacePresentDiscardConfirmation(_handle(handle));
 
   @override
   int focus(Object handle, int target) =>
@@ -454,7 +505,14 @@ final class TerminalNotesNativeFfiBindings
   }
 
   @override
-  void destroySurface(Object handle) => _surfaceDestroy(_handle(handle));
+  void destroySurface(Object handle) {
+    final Pointer<Void> nativeHandle = _handle(handle);
+    final int? notificationId = _notificationIdsByAddress.remove(
+      nativeHandle.address,
+    );
+    if (notificationId != null) _notificationHandlers.remove(notificationId);
+    _surfaceDestroy(nativeHandle);
+  }
 
   @override
   int get liveSurfaceCount => _debugLiveSurfaces();
@@ -469,6 +527,15 @@ final class TerminalNotesNativeFfiBindings
   static BigInt _unsigned64(int value) =>
       value >= 0 ? BigInt.from(value) : BigInt.from(value) + (BigInt.one << 64);
 }
+
+typedef _SurfaceNotifyNative = Void Function(Uint64 notificationId);
+
+void _dispatchSurfaceNotification(int notificationId) {
+  TerminalNotesNativeFfiBindings._notificationHandlers[notificationId]?.call();
+}
+
+final NativeCallable<_SurfaceNotifyNative> _surfaceNotification =
+    NativeCallable<_SurfaceNotifyNative>.listener(_dispatchSurfaceNotification);
 
 final class _DtnSurfaceSnapshotV1 extends Struct {
   @Uint32()
@@ -774,6 +841,23 @@ external int _abiVersion();
 )
 external Pointer<Void> _surfaceCreate();
 
+@Native<Int32 Function(Pointer<NativeFunction<_SurfaceNotifyNative>> callback)>(
+  symbol: 'dtn_set_surface_notify_callback',
+  assetId: _assetId,
+)
+external int _setSurfaceNotifyCallback(
+  Pointer<NativeFunction<_SurfaceNotifyNative>> callback,
+);
+
+@Native<Int32 Function(Pointer<Void>, Uint64)>(
+  symbol: 'dtn_surface_set_notification_id',
+  assetId: _assetId,
+)
+external int _surfaceSetNotificationId(
+  Pointer<Void> surface,
+  int notificationId,
+);
+
 @Native<Int32 Function(Pointer<Void>, Pointer<Uint8>, Size)>(
   symbol: 'dtn_surface_apply_projection',
   assetId: _assetId,
@@ -840,6 +924,12 @@ external int _surfaceApplyResult(
   assetId: _assetId,
 )
 external int _surfaceFocus(Pointer<Void> surface, int target);
+
+@Native<Int32 Function(Pointer<Void>)>(
+  symbol: 'dtn_surface_present_discard_confirmation',
+  assetId: _assetId,
+)
+external int _surfacePresentDiscardConfirmation(Pointer<Void> surface);
 
 @Native<Int32 Function(Pointer<Void>, Uint64, Uint64)>(
   symbol: 'dtn_surface_attach_to_renderer',

@@ -20,6 +20,28 @@ typedef TerminalNoteStoreLocationResolver = TerminalNoteStoreLocation Function(
   Map<String, String> environment,
 );
 typedef TerminalNoteUtcMicrosClock = int Function();
+typedef TerminalNoteProductSurfaceEventHandler = void Function(PaneId paneId);
+
+enum TerminalNoteProductFocusTarget { rail, editor }
+
+/// Content-free interaction state read from one generation-bound surface.
+final class TerminalNoteProductInteractionSnapshot {
+  const TerminalNoteProductInteractionSnapshot({
+    required this.surfaceGeneration,
+    required this.visibility,
+    required this.editorMode,
+    required this.draftGeneration,
+    required this.editorDirty,
+    required this.confirmingDiscard,
+  });
+
+  final int surfaceGeneration;
+  final TerminalNoteSurfaceVisibility visibility;
+  final TerminalNoteEditorMode editorMode;
+  final int draftGeneration;
+  final bool editorDirty;
+  final bool confirmingDiscard;
+}
 
 enum TerminalNoteProductTopologyDisposition {
   applied,
@@ -146,6 +168,22 @@ abstract interface class TerminalNoteProductTopologyPort
   /// The application invokes this after a routed native Note interaction;
   /// there is deliberately no idle polling timer.
   Future<TerminalNoteProductTopologyResult> pumpSurfaceIntent(PaneId paneId);
+
+  void setSurfaceEventHandler(TerminalNoteProductSurfaceEventHandler? handler);
+
+  TerminalNoteProductInteractionSnapshot? interactionSnapshotForPane(
+    PaneId paneId,
+  );
+
+  bool focusSurface(PaneId paneId, TerminalNoteProductFocusTarget target);
+
+  bool presentDiscardConfirmation(PaneId paneId);
+
+  bool surfaceContainsPoint(
+    PaneId paneId, {
+    required double x,
+    required double y,
+  });
 
   bool prepareSurfaceForHostTeardown(PaneId paneId);
 
@@ -290,6 +328,7 @@ final class TerminalNoteProductSubsystem
       <PaneId, TerminalNoteContextKind>{};
   final Map<PaneId, _TerminalNoteProductSurface> _surfaces =
       <PaneId, _TerminalNoteProductSurface>{};
+  TerminalNoteProductSurfaceEventHandler? _surfaceEventHandler;
   Future<void> _topologyTail = Future<void>.value();
   TerminalNoteFeatureConfiguration _configuration;
   TerminalNoteNativePresentationState _presentation;
@@ -403,23 +442,115 @@ final class TerminalNoteProductSubsystem
       _serialize(() => _pumpSurfaceIntent(paneId));
 
   @override
+  void setSurfaceEventHandler(TerminalNoteProductSurfaceEventHandler? handler) {
+    _surfaceEventHandler = handler;
+  }
+
+  @override
+  TerminalNoteProductInteractionSnapshot? interactionSnapshotForPane(
+    PaneId paneId,
+  ) {
+    final _TerminalNoteProductSurface? surface = _surfaces[paneId];
+    final TerminalNoteSurfaceProjection? projection =
+        surface?.adapter.lastAuthorityProjection;
+    if (surface == null || projection == null || surface.adapter.isDisposed) {
+      return null;
+    }
+    try {
+      final TerminalNotesNativeSnapshot native = surface.adapter.snapshot;
+      if (native.surfaceGeneration != projection.surfaceGeneration ||
+          native.projectionGeneration != projection.projectionGeneration) {
+        return null;
+      }
+      return TerminalNoteProductInteractionSnapshot(
+        surfaceGeneration: projection.surfaceGeneration,
+        visibility: projection.visibility,
+        editorMode: projection.editorMode,
+        draftGeneration: projection.draftGeneration,
+        editorDirty: native.editorDirty,
+        confirmingDiscard: native.confirmingDiscard,
+      );
+    } on Object {
+      return null;
+    }
+  }
+
+  @override
+  bool focusSurface(PaneId paneId, TerminalNoteProductFocusTarget target) {
+    final _TerminalNoteProductSurface? surface = _surfaces[paneId];
+    if (surface == null ||
+        !surface.hostAttached ||
+        surface.adapter.isDisposed) {
+      return false;
+    }
+    try {
+      return surface.adapter.focus(switch (target) {
+        TerminalNoteProductFocusTarget.rail =>
+          TerminalNotesNativeFocusTarget.rail,
+        TerminalNoteProductFocusTarget.editor =>
+          TerminalNotesNativeFocusTarget.editor,
+      });
+    } on Object {
+      return false;
+    }
+  }
+
+  @override
+  bool presentDiscardConfirmation(PaneId paneId) {
+    final _TerminalNoteProductSurface? surface = _surfaces[paneId];
+    if (surface == null ||
+        !surface.hostAttached ||
+        surface.adapter.isDisposed) {
+      return false;
+    }
+    try {
+      return surface.adapter.presentDiscardConfirmation();
+    } on Object {
+      return false;
+    }
+  }
+
+  @override
+  bool surfaceContainsPoint(
+    PaneId paneId, {
+    required double x,
+    required double y,
+  }) {
+    if (!x.isFinite || !y.isFinite) return false;
+    final _TerminalNoteProductSurface? surface = _surfaces[paneId];
+    if (surface == null ||
+        !surface.hostAttached ||
+        surface.adapter.isDisposed) {
+      return false;
+    }
+    try {
+      final TerminalNotesNativePresentation presentation =
+          surface.adapter.presentation;
+      bool contains(TerminalNotesRect rect) =>
+          rect.width > 0 &&
+          rect.height > 0 &&
+          x >= rect.x &&
+          x < rect.x + rect.width &&
+          y >= rect.y &&
+          y < rect.y + rect.height;
+      return (presentation.badgeVisible && contains(presentation.badgeHit)) ||
+          (presentation.railVisible && contains(presentation.rail));
+    } on Object {
+      return false;
+    }
+  }
+
+  @override
   bool prepareSurfaceForHostTeardown(PaneId paneId) {
     final _TerminalNoteProductSurface? surface = _surfaces[paneId];
     if (surface == null || !surface.hostAttached) return true;
     try {
       surface.adapter.detachFromHost();
       surface.hostAttached = false;
-      final TerminalNoteSurfaceResult result = _authority.updateSurface(
-        sequence: _authority.nextSequence(),
-        paneId: paneId,
-        surfaceGeneration: surface.surfaceGeneration,
-        visibility: TerminalNoteSurfaceVisibility.collapsed,
-        foreground: false,
-        occluded: true,
-      );
-      if (result.disposition == TerminalNoteSurfaceDisposition.applied) {
-        return true;
-      }
+      // Host replacement is a composition transition, not a user Close.
+      // Preserve the authority-owned visibility/editor state so the same
+      // surface generation can resume on the replacement renderer.
+      return true;
     } on Object {
       // Synchronous native destruction below is the final host-safety fence.
     }
@@ -462,6 +593,9 @@ final class TerminalNoteProductSubsystem
           _configuration,
         ),
       );
+      adapter.setNotificationHandler(() {
+        if (!_stopping) _surfaceEventHandler?.call(paneId);
+      });
     } on Object {
       return const TerminalNoteProductTopologyResult(
         TerminalNoteProductTopologyDisposition.nativeUnavailable,
@@ -605,11 +739,14 @@ final class TerminalNoteProductSubsystem
       );
     }
     surface.configuration = configuration;
+    final TerminalNoteSurfaceVisibility authorityVisibility =
+        surface.adapter.lastAuthorityProjection?.visibility ??
+        configuration.visibility;
     final TerminalNoteSurfaceResult result = _authority.updateSurface(
       sequence: _authority.nextSequence(),
       paneId: paneId,
       surfaceGeneration: surface.surfaceGeneration,
-      visibility: configuration.visibility,
+      visibility: authorityVisibility,
       foreground: configuration.foreground,
       occluded: configuration.occluded,
     );
@@ -913,6 +1050,7 @@ final class TerminalNoteProductSubsystem
   }
 
   Future<void> _runShutdown() async {
+    _surfaceEventHandler = null;
     try {
       await _authority.stop();
     } finally {

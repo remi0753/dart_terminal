@@ -109,6 +109,10 @@ final class _MissingBindings implements TerminalNotesNativeBindings {
   Object createSurface() => throw UnsupportedError('unreachable');
 
   @override
+  void setNotificationHandler(Object handle, void Function()? handler) =>
+      throw UnsupportedError('unreachable');
+
+  @override
   int applyProjection(Object handle, Uint8List bytes) =>
       throw UnsupportedError('unreachable');
 
@@ -140,6 +144,10 @@ final class _MissingBindings implements TerminalNotesNativeBindings {
 
   @override
   int focus(Object handle, int target) => throw UnsupportedError('unreachable');
+
+  @override
+  int presentDiscardConfirmation(Object handle) =>
+      throw UnsupportedError('unreachable');
 
   @override
   int attachToRenderer(

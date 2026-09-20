@@ -10,6 +10,12 @@ import 'terminal_note_projection.dart';
 abstract interface class TerminalNoteNativeSurfaceChannel {
   TerminalNotesApplyDisposition apply(TerminalNotesProjection projection);
 
+  TerminalNotesNativeSnapshot get snapshot;
+
+  TerminalNotesNativePresentation get presentation;
+
+  void setNotificationHandler(void Function()? handler);
+
   TerminalNotesNativeIntent? takeIntent();
 
   TerminalNotesResultApplyDisposition applyResult(
@@ -17,6 +23,8 @@ abstract interface class TerminalNoteNativeSurfaceChannel {
   );
 
   bool focus(TerminalNotesNativeFocusTarget target);
+
+  bool presentDiscardConfirmation();
 
   TerminalNotesAttachDisposition attachToRenderer({
     required int rendererHandle,
@@ -46,6 +54,16 @@ final class TerminalNoteFfiSurfaceChannel
       surface.apply(projection);
 
   @override
+  TerminalNotesNativeSnapshot get snapshot => surface.snapshot;
+
+  @override
+  TerminalNotesNativePresentation get presentation => surface.presentation;
+
+  @override
+  void setNotificationHandler(void Function()? handler) =>
+      surface.setNotificationHandler(handler);
+
+  @override
   TerminalNotesNativeIntent? takeIntent() => surface.takeIntent();
 
   @override
@@ -55,6 +73,9 @@ final class TerminalNoteFfiSurfaceChannel
 
   @override
   bool focus(TerminalNotesNativeFocusTarget target) => surface.focus(target);
+
+  @override
+  bool presentDiscardConfirmation() => surface.presentDiscardConfirmation();
 
   @override
   TerminalNotesAttachDisposition attachToRenderer({
@@ -171,9 +192,29 @@ final class TerminalNoteNativeSurfaceAdapter
     return _channel.applyResult(result);
   }
 
+  TerminalNotesNativeSnapshot get snapshot {
+    _ensureLive();
+    return _channel.snapshot;
+  }
+
+  TerminalNotesNativePresentation get presentation {
+    _ensureLive();
+    return _channel.presentation;
+  }
+
+  void setNotificationHandler(void Function()? handler) {
+    _ensureLive();
+    _channel.setNotificationHandler(handler);
+  }
+
   bool focus(TerminalNotesNativeFocusTarget target) {
     _ensureLive();
     return _channel.focus(target);
+  }
+
+  bool presentDiscardConfirmation() {
+    _ensureLive();
+    return _channel.presentDiscardConfirmation();
   }
 
   TerminalNotesAttachDisposition attachToRenderer({
@@ -220,6 +261,7 @@ final class TerminalNoteNativeSurfaceAdapter
     _lastAuthorityProjection = null;
     _lastNativeProjection = null;
     try {
+      _channel.setNotificationHandler(null);
       _channel.detachFromHost();
     } on Object {
       // Native destruction remains mandatory after a failed detach.

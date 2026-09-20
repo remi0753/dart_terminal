@@ -44,9 +44,11 @@ static bool dtn_valid_editor_string(NSString* value,
 static int32_t dtn_emit_view_intent(DtnSurface* surface, uint32_t kind,
                                     NSString* body, uint32_t color,
                                     uint64_t token);
+static void dtn_notify_surface(DtnSurface* surface);
 static bool dtn_intent_kind_commits(uint32_t kind);
 static bool dtn_intent_kind_projects(uint32_t kind);
 static const da_native_extension_services_v1* g_dtn_services = NULL;
+static DtnSurfaceNotifyV1 g_dtn_surface_notify = NULL;
 
 typedef void* (*DtnRendererNativeViewV1)(uint64_t handle,
                                          uint64_t generation);
@@ -457,6 +459,7 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 @property(nonatomic, strong) NSButton* discardButton;
 @property(nonatomic, strong) NSButton* keepEditingButton;
 @property(nonatomic, strong) NSTextField* errorLabel;
+@property(nonatomic, copy) void (^onInteractionChanged)(void);
 @property(nonatomic, copy) NSString* baselineBody;
 @property(nonatomic) uint32_t baselineColor;
 @property(nonatomic) uint64_t draftGeneration;
@@ -670,6 +673,7 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 - (void)textDidChange:(NSNotification*)notification {
   (void)notification;
   self.errorLabel.hidden = YES;
+  if (self.onInteractionChanged != nil) self.onInteractionChanged();
 }
 
 - (BOOL)textView:(NSTextView*)textView
@@ -874,6 +878,10 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     _editor.discardButton.action = @selector(onDiscard:);
     _editor.keepEditingButton.target = self;
     _editor.keepEditingButton.action = @selector(onKeepEditing:);
+    __weak DtnNoteSurfaceView* weak_self = self;
+    _editor.onInteractionChanged = ^{
+      dtn_notify_surface(weak_self.nativeSurface);
+    };
     [_rail addSubview:_editor];
     [self setAccessibilityElement:NO];
   }
@@ -948,6 +956,7 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
       dtn_emit_view_intent(self.nativeSurface, kind, body, color, token);
   if (status == DTN_STATUS_OK) {
     [self setSemanticControlsEnabled:NO];
+    dtn_notify_surface(self.nativeSurface);
   } else {
     [self.editor showFixedError];
   }
@@ -967,6 +976,7 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   (void)sender;
   if (self.editor.isDirty) {
     [self.editor showDiscardConfirmation];
+    dtn_notify_surface(self.nativeSurface);
     return;
   }
   [self emitIntent:DTN_INTENT_CANCEL
@@ -988,6 +998,7 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   (void)sender;
   [self.editor hideDiscardConfirmation];
   [self.editor.textView.window makeFirstResponder:self.editor.textView];
+  dtn_notify_surface(self.nativeSurface);
 }
 
 - (void)onDraftColor:(id)sender {
@@ -1001,6 +1012,7 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
       DtnColor(DtnSurfaceRgba(color, dark)).CGColor;
   self.editor.layer.borderColor =
       DtnColor(DtnAccentRgba(color, dark)).CGColor;
+  dtn_notify_surface(self.nativeSurface);
 }
 
 - (void)onCardColor:(id)sender {
@@ -1501,12 +1513,21 @@ struct DtnSurface {
   uint64_t last_event_generation;
   uint32_t emitted_intent_count;
   uint32_t applied_result_count;
+  uint64_t notification_id;
   bool has_pending_intent;
   bool pending_intent_delivered;
   bool initialized;
 };
 
 static atomic_uint_fast64_t g_live_surfaces = 0;
+
+static void dtn_notify_surface(DtnSurface* surface) {
+  if (surface == NULL || surface->notification_id == 0u ||
+      g_dtn_surface_notify == NULL) {
+    return;
+  }
+  g_dtn_surface_notify(surface->notification_id);
+}
 
 static uint16_t dtn_read_u16(const uint8_t* bytes) {
   return (uint16_t)bytes[0] | ((uint16_t)bytes[1] << 8u);
@@ -1835,6 +1856,29 @@ DtnSurface* dtn_surface_create(void) {
   surface->view.nativeSurface = surface;
   atomic_fetch_add_explicit(&g_live_surfaces, 1u, memory_order_relaxed);
   return surface;
+}
+
+int32_t dtn_set_surface_notify_callback(DtnSurfaceNotifyV1 callback) {
+  if (callback == NULL) return DTN_STATUS_INVALID_ARGUMENT;
+  if (g_dtn_surface_notify != NULL && g_dtn_surface_notify != callback) {
+    return DTN_STATUS_INVALID_ARGUMENT;
+  }
+  g_dtn_surface_notify = callback;
+  return DTN_STATUS_OK;
+}
+
+int32_t dtn_surface_set_notification_id(DtnSurface* surface,
+                                        uint64_t notification_id) {
+  if (surface == NULL || notification_id == 0u || notification_id > INT64_MAX) {
+    return DTN_STATUS_INVALID_ARGUMENT;
+  }
+  if (![NSThread isMainThread]) return DTN_STATUS_WRONG_THREAD;
+  if (surface->notification_id != 0u &&
+      surface->notification_id != notification_id) {
+    return DTN_STATUS_INVALID_ARGUMENT;
+  }
+  surface->notification_id = notification_id;
+  return DTN_STATUS_OK;
 }
 
 int32_t dtn_surface_apply_projection(DtnSurface* surface, const uint8_t* bytes,
@@ -2320,6 +2364,19 @@ int32_t dtn_surface_focus(DtnSurface* surface, uint32_t target) {
   return [surface->view focusInsideSurface:target];
 }
 
+int32_t dtn_surface_present_discard_confirmation(DtnSurface* surface) {
+  if (surface == NULL) return DTN_STATUS_INVALID_ARGUMENT;
+  if (![NSThread isMainThread]) return DTN_STATUS_WRONG_THREAD;
+  if (!surface->initialized ||
+      surface->projection.editor_mode == DTN_EDITOR_INACTIVE ||
+      surface->view.editor.hidden || !surface->view.editor.isDirty) {
+    return DTN_STATUS_INVALID_ARGUMENT;
+  }
+  [surface->view.editor showDiscardConfirmation];
+  dtn_notify_surface(surface);
+  return DTN_STATUS_OK;
+}
+
 void* dtn_surface_native_view(DtnSurface* surface) {
   if (surface == NULL || ![NSThread isMainThread]) return NULL;
   return (__bridge void*)surface->view;
@@ -2370,6 +2427,7 @@ void dtn_surface_destroy(DtnSurface* surface) {
   if (surface == NULL) return;
   if ([NSThread isMainThread]) {
     surface->view.nativeSurface = NULL;
+    surface->view.editor.onInteractionChanged = nil;
     surface->view.editor.textView.delegate = nil;
     [surface->view.editor.textView.undoManager removeAllActions];
     [surface->view removeFromSuperview];

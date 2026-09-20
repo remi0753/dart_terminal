@@ -318,6 +318,10 @@ final class TerminalNotesNativeSurface {
 
   bool get isDisposed => _handle == null;
 
+  void setNotificationHandler(void Function()? handler) {
+    _bindings.setNotificationHandler(_requireHandle(), handler);
+  }
+
   TerminalNotesApplyDisposition apply(TerminalNotesProjection projection) {
     final Object handle = _requireHandle();
     final Uint8List bytes = TerminalNotesProjectionCodec.encode(projection);
@@ -393,6 +397,16 @@ final class TerminalNotesNativeSurface {
     if (status == nativeStatusOk) return true;
     if (status == nativeStatusNotFound) return false;
     throw TerminalNotesNativeException('focus', status);
+  }
+
+  bool presentDiscardConfirmation() {
+    final int status = _bindings.presentDiscardConfirmation(_requireHandle());
+    if (status == nativeStatusOk) return true;
+    if (status == nativeStatusInvalidArgument ||
+        status == nativeStatusNotFound) {
+      return false;
+    }
+    throw TerminalNotesNativeException('presentDiscardConfirmation', status);
   }
 
   TerminalNotesAttachDisposition attachToRenderer({
@@ -547,6 +561,7 @@ final class TerminalNotesNativeSurface {
     final Object? handle = _handle;
     if (handle == null) return;
     _handle = null;
+    _bindings.setNotificationHandler(handle, null);
     _bindings.destroySurface(handle);
   }
 

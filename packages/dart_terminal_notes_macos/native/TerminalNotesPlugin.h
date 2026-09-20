@@ -121,6 +121,10 @@ enum {
 
 typedef struct DtnSurface DtnSurface;
 
+// Process-lifetime scalar wake-up. The callback owns no surface/content and
+// must return immediately; Dart drains state through the bounded APIs below.
+typedef void (*DtnSurfaceNotifyV1)(uint64_t notification_id);
+
 typedef struct DtnSurfaceSnapshotV1 {
   uint32_t struct_size;
   uint32_t version;
@@ -259,6 +263,13 @@ __attribute__((visibility("default"))) int32_t dtn_initialize(
 // AppKit process-main-thread only. Wrong-thread calls fail without mutation.
 __attribute__((visibility("default"))) DtnSurface* dtn_surface_create(void);
 
+__attribute__((visibility("default"))) int32_t
+dtn_set_surface_notify_callback(DtnSurfaceNotifyV1 callback);
+
+__attribute__((visibility("default"))) int32_t
+dtn_surface_set_notification_id(DtnSurface* surface,
+                                uint64_t notification_id);
+
 __attribute__((visibility("default"))) int32_t dtn_surface_apply_projection(
     DtnSurface* surface, const uint8_t* bytes, size_t length);
 
@@ -289,6 +300,11 @@ __attribute__((visibility("default"))) int32_t dtn_surface_apply_result(
 // confirm its generation-bound transfer only after this call succeeds.
 __attribute__((visibility("default"))) int32_t dtn_surface_focus(
     DtnSurface* surface, uint32_t target);
+
+// Presents the inline dirty-discard choice without replaying the outside
+// pointer event into either the terminal or the editor.
+__attribute__((visibility("default"))) int32_t
+dtn_surface_present_discard_confirmation(DtnSurface* surface);
 
 // Native-to-native composition seam. The returned view is unretained and must
 // never cross Dart FFI. attach consumes neither object.

@@ -64,6 +64,10 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
     );
     final TerminalNoteProductSubsystem subsystem =
         start.runtime! as TerminalNoteProductSubsystem;
+    PaneId? notifiedPane;
+    subsystem.setSurfaceEventHandler((PaneId paneId) {
+      notifiedPane = paneId;
+    });
     _expect(
       subsystem.livePaneCount == 2 &&
           subsystem.liveSurfaceCount == 0 &&
@@ -123,8 +127,19 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
           first.projections.last.visibility ==
               TerminalNotesVisibility.expanded &&
           first.projections.last.presentationEligible &&
-          first.projections.last.bodyFontMilliPoints == 15000,
+          first.projections.last.bodyFontMilliPoints == 15000 &&
+          subsystem.surfaceContainsPoint(const PaneId(1), x: 500, y: 100) &&
+          subsystem.focusSurface(
+            const PaneId(1),
+            TerminalNoteProductFocusTarget.rail,
+          ),
       'surface attach orders native host and layout before authority projection',
+    );
+    first.notify();
+    _expect(
+      notifiedPane == const PaneId(1) &&
+          first.focusTargets.single == TerminalNotesNativeFocusTarget.rail,
+      'native wake-up and focus remain pane-local and content-free',
     );
     final TerminalNoteProductTopologyResult duplicate = await subsystem
         .attachSurface(
@@ -223,9 +238,8 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
     _expect(
       subsystem.prepareSurfaceForHostTeardown(const PaneId(1)) &&
           subsystem.nativeSurfaceCount == 0 &&
-          first.projections.last.visibility ==
-              TerminalNotesVisibility.collapsed,
-      'host teardown preparation detaches native composition synchronously',
+          first.projections.last.visibility == TerminalNotesVisibility.expanded,
+      'host teardown detaches composition without converting it into user Close',
     );
     final TerminalNoteProductTopologyResult preparedReattach = await subsystem
         .updateSurface(
@@ -273,10 +287,31 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
               'take,projection,result',
       'explicit pump applies authority create projection before accepted result',
     );
+    final TerminalNoteProductTopologyResult preserved = await subsystem
+        .updateSurface(
+          paneId: const PaneId(1),
+          configuration: _surfaceConfiguration(
+            handle: 14,
+            visibility: TerminalNoteSurfaceVisibility.collapsed,
+            foreground: true,
+            occluded: false,
+          ),
+        );
+    final TerminalNoteProductInteractionSnapshot? creatingInteraction =
+        subsystem.interactionSnapshotForPane(const PaneId(1));
+    final TerminalNotesProjection creatingAfterRefresh = first.projections.last;
+    _expect(
+      preserved.isAccepted &&
+          first.projections.last.visibility ==
+              TerminalNotesVisibility.expanded &&
+          creatingInteraction?.editorMode == TerminalNoteEditorMode.creating &&
+          creatingInteraction?.draftGeneration == creating.draftGeneration,
+      'layout refresh preserves authority-owned expanded editor state',
+    );
 
     first.intents.add(
       _nativeIntent(
-        creating,
+        creatingAfterRefresh,
         eventGeneration: 2,
         kind: TerminalNotesIntentKind.save,
         color: TerminalNotesColor.yellow,
@@ -293,7 +328,7 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
           savedProjection.cards.length == 1 &&
           savedProjection.cards.single.body == 'remember the build command' &&
           savedProjection.selectedToken == savedProjection.cards.single.token &&
-          savedProjection.storeRevision > creating.storeRevision &&
+          savedProjection.storeRevision > creatingAfterRefresh.storeRevision &&
           first.results.last.newStoreRevision == savedProjection.storeRevision,
       'Save commits durably before publishing the selected card and result',
     );
@@ -672,6 +707,94 @@ final class _FakeProductNativeChannel
   int detachCount = 0;
   int disposeCount = 0;
   int takeIntentCount = 0;
+  int discardConfirmationCount = 0;
+  bool editorDirty = false;
+  bool confirmingDiscard = false;
+  void Function()? notificationHandler;
+  final List<TerminalNotesNativeFocusTarget> focusTargets =
+      <TerminalNotesNativeFocusTarget>[];
+
+  @override
+  TerminalNotesNativeSnapshot get snapshot {
+    final TerminalNotesProjection projection = projections.last;
+    return TerminalNotesNativeSnapshot(
+      paneId: projection.paneId,
+      surfaceGeneration: projection.surfaceGeneration,
+      projectionGeneration: projection.projectionGeneration,
+      storeRevision: projection.storeRevision,
+      acceptedProjectionCount: projections.length,
+      rejectedProjectionCount: 0,
+      draftGeneration: projection.draftGeneration,
+      activeCount: projection.activeCount,
+      dueCount: projection.dueCount,
+      projectedCardCount: projection.cards.length,
+      materializedCardCount: projection.cards.length,
+      packetBytes: 0,
+      visibility: projection.visibility,
+      presentationEligible: projection.presentationEligible,
+      initialized: true,
+      readyCue: projection.readyCue,
+      darkAppearance: projection.darkAppearance,
+      increaseContrast: projection.increaseContrast,
+      differentiateWithoutColor: projection.differentiateWithoutColor,
+      reduceMotion: projection.reduceMotion,
+      systemBadgeVisible: projection.systemBadgeVisible,
+      featureState: projection.featureState,
+      surfaceState: projection.surfaceState,
+      section: projection.section,
+      editorMode: projection.editorMode,
+      messageKey: projection.messageKey,
+      pageStart: projection.pageStart,
+      totalCount: projection.totalCount,
+      bodyFontMilliPoints: projection.bodyFontMilliPoints,
+      outstandingIntent: intents.isNotEmpty,
+      emittedIntentCount: takeIntentCount,
+      appliedResultCount: results.length,
+      editorDirty: editorDirty,
+      confirmingDiscard: confirmingDiscard,
+      focusTarget: focusTargets.isEmpty
+          ? TerminalNotesNativeFocusTarget.none
+          : focusTargets.last,
+    );
+  }
+
+  @override
+  TerminalNotesNativePresentation get presentation {
+    final TerminalNotesProjection projection = projections.last;
+    final bool expanded =
+        projection.visibility == TerminalNotesVisibility.expanded;
+    return TerminalNotesNativePresentation(
+      projectionGeneration: projection.projectionGeneration,
+      paneWidth: layout?.$1 ?? 800,
+      paneHeight: layout?.$2 ?? 500,
+      backingScale: layout?.$3 ?? 2,
+      badgeHit: const TerminalNotesRect(x: 744, y: 228, width: 44, height: 44),
+      badgeVisual: const TerminalNotesRect(
+        x: 744,
+        y: 236,
+        width: 44,
+        height: 28,
+      ),
+      rail: const TerminalNotesRect(x: 468, y: 12, width: 320, height: 476),
+      firstCard: const TerminalNotesRect(x: 480, y: 74, width: 284, height: 88),
+      flags: expanded ? 2 : 1,
+      materializedCardCount: projection.cards.length,
+      accessibilityNodeCount: 1,
+      accessibilityBodyCount: projection.cards.length,
+      visibleAcknowledgementEligibleGeneration: projection.projectionGeneration,
+      accessibilityAnnouncementCount: 0,
+      animationMilliseconds: 0,
+      bodyFontMilliPoints: projection.bodyFontMilliPoints,
+      badgeDisplayCount: projection.activeCount,
+    );
+  }
+
+  @override
+  void setNotificationHandler(void Function()? handler) {
+    notificationHandler = handler;
+  }
+
+  void notify() => notificationHandler?.call();
 
   @override
   TerminalNotesApplyDisposition apply(TerminalNotesProjection projection) {
@@ -729,7 +852,16 @@ final class _FakeProductNativeChannel
   }
 
   @override
-  bool focus(TerminalNotesNativeFocusTarget target) => true;
+  bool focus(TerminalNotesNativeFocusTarget target) {
+    focusTargets.add(target);
+    return true;
+  }
+
+  @override
+  bool presentDiscardConfirmation() {
+    discardConfirmationCount++;
+    return true;
+  }
 
   @override
   void dispose() {

@@ -4324,6 +4324,27 @@ final class TerminalApplication {
           final _TerminalHierarchyProductPane? owner = owners[paneId];
           final TerminalPaneLayoutRect? rectangle = owner?.layout;
           if (owner == null || rectangle == null) return;
+          final TerminalNoteApplicationCoordinator? notes =
+              noteApplicationCoordinator;
+          if (notes != null &&
+              notes.handlePointerEvent(
+                paneId: paneId,
+                phase: switch (event.kind) {
+                  AppKitMouseEventKind.down =>
+                    TerminalNoteApplicationPointerPhase.down,
+                  AppKitMouseEventKind.up =>
+                    TerminalNoteApplicationPointerPhase.up,
+                  AppKitMouseEventKind.dragged =>
+                    TerminalNoteApplicationPointerPhase.drag,
+                  AppKitMouseEventKind.moved =>
+                    TerminalNoteApplicationPointerPhase.moved,
+                },
+                x: event.x - rectangle.left,
+                y: event.y - rectangle.top,
+              )) {
+            cancelHyperlinkInteraction(tab);
+            return;
+          }
           if (routeWindowInput(
                 paneId,
                 TerminalWindowInteractionInputFamily.mouse,
@@ -4982,6 +5003,7 @@ final class TerminalApplication {
             ],
             ensureQuickTerminalContext: true,
             presentation: notePresentationForPane(initialPane.id),
+            onError: recordAsynchronousError,
           );
       noteApplicationCoordinator = createdNoteCoordinator;
       noteConfigurationObserver = createdNoteCoordinator.applyLiveConfiguration;

@@ -319,6 +319,10 @@ void _testSurfaceFacade() {
   final TerminalNotesNativeSurface surface = TerminalNotesNativeSurface(
     bindings: bindings,
   );
+  var notifications = 0;
+  surface.setNotificationHandler(() => notifications++);
+  bindings.notificationHandler?.call();
+  _expect(notifications == 1, 'typed scalar native notification');
   _expect(
     surface.apply(_projection()) == TerminalNotesApplyDisposition.accepted,
     'typed surface apply',
@@ -349,7 +353,8 @@ void _testSurfaceFacade() {
         !interaction.confirmingDiscard &&
         interaction.focusTarget == TerminalNotesNativeFocusTarget.none &&
         surface.focus(TerminalNotesNativeFocusTarget.rail) &&
-        !surface.focus(TerminalNotesNativeFocusTarget.editor),
+        !surface.focus(TerminalNotesNativeFocusTarget.editor) &&
+        surface.presentDiscardConfirmation(),
     'typed content-free interaction snapshot and focus request',
   );
   _expectThrows<ArgumentError>(
@@ -443,6 +448,7 @@ class _FakeBindings implements TerminalNotesNativeBindings {
   (int, int)? attachment;
   int attachStatus = 0;
   int detachCount = 0;
+  void Function()? notificationHandler;
 
   @override
   int get abiVersion => 1;
@@ -452,6 +458,12 @@ class _FakeBindings implements TerminalNotesNativeBindings {
 
   @override
   Object createSurface() => handle;
+
+  @override
+  void setNotificationHandler(Object handle, void Function()? handler) {
+    _expect(identical(handle, this.handle), 'fake notification handle');
+    notificationHandler = handler;
+  }
 
   @override
   int applyProjection(Object handle, Uint8List bytes) {
@@ -549,6 +561,12 @@ class _FakeBindings implements TerminalNotesNativeBindings {
 
   @override
   int focus(Object handle, int target) => target == 1 ? 0 : 6;
+
+  @override
+  int presentDiscardConfirmation(Object handle) {
+    _expect(identical(handle, this.handle), 'fake discard handle');
+    return 0;
+  }
 
   @override
   int attachToRenderer(
