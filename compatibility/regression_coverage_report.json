@@ -17,7 +17,7 @@
     },
     {
       "path": "compatibility/application_matrix_acceptance.json",
-      "sha256": "edb25bc4b91f4b72128676886e2c325ef3088d78dd8e991a60412ef2cefd4727"
+      "sha256": "4f27bc4ef32ed63e9e7e51a9718031ad186c56754303f7c6b3357de451c769ff"
     },
     {
       "path": "compatibility/differential_acceptance_report.json",
@@ -33,11 +33,11 @@
     },
     {
       "path": "README.md",
-      "sha256": "17ce6b5131eb9f154cee7cea2912755fa75e2a0d79cc638192f91133930ef6ca"
+      "sha256": "489185d64c8105d4155d502c87eabd45411b4860545004e6a7393e6dd53ff4e8"
     },
     {
       "path": "FEATURE_MATRIX.md",
-      "sha256": "b82cfc16600488ec8099ea7d6b0c95c37fa0fbea06404b423f9aa161c2a075fb"
+      "sha256": "907cf63cd776f67cf349935d99149c780d06e74b89eef2ee4d49a031f974028a"
     }
   ],
   "fix_families": [
@@ -128,7 +128,7 @@
       "id": "hilite-mouse",
       "disposition": "explicit-unsupported",
       "impact": "input-events",
-      "owner": "ROADMAP.md#phase-6-focus-mouse-query",
+      "owner": "docs/archive/terminal-emulator-release-roadmap.md#phase-6-focus-mouse-query",
       "variants": 1,
       "screen_mutation": false,
       "matrix_blocker": false

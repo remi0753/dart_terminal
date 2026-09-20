@@ -102,7 +102,7 @@
       "inventory_ids": [
         "xterm:mode:xterm-hilite-mouse-tracking"
       ],
-      "owner": "ROADMAP.md#phase-6-focus-mouse-query",
+      "owner": "docs/archive/terminal-emulator-release-roadmap.md#phase-6-focus-mouse-query",
       "minimal_hex": "1b5b3f313030316c",
       "variants": [
         "1b5b3f313030316c"

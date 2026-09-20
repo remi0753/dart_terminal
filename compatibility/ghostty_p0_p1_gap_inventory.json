@@ -4,7 +4,7 @@
   "status": "closed-no-actionable-p0-p1",
   "matrix": {
     "path": "FEATURE_MATRIX.md",
-    "sha256": "b82cfc16600488ec8099ea7d6b0c95c37fa0fbea06404b423f9aa161c2a075fb",
+    "sha256": "907cf63cd776f67cf349935d99149c780d06e74b89eef2ee4d49a031f974028a",
     "pinned_ghostty_revision": "d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
     "pinned_archive_sha256": "3111538f70b1a7fed43646395906724db9ef92eb85d66410c5bce2067ad2b7d2"
   },
@@ -48,11 +48,11 @@
     },
     {
       "path": "compatibility/application_matrix_acceptance.json",
-      "sha256": "edb25bc4b91f4b72128676886e2c325ef3088d78dd8e991a60412ef2cefd4727"
+      "sha256": "4f27bc4ef32ed63e9e7e51a9718031ad186c56754303f7c6b3357de451c769ff"
     },
     {
       "path": "compatibility/regression_coverage_report.json",
-      "sha256": "645e6b02d875eebb407c973d9888845ec5f9ab21c1b49d9237d3df6d25b5cb72"
+      "sha256": "6b508987c0c2f5b11e986fc42c064f4c12b6fa57ce95cd5db4e88d88115adfd8"
     },
     {
       "path": "benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json",

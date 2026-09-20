@@ -60,6 +60,9 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
 の同じIDを参照する。現在の先頭未完了taskをcommitする前に後続へ進まない。Stage taskはcode mergeだけで
 完了にせず、指定された実測evidenceを満たすまで未完了とする。
 
+- [x] archived release roadmapへcompatibility acceptanceのhistorical owner参照を移す
+  （[`archived-roadmap-acceptance-ownership.md`](docs/contextual-memory/archived-roadmap-acceptance-ownership.md)
+  を参照して実施する）
 - [ ] CM-01 Pure Note domain model と trigger state machineを実装する
 - [ ] CM-02 Note store version 1 codecを実装する
 - [ ] CM-03 durable Note store workerを実装する

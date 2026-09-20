@@ -122,7 +122,9 @@ TerminalApplicationAcceptanceResult runTerminalApplicationAcceptanceChecks({
   final List<_AcceptanceGap> gaps = _parseGaps(
     report['gaps'],
     inventoryById,
-    File.fromUri(root.uri.resolve('ROADMAP.md')).readAsStringSync(),
+    File.fromUri(
+      root.uri.resolve('docs/archive/terminal-emulator-release-roadmap.md'),
+    ).readAsStringSync(),
   );
   final Map<String, _AcceptanceGap> gapByVariant = <String, _AcceptanceGap>{};
   for (final _AcceptanceGap gap in gaps) {
@@ -287,13 +289,15 @@ List<_AcceptanceGap> _parseGaps(
   String roadmap,
 ) {
   const Map<String, String> owners = <String, String>{
-    'ROADMAP.md#phase-6-terminfo': 'terminfo source、compile/install/fallback',
-    'ROADMAP.md#phase-6-osc-title-cwd-policy':
+    'docs/archive/terminal-emulator-release-roadmap.md#phase-6-terminfo':
+        'terminfo source、compile/install/fallback',
+    'docs/archive/terminal-emulator-release-roadmap.md#phase-6-osc-title-cwd-policy':
         'OSC title/cwd/hyperlink/palette/clipboard policy',
-    'ROADMAP.md#phase-6-focus-mouse-query':
+    'docs/archive/terminal-emulator-release-roadmap.md#phase-6-focus-mouse-query':
         'focus/mouse/bracketed paste/query reports',
-    'ROADMAP.md#phase-9-kitty-keyboard-protocol': 'Kitty keyboard protocol',
-    'ROADMAP.md#phase-9-light-dark-notification-reports':
+    'docs/archive/terminal-emulator-release-roadmap.md#phase-9-kitty-keyboard-protocol':
+        'Kitty keyboard protocol',
+    'docs/archive/terminal-emulator-release-roadmap.md#phase-9-light-dark-notification-reports':
         'light/dark notification と extended reports',
   };
   final List<Object?> values = _array(value, 'gaps');
@@ -343,7 +347,10 @@ List<_AcceptanceGap> _parseGaps(
       );
     }
     _expect(
-      inventoryIds.isNotEmpty || owner.startsWith('ROADMAP.md#phase-9-'),
+      inventoryIds.isNotEmpty ||
+          owner.startsWith(
+            'docs/archive/terminal-emulator-release-roadmap.md#phase-9-',
+          ),
       '$id unlisted extension lacks a future protocol owner',
     );
     final String minimalHex = _hex(gap['minimal_hex'], 'gap.minimal_hex');
