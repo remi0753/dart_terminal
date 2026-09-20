@@ -240,3 +240,61 @@ adapterへ注入する。
 
 このサブタスクではtwo-process lock helper、実filesystem attack/recovery/export matrix、1/16 MiB 20回performance gateを
 実施していない。次の最終サブタスクで実測し、全条件を満たした場合だけ親CM-03も完了にする。
+
+### 2026-09-20: 実filesystem受け入れと性能gate着手
+
+- ROADMAPを再読し、先頭未完了がCM-03第4サブタスクであることを確認した。ここではproduct semanticsを追加せず、既存の
+  generic filesystem capability、transaction engine、isolate clientを実macOS filesystem/processで結合検証する。
+- Security fixtureはtrusted system tempを先にreal pathへ解決し、そのlocal treeだけを使う。0700/0600 narrowing、directory/file
+  symlink、hard-link、safe orphan pending cleanupを個別directoryで検証し、cleanup対象を曖昧なpathやglobにしない。
+- Two-process contentionは同じtest fileのcontent-free helper modeを別Dart processで起動し、kernel lock保持中の親process openが
+  `lockBusy`、helper終了後の再openが成功することを確認する。Lock file pathnameの有無だけをcontention判定にしない。
+- Recovery fixtureは実current/backupをcommit後にcurrentを破損してread-only preview→explicit retryを検証する。別fixtureで
+  durable deletion journalだけをcurrentへ重ね、load/export/次commit/backup/journal compactionの全段階で削除本文/IDが復活しないこと、
+  journal-only storeをempty resetしないことを確認する。
+- Worker privacyは本文、persistent ID、timestamp、color、trigger sentinelを持つdocumentをhelper process内のproduction isolateで
+  commitし、captured stdout/stderrにsentinel 0を要求する。Helper自身はfixed machine line以外に製品dataを出さない。
+- Performanceはlocal fixtureでwarm-up後20回を測る。1 MiB以上のcanonical Note storeはproduction isolate client経由のdurable
+  commit全体をp95 250 ms以下、generic primitiveは16 MiB exact bytesのwrite+file fsync+rename+directory fsyncをp95 1.5 s以下とする。
+  Candidate/byte allocationは計測外、sortingはnearest-rank p95（20回の19番目）とし、基準未達なら閾値を変更せず停止する。
+- `dart_appkit`には変更を加えない。受け入れtestとtask memo、runner/hash以外に変更が必要になった場合は原因を記録してから判断する。
+- Performance fixture初回は256 Noteを一contextへ配置し、modelのper-attached-context上限128により計測前の
+  `invariantViolation`で停止した。Store/body総量の条件ではなくfixture topologyの誤りなので、128 Noteずつ二contextへ分け、
+  model上限や製品実装を変更せず再実行する。
+- JIT acceptance通過後にhard baseline条件を再確認し、実行hostはApple M1 arm64、16 GB、macOS 26.6.2、fixtureを置く
+  Data volumeはlocal APFSと確認した。最初のhardware確認ではsandbox内`sysctl`がpermission errorになったため、識別情報を
+  記録しない`uname`/`system_profiler`の必要項目と`mount`のfilesystem種別だけを採用した。Release AOTでも同じtestを動かせるよう、
+  helper process argvをJIT script起動とAOT self-executable起動の双方へ対応させる。
+- Release AOTの最初の試行では`dart compile exe test/terminal_note_store_acceptance_test.dart`自体は成功したが、生成物には
+  build hookのdynamic native assetが同梱されず、最初のstore openがfixed `unknown` failureで停止した。この実行は性能証拠に
+  数えない。Native Assetsを持つhelperの既存packaging precedentとCLI helpを再確認し、`dart build cli --target=...`が
+  executableとdynamic libraryを同じbundleへ配置する正しい経路だと判断した。閾値やproduction error mappingは変更せず、
+  同じacceptance sourceをarm64 CLI bundleとしてbuildし直す。
+- `dart build cli`初回はroot packageの全transitive hookを評価し、既存rendererのMetal compilerがsandbox外の
+  `~/.cache/clang/ModuleCache`へ書けず停止した。Note store/native assetのcompile failureではないため、既定`HOME`を変えず
+  `CLANG_MODULE_CACHE_PATH`だけを`/private/tmp`の専用directoryへ注入して再実行したが、`xcrun metal`はその変数を採用せず同じ
+  locationで停止した。既存hookをtest都合で変更せず、macOS toolchainの通常cache writeだけを許可した同一buildを実行した。
+- Hook-aware `dart build cli`によるmacOS/arm64 bundle buildは成功し、durable-fileを含む4 native assetsをbundleへ配置した。
+  生成したRelease AOT executableで同一acceptanceを実行し、security、two-process contention、recovery、deletion/export、worker log
+  privacyがすべてpassした。Warm-up後20回のnearest-rank p95は、1 MiB以上のproduction-isolate durable commitが151,491 us
+  （上限250,000 us）、16 MiB generic durable primitiveが10,814 us（上限1,500,000 us）で、固定hard gateを満たした。
+
+### 2026-09-20: 実filesystem受け入れと性能gate完了
+
+- `terminal_note_store_acceptance_test.dart`をroot aggregate runnerへ接続した。実fixtureで0700/0600、safe orphan cleanup、
+  directory/current symlink、hard-link、別process kernel lock/stale pathname、corrupt-current recovery previewとexplicit retry、
+  deletion journalによるload/export/次commit/backupのresurrection 0、journal-only no-resetを検証する。
+- Exportはcancel時destination 0、Unicode filename成功、existing parent 0755不変、file 0600を確認した。Production isolate helperの
+  stdout/stderrを捕捉し、本文、persistent ID、timestamp、color、trigger、store pathの各sentinelが0であることを確認した。
+- 最終focused Developer JITは20回で1 MiB commit p95 117,176 us、16 MiB primitive p95 10,074 usとしてpassした。
+  直前の一回はDart CLIがsandbox外telemetry timestampを更新しようとしてtest開始前に停止したため証拠に数えず、通常CLI metadata
+  writeだけを許可して同一commandを再実行した。Test source/production codeや閾値は変更していない。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: 成功。360 files format変更0、全package/root analyze issue 0、native、security、
+  compatibility、integrationを含むaggregateが`dart_terminal tests passed`で終了した。Aggregate内の同じ実filesystem fixtureも
+  1 MiB commit p95 132,382 us、16 MiB primitive p95 13,600 usでpassした。
+- `make test`内のrelease-candidate daily-use matrixはprogram 8、workflow 8、gate 31、release blocker 0でpassした。
+  Runner hashを正規再生成済みである。`git diff --check`もpassし、generic durable-file package sourceにDart Terminal、Note、
+  AppKit、PTY依存0、`dart_appkit`変更0を再確認した。
+
+これでCM-03の4サブタスクを順に完了した。Application Note semantics、context restoration binding、native success表示は追加しておらず、
+次の先頭未完了task CM-04へ残す。
