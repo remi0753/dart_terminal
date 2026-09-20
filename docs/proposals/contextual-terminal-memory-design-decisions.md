@@ -1,6 +1,6 @@
 # Contextual terminal memory 設計判断一覧
 
-- 状態: Gate 1/2/4 完了、Gate 3/5/6/7は未決定（実装未承認）
+- 状態: Gate 1/2/3/4 完了、Gate 5/6/7は未決定（実装未承認）
 - 作成日: 2026-09-20
 - 対象提案: [`contextual-terminal-memory-and-input-checkpoints.md`](contextual-terminal-memory-and-input-checkpoints.md)
 
@@ -134,6 +134,21 @@ persistence、trigger、input authority、shell adapter、privacy、UX などに
 - 複数due Noteは単一railへFIFO coalesceし、capabilityはavailable/probing/suspended/unavailableを
   明示する。available以外をno-matchやsafeと表示しない。
 
+### 2026-09-20: Gate 3 data, persistence, and privacy decision
+
+- S1〜S3のNote、trigger、delivery、contextを別recordとし、延期中のcommand digest、raw command、
+  receipt fieldをinitial schemaへ入れない。本文は最大4,096 UTF-8 bytes／64行のplain textとし、
+  markup、link、command actionを解釈しない。
+- Note storeはrestorationから分離したversioned canonical JSONとし、single writer、checksum、
+  same-directory atomic replace、known-good backup、deletion journalをcontractに含める。user Noteは
+  quota到達やageによって自動evictせず、mutationを無変更で拒否する。
+- Storeは0600、directoryは0700とするが、application独自の暗号化はinitial releaseで提供しない。
+  UIでlocal plain-text保存とsecretを記入しない注意を明示する。command secret storageはS5とともに延期した。
+- Note本文、internal ID、timestamp、color、trigger historyはdiagnostics、log、analytics、crash metadataから
+  default-excludeする。明示exportとlogical deleteを採用し、importはinitial releaseで延期した。
+- field invariant、crash recovery、restoration reconciliation、quota、migration、privacy matrixの正本は
+  [`data, persistence, and privacy`](contextual-terminal-memory-data-persistence-privacy.md) とする。
+
 ## 判断方法
 
 各項目は次のいずれかで閉じる。`採用` だけが後続の仕様化と実装候補になる。
@@ -148,7 +163,9 @@ behavior」「検証可能な acceptance」「後続 task」を本書または�
 [`product slice decisions`](contextual-terminal-memory-product-slices.md) で完了した。
 Gate 2/4 のD-07〜D-11、D-21〜D-26は
 [`scope and trigger semantics`](contextual-terminal-memory-scope-trigger-semantics.md) で完了した。
-Gate 3/5/6/7は**未決定**であり、表に挙げた選択肢は採用を意味しない。
+Gate 3 のD-12〜D-20は
+[`data, persistence, and privacy`](contextual-terminal-memory-data-persistence-privacy.md) で完了した。
+Gate 5/6/7は**未決定**であり、表に挙げた選択肢は採用を意味しない。
 
 ## 機能 slice
 
@@ -202,6 +219,11 @@ opaque `TerminalNoteContextId`とした。workspace、invocation receipt、exact
 | D-11 | Scope transition | cwd change、tab move、pane split/close、window restoration、app restart、shell re-exec で note/rule を retain、move、expire のどれにするか。 | event × scope の lifecycle table と orphan handling を作る。data integrity に影響する。 |
 
 ### Gate 3 — Data model、永続化、privacy
+
+**状態: 完了。** S1〜S3のentity、plain-text policy、lifecycle、versioned local store、quota、
+logical delete、export、migration、default-exclude privacy boundaryの正本は
+[`contextual-terminal-memory-data-persistence-privacy.md`](contextual-terminal-memory-data-persistence-privacy.md)
+を参照する。Command dataとimportは延期し、application独自暗号化をinitial releaseへ含めない。
 
 | ID | 決めること | 主な選択肢・問い | 完了証拠と影響 |
 | --- | --- | --- | --- |
@@ -305,14 +327,9 @@ Gate 1で、S1/S2採用、S3を次 incrementとして採用、S4〜S6延期と�
 
 ## 次の検討で最初に閉じる事項
 
-`ROADMAP.md` の次の未完了 task は Gate 3 のdata model、永続化、privacy、security、migration
-方針である。S1〜S3だけを current scope とし、次の順に決める。
-
-1. Note entity、trigger record、delivery recordを分離するかとfield invariantを決める。
-2. 本文format、Unicode/control/link policy、bounded sizeを決める。
-3. active/resolved、trigger/delivery、detachedのstate transitionをdata modelへ落とす。
-4. store、atomic transaction、restoration reconciliation、quota、corruption recoveryを決める。
-5. export/import/delete/diagnostics/privacy boundaryとschema migrationを決める。
+`ROADMAP.md` の次の未完了 task は Gate 5 のoverlay、編集体験、input authority、accessibility
+方針である。S1〜S3だけをcurrent scopeとし、Miroの付箋から得たcard/color/direct-manipulationの
+affordanceをterminal geometryとinput contractを壊さないnative pane surfaceへ落とす。
 
 ## 検証記録
 

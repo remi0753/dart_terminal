@@ -5,6 +5,7 @@
 - Design intake: [`contextual-terminal-memory-design-decisions.md`](contextual-terminal-memory-design-decisions.md)
 - Product decisions: [`contextual-terminal-memory-product-slices.md`](contextual-terminal-memory-product-slices.md)
 - Scope and triggers: [`contextual-terminal-memory-scope-trigger-semantics.md`](contextual-terminal-memory-scope-trigger-semantics.md)
+- Data and privacy: [`contextual-terminal-memory-data-persistence-privacy.md`](contextual-terminal-memory-data-persistence-privacy.md)
 - Target: Dart Terminal
 
 ## Current decision status
@@ -23,6 +24,11 @@ toolbar, collaboration model, and brand are not requirements.
   from live pane and PTY-session IDs. Workspace and invocation scopes are deferred.
 - `On Return` is a non-blocking, once-per-arm focus transition. `At Next Prompt` requires a matching
   shell-integration instance and a complete post-arm C→D→A/N→B lifecycle.
+- Initial notes are bounded plain text stored in a separate, versioned local store. The app does not
+  encrypt that store itself, command text/digests are not stored, and note content is excluded from
+  diagnostics, logs, analytics, crash metadata, the PTY, and restoration data by default.
+- Explicit note export and logical deletion are adopted. Import is deferred, and deletion does not
+  claim physical erasure from filesystem snapshots or external backups.
 - The linked product decision record supersedes the original all-in-one MVP and implementation order
   below. Adoption means the slice proceeds to detailed design; it does not authorize product-code work.
 
