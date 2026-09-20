@@ -6,6 +6,7 @@
 - Product decisions: [`contextual-terminal-memory-product-slices.md`](contextual-terminal-memory-product-slices.md)
 - Scope and triggers: [`contextual-terminal-memory-scope-trigger-semantics.md`](contextual-terminal-memory-scope-trigger-semantics.md)
 - Data and privacy: [`contextual-terminal-memory-data-persistence-privacy.md`](contextual-terminal-memory-data-persistence-privacy.md)
+- Overlay and interaction: [`contextual-terminal-memory-overlay-editor-accessibility.md`](contextual-terminal-memory-overlay-editor-accessibility.md)
 - Target: Dart Terminal
 
 ## Current decision status
@@ -29,6 +30,12 @@ toolbar, collaboration model, and brand are not requirements.
   diagnostics, logs, analytics, crash metadata, the PTY, and restoration data by default.
 - Explicit note export and logical deletion are adopted. Import is deferred, and deletion does not
   claim physical erasure from filesystem snapshots or external backups.
+- Notes use opaque, theme-aware colored cards in one pane-anchored trailing rail. The interactive
+  AppKit child surface overlays the terminal without changing rows, columns, the Metal drawable, or
+  PTY size; the existing system notice badge remains a separate higher layer.
+- A due rail may open without taking keyboard or VoiceOver focus. Explicit note interaction uses one
+  generation-bound window input owner, and the native multiline editor uses explicit Save/Cancel;
+  autosave, durable drafts, rich text, and checkpoint controls are absent.
 - The linked product decision record supersedes the original all-in-one MVP and implementation order
   below. Adoption means the slice proceeds to detailed design; it does not authorize product-code work.
 

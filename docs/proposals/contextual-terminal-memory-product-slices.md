@@ -5,6 +5,7 @@
 - Branch: `codex/contextual-memory-design`
 - 親文書: [`contextual-terminal-memory-design-decisions.md`](contextual-terminal-memory-design-decisions.md)
 - 原案: [`contextual-terminal-memory-and-input-checkpoints.md`](contextual-terminal-memory-and-input-checkpoints.md)
+- Overlay仕様: [`contextual-terminal-memory-overlay-editor-accessibility.md`](contextual-terminal-memory-overlay-editor-accessibility.md)
 
 ## 目的
 
@@ -135,22 +136,21 @@ pane chrome に anchor された一覧と一時的な overlay で表示する。
   読む／編集するときは terminal の一部を一時的に覆ってよいが、rows/columns は変えない。
 - Create、edit、color、show timing、resolve の controls は GUI として discoverable にし、同じ操作を
   keyboard でも完結できるようにする。
-- 選択、due、snoozed、resolved は色だけに依存せず、label、icon、shape、accessibility value の
+- 選択、due、waiting、resolved は色だけに依存せず、label、icon、shape、accessibility value の
   組合せで区別する。
-- alternate screen や continuously redrawing TUI では既定で collapsed badge に留め、利用者が
-  明示的に開いた場合だけ overlay を表示する。
+- alternate screen や continuously redrawing TUI ではpassive Noteをcollapsed badgeに留める。
+  Due Noteだけは単一railをnon-blockingに展開し、terminal focus/inputを変えない。
 
-### Gate 5 まで固定しないもの
+### Gate 5で確定したvisual/interaction
 
-- card の正確な寸法、角丸、shadow、folded corner、animation
-- palette の色数と具体的な color token
-- rail を左右どちらへ置くか、popover／child overlay の native primitive
-- toolbar の形、drag/reorder、card の最大同時表示数
-- editor の typography、Markdown-lite、autosave、undo の詳細
+- Terminal native view内のinteractive AppKit child overlayとtrailing railを使い、geometryを変えない。
+- Opaque paper card、6色のlight/dark token、10 pt corner、bounded shadow、non-color status chipを使う。
+- Explicit Save/Cancelのplain-text native editorとvolatile Undoを使い、Markdown/autosaveは導入しない。
+- Card reorder、keyboard equivalent、VoiceOver、英語／日本語、contrast、Reduce Motionを同じcontractにする。
 
-この区別により「付箋らしさ」は製品要件として保持しつつ、Miro の screenshot を pixel-level
-specification にせず、terminal readability、Reduce Motion、Increase Contrast、VoiceOver と
-両立する実装を Gate 5 で選べる。
+正確なgeometry、palette、owner/input matrix、TUI/DEC focus、accessibility acceptanceは
+[`overlay/editor仕様`](contextual-terminal-memory-overlay-editor-accessibility.md)を正本とする。
+この結果もMiroのscreenshotをpixel-level specificationとして扱わない。
 
 ## Release boundaries
 
@@ -259,8 +259,8 @@ deterministic On Return／At Next Prompt semanticsを採用した。
 - Gate 2では initial release の attach target を pane/session のどちらとして userへ説明するか、
   app restart、pane close、restoration を跨ぐかを最初に決める。
 - Gate 3では note entity と store を設計し、exact-command secret field は含めない。
-- Gate 5では本書の visual direction を満たす最小 overlay/railを選ぶ。infinite canvasや
-  cell-relative positioningを候補へ戻さない。
+- Gate 5では本書のvisual directionをinteractive child overlay、edge badge、trailing railとして確定した。
+  Infinite canvasやcell-relative positioningは候補へ戻さない。
 - Gate 6は S5/S6だけの独立再評価であり、S1〜S3の採用を取り消したり、その model を
   speculative checkpoint fieldsで汚染したりしない。
 

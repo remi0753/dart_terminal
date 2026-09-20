@@ -35,8 +35,10 @@
   （判断結果は
   [`contextual-terminal-memory-data-persistence-privacy.md`](docs/proposals/contextual-terminal-memory-data-persistence-privacy.md)
   を参照する）
-- [ ] overlay、編集体験、input authority、accessibility の仕様を確定する
-  （実施時に同文書の Gate 5 を参照する）
+- [x] overlay、編集体験、input authority、accessibility の仕様を確定する
+  （判断結果は
+  [`contextual-terminal-memory-overlay-editor-accessibility.md`](docs/proposals/contextual-terminal-memory-overlay-editor-accessibility.md)
+  を参照する）
 - [ ] exact-command shell adapter の feasibility と trust boundary を検証し、checkpoint slice の採否を決める
   （実施時に同文書の Gate 6 を参照する）
 - [ ] 採用した slice の仕様、互換性 matrix、検証条件、段階的 rollout を確定する

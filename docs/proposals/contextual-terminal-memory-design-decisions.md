@@ -1,6 +1,6 @@
 # Contextual terminal memory 設計判断一覧
 
-- 状態: Gate 1/2/3/4 完了、Gate 5/6/7は未決定（実装未承認）
+- 状態: Gate 1/2/3/4/5 完了、Gate 6/7は未決定（実装未承認）
 - 作成日: 2026-09-20
 - 対象提案: [`contextual-terminal-memory-and-input-checkpoints.md`](contextual-terminal-memory-and-input-checkpoints.md)
 
@@ -149,6 +149,23 @@ persistence、trigger、input authority、shell adapter、privacy、UX などに
 - field invariant、crash recovery、restoration reconciliation、quota、migration、privacy matrixの正本は
   [`data, persistence, and privacy`](contextual-terminal-memory-data-persistence-privacy.md) とする。
 
+### 2026-09-20: Gate 5 overlay, editor, and accessibility decision
+
+- Miroの画像はcard/color/grouping/direct manipulationのaffordanceとしてだけ参照し、infinite canvas、
+  toolbar、collaboration、自由座標は採用していない。Noteはopaqueな色付きpaper card、pane edge badge、
+  trailing railとしてterminal native view内へ重ねる。
+- Existing `ViewBadge`はnon-interactive、generic `TextEditor`はchange event/containerを持たないため、
+  `DtrTerminalMetalView`内にversioned AppKit child surfaceを追加する方針とした。Terminal geometry、
+  Metal drawable、grid、PTY winsizeは不変とする。
+- Due railは自動展開してもkeyboard/VoiceOver focusを奪わない。Explicit interaction時だけwindow単位の
+  generation-bound ownerをterminal、Context Dock、Note rail/editor間で移し、IME、paste、mouse、scroll、
+  Services、drop、automationをexactly one consumerへrouteする。
+- Native multiline editorはexplicit Save/Cancel、volatile draft、IME/selection/Undoを持つ。Autosave、
+  durable draft、Markdown、title、urgency、S5 Checkpoint modeはinitial UIへ入れない。
+- Exact palette、geometry、light/dark/contrast/Reduce Motion、英語／日本語、VoiceOver、TUI/mouse-reporting、
+  DEC focusの正本は
+  [`overlay, editor, and accessibility`](contextual-terminal-memory-overlay-editor-accessibility.md) とする。
+
 ## 判断方法
 
 各項目は次のいずれかで閉じる。`採用` だけが後続の仕様化と実装候補になる。
@@ -165,7 +182,9 @@ Gate 2/4 のD-07〜D-11、D-21〜D-26は
 [`scope and trigger semantics`](contextual-terminal-memory-scope-trigger-semantics.md) で完了した。
 Gate 3 のD-12〜D-20は
 [`data, persistence, and privacy`](contextual-terminal-memory-data-persistence-privacy.md) で完了した。
-Gate 5/6/7は**未決定**であり、表に挙げた選択肢は採用を意味しない。
+Gate 5 のD-27〜D-34は
+[`overlay, editor, and accessibility`](contextual-terminal-memory-overlay-editor-accessibility.md) で完了した。
+Gate 6/7は**未決定**であり、表に挙げた選択肢は採用を意味しない。
 
 ## 機能 slice
 
@@ -256,6 +275,11 @@ arm後C→D→A/N→B cycleで一度だけdueになる。passive/due、FIFO coal
 
 ### Gate 5 — Overlay、編集、input authority、accessibility
 
+**状態: 完了。** Interactive child overlay、edge badge、trailing rail、sticky-note card、explicit editor、
+window interaction owner、focus/TUI/mouse、accessibility/localization/appearanceの正本は
+[`contextual-terminal-memory-overlay-editor-accessibility.md`](contextual-terminal-memory-overlay-editor-accessibility.md)
+を参照する。D-31のCheckpoint interactionだけはS5とともにGate 6へ延期した。
+
 | ID | 決めること | 主な選択肢・問い | 完了証拠と影響 |
 | --- | --- | --- | --- |
 | D-27 | Overlay primitive | terminal view 内 child overlay、popover/sheet、別 window、Context Dock extension のどれか。pane 単位か window 単位か。 | overlay 表示前後で rows/columns、drawable、PTY winsize、`SIGWINCH` が不変である architecture と test を定義する。 |
@@ -327,9 +351,10 @@ Gate 1で、S1/S2採用、S3を次 incrementとして採用、S4〜S6延期と�
 
 ## 次の検討で最初に閉じる事項
 
-`ROADMAP.md` の次の未完了 task は Gate 5 のoverlay、編集体験、input authority、accessibility
-方針である。S1〜S3だけをcurrent scopeとし、Miroの付箋から得たcard/color/direct-manipulationの
-affordanceをterminal geometryとinput contractを壊さないnative pane surfaceへ落とす。
+`ROADMAP.md` の次の未完了 task は Gate 6 のexact-command shell adapter feasibilityとtrust boundaryで
+ある。S5/S6はGate 1から延期中であり、S1〜S3のNote仕様を変更せず、product value、content-free
+shell integration境界、pre-submit hook、transport spoofing、command secret、input holdの追加costを独立に
+評価して採用、延期、不採用のいずれかへ閉じる。
 
 ## 検証記録
 
