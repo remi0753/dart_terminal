@@ -34,6 +34,10 @@ enum TerminalNoteStoreFailure {
   invariantViolation,
   exportCancelled,
   invalidState,
+  protocolViolation,
+  timeout,
+  workerCrashed,
+  busy,
   unknown,
 }
 
@@ -550,14 +554,15 @@ final class TerminalNoteStoreTransactionEngine {
         _session.unlink(deletionJournalLeaf, missingOkay: true);
         _session.flushDirectory();
       }
-      _loaded = candidate;
+      final TerminalNoteStoreDocument committed = _codec.decode(candidateBytes);
+      _loaded = committed;
       _journal = TerminalNoteDeletionJournal(
         entries: const <TerminalNoteDeletionTombstone>[],
       );
       _state = _TerminalNoteEngineState.ready;
       return _result(
         TerminalNoteStoreDisposition.committed,
-        document: candidate,
+        document: committed,
         exposeDocument: false,
       );
     } on TerminalNoteStoreException catch (error) {
@@ -924,7 +929,8 @@ final class TerminalNoteStoreTransactionEngine {
           ? TerminalNoteStoreDisposition.recoveryRequired
           : failure == TerminalNoteStoreFailure.revisionConflict ||
                 failure == TerminalNoteStoreFailure.invariantViolation ||
-                failure == TerminalNoteStoreFailure.invalidState
+                failure == TerminalNoteStoreFailure.invalidState ||
+                failure == TerminalNoteStoreFailure.busy
           ? TerminalNoteStoreDisposition.rejected
           : TerminalNoteStoreDisposition.unavailable,
       failure: failure,

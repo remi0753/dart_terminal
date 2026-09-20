@@ -188,3 +188,55 @@ adapterへ注入する。
 
 このサブタスクではisolate、queue、timeout、cross-isolate protocolを実装していない。次のサブタスクで本engineを専用isolateへ
 閉じ込め、application側へbounded clientだけを公開する。
+
+### 2026-09-20: 専用isolate client着手
+
+- ROADMAPを再読し、先頭未完了がCM-03第3サブタスクであることを確認した。対象はprotocol v1、専用isolate、
+  authority generation/request sequence、一件in-flight、pending intent 32件/128 KiB、startup load 3秒、stop 1秒、
+  crash/late response/restart処理である。実filesystemの攻撃・contention・performance matrixは第4サブタスクまで実施しない。
+- Full candidateをclient内に最大32件queueすると、16 MiB級snapshotを複数retainし、「workerへcandidate objectを一件だけ」と
+  memory budgetの双方に反する。Store clientはcandidate requestを常に一件だけin-flightとし、busy中の2件目を固定failureで拒否する。
+  32件/128 KiBはCM-05 authorityが利用するFIFO `TerminalNoteIntentAdmissionQueue<T>`として分離し、軽量なuser intentと
+  caller算出body byte costだけを保持する。last-write-wins、implicit retry、candidate queueは実装しない。
+- Isolate messageは既存1 MiB `RuntimeWorkerFrame`へ詰めず、fixed-length list envelopeのNote専用protocol v1を作る。
+  Protocol/generation/sequence/kind/result scalarをstrict decodeし、commitだけ一件のvalidated immutable documentとbounded tombstone、
+  load responseだけvalidated documentを運ぶ。Protocol value/errorの文字列表現はcontent/path/IDを出さない。
+- Worker crash、protocol violation、load timeoutはそのgenerationをterminal failureにし、in-flightをfixed failureで完了、isolate/portを
+  回収する。自動restart/retryは行わず、callerが新authority generationで新clientを明示作成する。Stale generation、完了済み
+  sequenceのlate/duplicate responseはdropし、future sequence/kind mismatchはprotocol failureとしてfail closedする。
+- Startupはspawn、lock/open、最初のloadを同じ3秒deadline内で完了する。Stopは新規requestをfreezeし、既存in-flightをdeadline内で
+  drainしてからstopを一件送り、1秒超過時だけisolateをkillする。結果をcacheしてstopをidempotentにする。
+- `dart_appkit`は変更せず、isolate/lifecycle/protocolはroot packageへ置き、前サブタスクの汎用filesystem packageには手を加えない。
+
+### 2026-09-20: 専用isolate clientとbounded admission完了
+
+- Note専用protocol v1をfixed-length list envelopeとして実装した。Bootstrap、ready/startup failure、5 request kind、responseは
+  protocol/version、authority generation、request sequence、request kind、fixed disposition/failure、u64 revision、bounded metricsを
+  strict decodeする。Commit requestだけvalidated immutable documentとbounded tombstone、load responseだけvalidated documentを許す。
+- Production entrypointは一isolateにつき一つのtransaction engine/lockを所有し、request portをserial処理する。Malformed requestは
+  contentを返さずengineをstopしてisolateを終了する。Commit後はcanonical bytesから再decodeしたworker-owned copyへ置換し、
+  cross-isolate request candidate objectそのものをretainしない。
+- Client startupはspawn、ready、初回loadを同じ3秒deadline（testでは短縮注入可能）に含める。Expected store/recovery/upgrade resultは
+  typed startup resultで返し、timeout、uncaught crash、protocol violationはisolateをkillしてclient/port/in-flightを0にする。
+  自動retry/restartはなく、明示的な新authority generationだけが新clientを開始できる。
+- Requestは一件だけin-flightとし、並行2件目をfixed `busy`で無変更拒否する。Stale authority generationと完了済みsequenceの
+  late/duplicate responseはdropし、future sequenceまたはrequest kind mismatchはprotocol violationとしてfail closedする。
+- Stopは新規admissionをfreezeし、既存in-flightをdeadline内でdrainしてからstop requestを送る。全体で1秒を超える場合はkillし、
+  timeout結果をcacheする。Normal/timeoutの双方で二回目以降のstopは同じ結果を返し、client handle/pending requestを0にする。
+- `TerminalNoteIntentAdmissionQueue<T>`はauthorityが後続CM-05で使う軽量FIFOとして、32件とbody cost合計128 KiBをexact boundにする。
+  Overflowは既存entryを変更せずbusy、invalid costをrejectし、closeは全ownershipをreleaseする。Full snapshotはqueueしない。
+- `dart_appkit`と汎用`dart_durable_file_macos`は変更していない。Note protocol/client/admissionはroot packageにのみ追加した。
+
+#### 検証
+
+- `CI=true DART_SUPPRESS_ANALYTICS=true dart test/terminal_note_store_isolate_test.dart`: 成功。Protocol round-trip/malformed、
+  exact 32/128 KiB FIFO、production isolateによるempty→commit→stop→new generation load、single-flight busy、drain stop、
+  stale generation/late duplicate drop、future sequence rejection、startup failure、ready/load timeout、uncaught crash、明示restart、
+  stop timeout/idempotence、最終live client/pending 0を通過した。
+- `make release-candidate-daily-use-matrix`: 成功。Async testを追加したroot runner hashを正規再生成した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true dart analyze`: 成功、root issue 0。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: 成功。359 files format変更0、全package/root analyze issue 0、
+  native/security/compatibility/integrationと新real-isolate testを含むaggregateが`dart_terminal tests passed`で終了した。
+
+このサブタスクではtwo-process lock helper、実filesystem attack/recovery/export matrix、1/16 MiB 20回performance gateを
+実施していない。次の最終サブタスクで実測し、全条件を満たした場合だけ親CM-03も完了にする。
