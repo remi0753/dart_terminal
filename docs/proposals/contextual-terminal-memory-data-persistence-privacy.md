@@ -6,6 +6,7 @@
 - 親文書: [`contextual-terminal-memory-design-decisions.md`](contextual-terminal-memory-design-decisions.md)
 - Scope/trigger仕様: [`contextual-terminal-memory-scope-trigger-semantics.md`](contextual-terminal-memory-scope-trigger-semantics.md)
 - Checkpoint採否: [`contextual-terminal-memory-checkpoint-feasibility.md`](contextual-terminal-memory-checkpoint-feasibility.md)
+- Architecture/rollout仕様: [`contextual-terminal-memory-architecture-verification-rollout.md`](contextual-terminal-memory-architecture-verification-rollout.md)
 
 ## 目的
 
@@ -161,6 +162,8 @@ singleton context IDもこのtableに保存する。
   uniqueである。
 - resolved/detached Noteはtriggerとdeliveryを持たない。
 - deliveryはmatching triggerが`due` phaseのときだけ存在する。
+- `restorationBinding`のcontext IDはuniqueなknown standard contextだけで、最大64件。Quick Terminal contextは
+  含めない。
 - Note deleteはNote、trigger、delivery、collection orderを一transactionで更新する。
 - context detachは関連trigger/deliveryを解除し、Note attachmentをdetachedへ一transactionで変える。
 - dangling reference、duplicate order、unknown enum/field、non-canonical ID、counter rollbackをdecode時に
@@ -254,9 +257,17 @@ payload = {
   contexts[],
   notes[],
   triggers[],
-  deliveries[]
+  deliveries[],
+  restorationBinding
 }
 ```
+
+Gate 7で、pre-Notes binary rollbackのためexisting restoration format version 1を変更せず、payloadへ
+`restorationBinding`を追加した。値はnull、またはrestoration format 1、diskへcommitしたrestoration JSONの
+exact UTF-8 bytesに対するlowercase SHA-256、deterministic pane traversal順の最大64 context IDを持つobjectである。
+Bindingはcontext IDがunique/knownでpane countと一致する場合だけvalidとし、cwd、title、path、pane indexを
+identityとして保存しない。Exact contractとrollback matrixは
+[`architecture/rollout仕様`](contextual-terminal-memory-architecture-verification-rollout.md)を正本とする。
 
 Field order、array order、integer/string encodingをcanonical codecで固定し、checksumはcanonical
 payload UTF-8 bytesへ計算する。SHA-256はaccidental corruption検出であり、改ざん防止や署名ではない。
@@ -291,10 +302,11 @@ Startupはcurrent、backupの順にsize、permission、type、strict schema、ch
 
 ### Restoration reconciliation
 
-Restoration leafとNote storeのcontext IDを集合比較する。
+Restoration v1 exact-byte hashとNote storeの`restorationBinding`を照合し、matching binding内のcontext IDを
+restoration leafのdeterministic traversalへ対応させた後、context ID集合を比較する。
 
 - 両方にあるIDだけをlive paneへattachする。
-- restorationだけにあるIDは空contextとしてNote storeへ登録できる。
+- bindingなし、hash/count/ID mismatch、legacy restorationでは全restored paneへfresh IDを発行する。
 - Note storeだけにあるactive/restorable IDはdetachedへ移し、cwd/title/orderで推測reattachしない。
 - legacy restorationにIDがないpaneは新しいcontext IDを発行する。既存Noteを推測移行しない。
 - Quick Terminalはstore内singleton contextを再利用する。
@@ -362,11 +374,11 @@ Importはinitial releaseで延期する。将来導入する場合、untrusted b
 | --- | --- | --- | --- |
 | Note card/editor/rail | 利用者が開いたcontextで表示 | UIに必要なcolor/statusだけ | due/suspended reasonを固定文言で表示 |
 | VoiceOver/accessibility | visible/focused cardのbodyをapplication controlとして公開 | stable internal ID/timeは非公開 | fixed role/stateを公開 |
-| local Note store | 保存 | 保存 | current stateだけ保存、historyなし |
+| local Note store | 保存 | 保存。restoration exact-byte SHA-256 bindingもlocal-only | current stateだけ保存、historyなし |
 | terminal grid/PTY/scrollback/search/copy | 送らない | 送らない | 送らない |
 | shell integration environment/event | 送らない | Note/context IDは送らない | non-secret integration instanceだけ。Note identityなし |
-| restoration file | bodyなし | context IDだけ | なし |
-| general diagnostics/inspector/export | bodyなし | ID/time/colorなし | fixed availabilityとbounded countsだけ許可 |
+| restoration file | bodyなし | Note/context IDなし。existing cwd/layout format v1を維持 | なし |
+| general diagnostics/inspector/export | bodyなし | ID/time/color/restoration binding hashなし | fixed availabilityとbounded countsだけ許可 |
 | unified log/stderr/machine line/crash metadata | なし | なし | fixed error class/countだけ許可 |
 | analytics/telemetry/network/cloud/indexer | なし | なし | なし |
 | explicit `Export Notes…` | warning後に含む | portable fieldだけ | passive intentだけ |
@@ -392,8 +404,9 @@ App switcher、window title、notification、Dock badgeへbodyを投影しない
 - Older appがnewer storeを開いた場合はread/writeせず、userにnewer appを使うよう表示する。
 - Rollback対応を約束するversionでは、writerがold-version互換exportを別途生成できる場合だけ明示する。
   unknown fieldのdropや自動downgradeは行わない。
-- Schema migrationとrestoration format migrationは別transactionで、context ID集合のintersection ruleに
-  よりreconcileする。
+- Initial specificationはrestoration formatをversion 1のまま維持し、Note store内bindingとの別transactionを
+  exact hashとcontext ID集合のintersection ruleでreconcileする。将来restoration formatを上げる場合もNote
+  store migrationとは別transactionとし、同じfail-closed ruleを維持する。
 
 ## Verification vectors
 
@@ -411,7 +424,7 @@ App switcher、window title、notification、Dock badgeへbodyを投影しない
 | F2 | current checksum failure、backup valid | explicit recovery preview、automatic overwrite 0 |
 | F3 | current/backup両方invalid | recovery-required、empty reset 0 |
 | D1 | deleteの各stepでcrash | tombstone適用によりcurrent/backupからNote再表示 0 |
-| R1 | restoration/store context intersection | intersectionだけattach、store-onlyはdetached |
+| R1 | exact restoration hashとordered bindingが一致 | binding内のknown contextだけattach、store-onlyはdetached |
 | R2 | legacy restoration v1 | fresh context ID、既存Noteのpath推測reattach 0 |
 | P1 | general diagnostics/export/log生成 | body/ID/time/color/trigger history sentinel 0、bounded countsのみ |
 | E1 | explicit export cancel | file write/content read 0 |

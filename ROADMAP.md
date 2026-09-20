@@ -43,8 +43,10 @@
   （判断結果は
   [`contextual-terminal-memory-checkpoint-feasibility.md`](docs/proposals/contextual-terminal-memory-checkpoint-feasibility.md)
   を参照する）
-- [ ] 採用した slice の仕様、互換性 matrix、検証条件、段階的 rollout を確定する
-  （実施時に同文書の Gate 7 を参照する）
+- [x] 採用した slice の仕様、互換性 matrix、検証条件、段階的 rollout を確定する
+  （判断結果は
+  [`contextual-terminal-memory-architecture-verification-rollout.md`](docs/proposals/contextual-terminal-memory-architecture-verification-rollout.md)
+  を参照する）
 - [ ] 採用した slice だけを実装可能な subtask へ分割し、依存順と個別の完了条件を本書へ追加する
 
 最後の項目が完了するまで、提案にある schema、overlay、input mode、shell adapter を

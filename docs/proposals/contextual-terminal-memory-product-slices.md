@@ -7,6 +7,7 @@
 - 原案: [`contextual-terminal-memory-and-input-checkpoints.md`](contextual-terminal-memory-and-input-checkpoints.md)
 - Overlay仕様: [`contextual-terminal-memory-overlay-editor-accessibility.md`](contextual-terminal-memory-overlay-editor-accessibility.md)
 - Checkpoint採否: [`contextual-terminal-memory-checkpoint-feasibility.md`](contextual-terminal-memory-checkpoint-feasibility.md)
+- Architecture/rollout仕様: [`contextual-terminal-memory-architecture-verification-rollout.md`](contextual-terminal-memory-architecture-verification-rollout.md)
 
 ## 目的
 

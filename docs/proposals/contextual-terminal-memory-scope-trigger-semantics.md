@@ -6,6 +6,7 @@
 - 親文書: [`contextual-terminal-memory-design-decisions.md`](contextual-terminal-memory-design-decisions.md)
 - 製品判断: [`contextual-terminal-memory-product-slices.md`](contextual-terminal-memory-product-slices.md)
 - Checkpoint採否: [`contextual-terminal-memory-checkpoint-feasibility.md`](contextual-terminal-memory-checkpoint-feasibility.md)
+- Architecture/rollout仕様: [`contextual-terminal-memory-architecture-verification-rollout.md`](contextual-terminal-memory-architecture-verification-rollout.md)
 
 ## 目的
 
@@ -123,8 +124,9 @@ Workspace scopeは延期する。Git rootやcwdを自動workspaceにすると、
   自動copyしない。
 - IDを利用者向け画面、diagnostics、logへ通常表示しない。
 
-現行restoration version 1にはこのIDがない。実装時はversioned migrationで既存paneへ新規IDを
-一度だけ割り当てる必要があるが、encodingとtransactionはGate 3で決める。
+現行restoration version 1にはこのIDがない。Gate 7ではformat v1を維持し、Note store内の
+exact-restoration-hash bindingが一致した場合だけordered context IDを復元する。Legacy/mismatch paneには
+新規IDを発行し、old NoteをDetachedにする。
 
 Quick Terminalはlayout restoration対象外だが、製品上は一つのlogical terminalとして再利用される。
 そのためQuick Terminal専用のcontext IDをNote store metadataに一つ保持し、hide/showとapp restartで
@@ -154,7 +156,7 @@ Quick Terminalはlayout restoration対象外だが、製品上は一つのlogica
 | Quick Terminal hide/show | 専用IDを保持 | 保持 | hideでaway、showでreturn | state保持 |
 | PTY/shell generation restart | 保持 | 保持 | state保持 | `suspended`。新sessionへ自動transferしない |
 | RIS / semantic reset | 保持 | 保持 | state保持 | candidate cycleを破棄して`suspended`。明示re-armが必要 |
-| successful app restoration | 保存IDを復元 | 保持 | terminationをawayとし、最初のeligible visitでdue | fresh sessionのため`suspended` |
+| successful app restoration | exact hash binding一致時だけ保存IDを復元 | 保持 | terminationをawayとし、最初のeligible visitでdue | fresh sessionのため`suspended` |
 | restorationなし／decode失敗／対応pane欠落 | restoreしない | detachedとして保持 | trigger解除 | trigger解除 |
 | userがpane/windowをclose | detachし、再利用しない | detachedとして保持 | trigger解除 | trigger解除 |
 | future duplicate/clone | destinationは新規 | 自動copyしない | copyしない | copyしない |
@@ -162,7 +164,7 @@ Quick Terminalはlayout restoration対象外だが、製品上は一つのlogica
 
 App terminationは、restoration snapshotとNote storeの両方がcommitできたcontextだけを
 restorableとして扱う。片方しか残らない場合は別paneへの推測reattachをせずdetachedにする。
-atomicity、crash recovery、reconciliationはGate 3で決める。
+Store transactionとcrash recoveryはGate 3、別transaction間のexact hash reconciliationはGate 7を正本とする。
 
 Detached Noteは自動削除しない。`Notes`のapplication-level `Detached` collectionから閲覧、
 reattach、resolve、deleteできることを後続UI contractへ要求する。cwdやpane順序が同じでも
@@ -246,7 +248,10 @@ non-secretな128-bit `ShellIntegrationInstanceId`を発行する。
   matching instance/versionのeventだけを受ける。
 - このIDはauthentication secretではない。悪意あるlocal processを防ぐ保証はせず、diagnosticsや
   exportへ出さないcorrelation valueとして扱う。
-- exact wire encoding、version negotiation、resource更新はGate 7と実装taskで固定する。
+- exact wire encodingはGate 7で、trailing
+  `dtr-note-v3=<32 lowercase hex>`を持つone-way OSC 133として固定した。Version 2/missing/mismatchは
+  S3 unavailable/suspendedとなり、S1/S2とstandard semantic processingは継続する。正本は
+  [`architecture/rollout仕様`](contextual-terminal-memory-architecture-verification-rollout.md)とする。
 
 #### Prompt-cycle state machine
 

@@ -1,6 +1,6 @@
 # Contextual terminal memory 設計判断一覧
 
-- 状態: Gate 1/2/3/4/5/6 完了、Gate 7は未決定（実装未承認）
+- 状態: Gate 1/2/3/4/5/6/7 完了、D-48 task化は未完了（実装未承認）
 - 作成日: 2026-09-20
 - 対象提案: [`contextual-terminal-memory-and-input-checkpoints.md`](contextual-terminal-memory-and-input-checkpoints.md)
 
@@ -185,6 +185,24 @@ persistence、trigger、input authority、shell adapter、privacy、UX などに
   正本は
   [`checkpoint feasibility`](contextual-terminal-memory-checkpoint-feasibility.md) とする。
 
+### 2026-09-20: Gate 7 architecture, verification, and rollout decision
+
+- Application rootの`TerminalNoteAuthority`をsole logical ownerとし、filesystem/codecだけを行うbounded
+  store worker、content-free session observer、AppKit Note surfaceをgeneration/revision messageで従属させる。
+  Store commit成功後だけsnapshot/UI successをpublishし、terminal input/renderを待たせない。
+- Existing restoration JSONはversion 1のまま保ち、Note store v1にexact restoration bytesのSHA-256と
+  deterministic pane orderのcontext IDを持つbindingを追加する。一致時だけreattachし、legacy/mismatchは
+  fresh context + Detachedにすることでwrong attach 0とpre-Notes binary rollbackを両立する。
+- `notes`、`notes-on-return`、`notes-next-prompt`をrestart境界のtyped local kill switch、
+  `notes-font-size`をlive optionとした。Initial implementationはdefault-offで、telemetry/remote flagを使わない。
+- S3だけはone-way shell integration version 3とし、OSC 133 trailing instance fieldでcurrent local root
+  adapterへcorrelateする。Version 2/missing/mismatchではS3だけunavailable/suspendedとなりS1/S2を維持する。
+- Queue、projection、file、latency、memory budgetとpure/fuzz/fault/native/real-PTY/runtime/manual test pyramid、
+  hidden→internal opt-in→user opt-in→S1/S2 default-on→S3 opt-in/default-onのstageを固定した。
+- S1/S2 initialとS3 next incrementのspecをfreezeした。D-43〜D-47とD-48のfreeze判断の正本は
+  [`architecture, verification, and rollout`](contextual-terminal-memory-architecture-verification-rollout.md) とする。
+  D-48のordered implementation task登録は次のroadmap itemで行う。
+
 ## 判断方法
 
 各項目は次のいずれかで閉じる。`採用` だけが後続の仕様化と実装候補になる。
@@ -205,7 +223,9 @@ Gate 5 のD-27〜D-34は
 [`overlay, editor, and accessibility`](contextual-terminal-memory-overlay-editor-accessibility.md) で完了した。
 Gate 6 のD-35〜D-42は
 [`checkpoint feasibility`](contextual-terminal-memory-checkpoint-feasibility.md) で完了し、すべて不採用とした。
-Gate 7は**未決定**であり、表に挙げた選択肢は採用を意味しない。
+Gate 7 のD-43〜D-47とD-48のfreeze方針は
+[`architecture, verification, and rollout`](contextual-terminal-memory-architecture-verification-rollout.md)で完了した。
+D-48のroadmap task登録は**未完了**であり、次の作業で実施する。
 
 ## 機能 slice
 
@@ -336,6 +356,11 @@ load-order conflict、existing preexecの非blocking性、transport／secret／r
 
 ### Gate 7 — Architecture、検証、rollout、仕様凍結
 
+**状態: architecture/verification/rollout/spec freeze完了。** D-43〜D-47を採用し、D-48は採用sliceだけを
+次のroadmap taskで依存順にtask化する方針まで確定した。Owner/message/version/config/budget/stageの正本は
+[`contextual-terminal-memory-architecture-verification-rollout.md`](contextual-terminal-memory-architecture-verification-rollout.md)
+を参照する。
+
 | ID | 決めること | 主な選択肢・問い | 完了証拠と影響 |
 | --- | --- | --- | --- |
 | D-43 | Ownership / concurrency | app model、pane/session worker、renderer、native main thread のどこが store、trigger、overlay、protocol state を所有するか。queue上限と teardown 順は何か。 | ownership table、message schema、backpressure、stale generation rejection をADR化する。 |
@@ -378,9 +403,9 @@ S5/S6を不採用へ閉じた。S4だけが延期を維持する。
 
 ## 次の検討で最初に閉じる事項
 
-`ROADMAP.md` の次の未完了taskはGate 7である。採用済みS1〜S3だけについてownership、config、
-schema evolution、verification budget、rollout／rollbackを確定する。S4は延期、S5/S6は不採用のため、
-Gate 7のmodel、message、kill switch、test matrixへreceipt、rule、checkpoint、shell replyを混入させない。
+`ROADMAP.md` の次の未完了taskはD-48のimplementation subdivisionである。Frozen specificationから
+S1/S2 initial、S3 increment、rollout evidenceをtask-scoped commitに分け、依存順、個別completion、
+verification、参照文書をroot roadmapへ登録する。S4〜S6や旧roadmap follow-upは混入させない。
 
 ## 検証記録
 

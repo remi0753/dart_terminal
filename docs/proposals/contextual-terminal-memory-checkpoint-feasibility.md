@@ -198,7 +198,7 @@ S1〜S3の実装仕様に次のsymbol、field、mode、action、resourceを予�
 - `Checkpoint` interaction owner、`Rule` entity、`ExactCommandBytes`、`CommandDigest`
 - Allow/Run once/Edit command/Disable rule/Snooze control
 - pre-submit trigger、held input、request/reply ID、adapter nonce、key reference
-- shell integration version bump、custom OSC/DCS、socket/helper、remote forwarding
+- checkpoint固有のshell integration version、bidirectional custom OSC/DCS、socket/helper、remote forwarding
 - observe-only match event、synthetic terminal、rule import/export
 
 Note bodyはplain textのままでcommandとして解釈せず、terminal inputをblockしない。Current shell integrationは

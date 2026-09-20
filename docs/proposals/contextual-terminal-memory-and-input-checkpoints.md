@@ -1,6 +1,6 @@
 # Contextual terminal memory and input checkpoints
 
-- Status: S1–S3 design in progress; S4 deferred; S5/S6 rejected; implementation not scheduled
+- Status: S1–S3 specification frozen; S4 deferred; S5/S6 rejected; implementation tasking pending
 - Date: 2026-09-20
 - Design intake: [`contextual-terminal-memory-design-decisions.md`](contextual-terminal-memory-design-decisions.md)
 - Product decisions: [`contextual-terminal-memory-product-slices.md`](contextual-terminal-memory-product-slices.md)
@@ -8,6 +8,7 @@
 - Data and privacy: [`contextual-terminal-memory-data-persistence-privacy.md`](contextual-terminal-memory-data-persistence-privacy.md)
 - Overlay and interaction: [`contextual-terminal-memory-overlay-editor-accessibility.md`](contextual-terminal-memory-overlay-editor-accessibility.md)
 - Checkpoint feasibility: [`contextual-terminal-memory-checkpoint-feasibility.md`](contextual-terminal-memory-checkpoint-feasibility.md)
+- Architecture and rollout: [`contextual-terminal-memory-architecture-verification-rollout.md`](contextual-terminal-memory-architecture-verification-rollout.md)
 - Target: Dart Terminal
 
 ## Current decision status
@@ -39,6 +40,8 @@ toolbar, collaboration model, and brand are not requirements.
   autosave, durable drafts, rich text, and checkpoint controls are absent.
 - The current schema, shell integration, and UI reserve no command matcher, digest, bidirectional
   adapter, checkpoint owner, or simulation mode. Reconsideration requires a separate product proposal.
+- The application-root Note authority, store/native protocols, restoration hash binding, local kill
+  switches, verification budgets, and staged rollout are frozen in the linked architecture record.
 - The linked product decision record supersedes the original all-in-one MVP and implementation order
   below. Adoption means the slice proceeds to detailed design; it does not authorize product-code work.
 
