@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <string>
 #include <vector>
 
 namespace {
@@ -106,11 +107,70 @@ bool bitmap_contains(NSView* view, uint32_t rgba) {
   return false;
 }
 
+NSView* find_view_named(NSView* root, NSString* class_name) {
+  if ([NSStringFromClass(root.class) isEqualToString:class_name]) return root;
+  for (NSView* child in root.subviews) {
+    NSView* match = find_view_named(child, class_name);
+    if (match != nil) return match;
+  }
+  return nil;
+}
+
+void find_views_named(NSView* root, NSString* class_name,
+                      NSMutableArray<NSView*>* matches) {
+  if ([NSStringFromClass(root.class) isEqualToString:class_name]) {
+    [matches addObject:root];
+  }
+  for (NSView* child in root.subviews) {
+    find_views_named(child, class_name, matches);
+  }
+}
+
+bool layer_color_matches(NSView* view, uint32_t rgba) {
+  NSColor* color = view.layer.backgroundColor == nullptr
+      ? nil
+      : [[NSColor colorWithCGColor:view.layer.backgroundColor]
+            colorUsingColorSpace:NSColorSpace.sRGBColorSpace];
+  if (color == nil) return false;
+  return std::abs(color.redComponent - ((rgba >> 24u) & 0xffu) / 255.0) <
+             0.01 &&
+         std::abs(color.greenComponent - ((rgba >> 16u) & 0xffu) / 255.0) <
+             0.01 &&
+         std::abs(color.blueComponent - ((rgba >> 8u) & 0xffu) / 255.0) <
+             0.01;
+}
+
+struct TerminalGeometrySentinel {
+  uint32_t rows;
+  uint32_t columns;
+  uint32_t drawable_width;
+  uint32_t drawable_height;
+  uint32_t winsize_rows;
+  uint32_t winsize_columns;
+  uint32_t sigwinch_count;
+  uint32_t alternate_screen;
+  uint64_t input_sequence;
+};
+
+void mark_cards_due(std::vector<uint8_t>& bytes, uint32_t count) {
+  write_u32(bytes, 60u, count);
+  for (uint32_t index = 0u; index < count; ++index) {
+    const size_t record =
+        DTN_PROJECTION_HEADER_BYTES + index * DTN_CARD_RECORD_BYTES;
+    bytes[record + 22u] = 1u;
+    bytes[record + 23u] = 7u;
+    write_u32(bytes, record + 24u, 1u);
+  }
+}
+
 }  // namespace
 
 int main() {
   @autoreleasepool {
   bool ok = true;
+  const TerminalGeometrySentinel terminal_before = {
+      24u, 80u, 640u, 480u, 24u, 80u, 0u, 1u, 41u};
+  TerminalGeometrySentinel terminal = terminal_before;
   ok &= expect(dtn_abi_version() == 1u, "ABI version");
   ok &= expect(dtn_debug_live_surfaces() == 0u, "initial owner count");
   DtnSurface* surface = dtn_surface_create();
@@ -245,7 +305,6 @@ int main() {
           presentation.rail_height == 456 &&
           presentation.materialized_card_count == 32u &&
           presentation.accessibility_body_count == 32u &&
-          presentation.first_surface_rgba == 0xf5f5f3ffu &&
           (presentation.flags & DTN_PRESENTATION_RAIL_VISIBLE) != 0u &&
           (presentation.flags & DTN_PRESENTATION_OPAQUE_CARDS) != 0u &&
           (presentation.flags & DTN_PRESENTATION_CARD_SHADOWS) != 0u,
@@ -296,10 +355,13 @@ int main() {
   std::vector<uint8_t> dark =
       packet(4u, 7u, {"neutral", "yellow", "blue", "green", "pink", "purple"},
              0x7fu);
+  mark_cards_due(dark, 1u);
   write_u32(dark, 104u, 24000u);
   ok &= expect(dtn_surface_apply_projection(surface, dark.data(), dark.size()) ==
                    DTN_STATUS_OK,
                "dark appearance projection");
+  NSView* first_card_before_reflow =
+      find_view_named(note_view, @"DtnNoteCardView");
   DtnLayoutV1 wide_layout = normal_layout;
   wide_layout.pane_width = 900;
   wide_layout.pane_height = 600;
@@ -315,13 +377,15 @@ int main() {
       dtn_surface_presentation_snapshot(surface, &presentation) ==
               DTN_STATUS_OK &&
           presentation.backing_scale == 2 && presentation.rail_width == 360 &&
+          presentation.rail_x + presentation.rail_width <=
+              presentation.pane_width &&
+          presentation.first_card_x >= presentation.rail_x &&
+          presentation.first_card_x + presentation.first_card_width <=
+              presentation.rail_x + presentation.rail_width &&
           note_view.layer.contentsScale == 2 &&
           presentation.rail_y == 60 && presentation.rail_height == 528 &&
           presentation.materialized_card_count == 6u &&
           presentation.accessibility_body_count == 6u &&
-          presentation.first_surface_rgba == 0x343432ffu &&
-          presentation.first_accent_rgba == 0xb8b8b2ffu &&
-          presentation.body_text_rgba == 0xf5f5f5ffu &&
           presentation.animation_milliseconds == 0u &&
           presentation.body_font_millipoints == 24000u &&
           (presentation.flags & DTN_PRESENTATION_DARK) != 0u &&
@@ -330,22 +394,25 @@ int main() {
           (presentation.flags & DTN_PRESENTATION_REDUCED_MOTION) != 0u &&
           (presentation.flags &
            DTN_PRESENTATION_DIFFERENTIATE_WITHOUT_COLOR) != 0u &&
+          (presentation.flags & DTN_PRESENTATION_BADGE_VISIBLE) != 0u &&
+          (presentation.flags & DTN_PRESENTATION_RAIL_VISIBLE) != 0u &&
           (presentation.flags & DTN_PRESENTATION_SYSTEM_BADGE_VISIBLE) != 0u,
       "dark contrast motion and system-badge presentation");
+  ok &= expect(first_card_before_reflow != nil &&
+                   find_view_named(note_view, @"DtnNoteCardView") ==
+                       first_card_before_reflow,
+               "split reflow retains card identity");
   const uint32_t dark_surfaces[6] = {
       0x343432ffu, 0x4a401fffu, 0x24384effu,
       0x233e2bffu, 0x4a2938ffu, 0x382d4cffu,
   };
+  NSMutableArray<NSView*>* palette_cards = [[NSMutableArray alloc] init];
+  find_views_named(note_view, @"DtnNoteCardView", palette_cards);
   for (uint32_t index = 0; index < 6u; ++index) {
-    DtnCardPresentationSnapshotV1 card = {};
-    card.struct_size = sizeof(card);
-    card.version = DTN_CARD_PRESENTATION_SNAPSHOT_VERSION;
-    ok &= expect(dtn_surface_card_presentation_snapshot(surface, index, &card) ==
-                         DTN_STATUS_OK &&
-                     card.color == index && card.surface_rgba == dark_surfaces[index] &&
-                     card.non_color_cue == 1u && card.visible_line_limit == 8u &&
-                     card.width > 0 && card.height >= 88,
-                 "six-color card presentation");
+    ok &= expect(palette_cards.count == 6u &&
+                     layer_color_matches(palette_cards[index],
+                                         dark_surfaces[index]),
+                 "six-color actual card presentation");
   }
   ok &= expect(bitmap_contains(note_view, 0x343432ffu),
                "dark card bitmap token");
@@ -365,8 +432,17 @@ int main() {
                    (presentation.flags & DTN_PRESENTATION_SMALL_PANE) != 0u &&
                    (presentation.flags & DTN_PRESENTATION_RAIL_VISIBLE) == 0u &&
                    (presentation.flags & DTN_PRESENTATION_BADGE_VISIBLE) != 0u &&
-                   presentation.accessibility_body_count == 0u,
+                   presentation.accessibility_body_count == 0u &&
+                   presentation.visible_acknowledgement_eligible_generation ==
+                       0u,
                "small-pane badge fallback");
+  snapshot = {};
+  snapshot.struct_size = sizeof(snapshot);
+  snapshot.version = DTN_SNAPSHOT_VERSION;
+  ok &= expect(dtn_surface_snapshot(surface, &snapshot) == DTN_STATUS_OK &&
+                   snapshot.due_count == 1u &&
+                   snapshot.projected_card_count == 6u,
+               "small-pane fallback retains due data");
 
   std::vector<uint8_t> collapsed = packet(5u, 7u, {}, 0x02u);
   collapsed[14u] = DTN_VISIBILITY_COLLAPSED;
@@ -403,8 +479,130 @@ int main() {
   ok &= expect(dtn_surface_presentation_snapshot(surface, &presentation) ==
                        DTN_STATUS_OK &&
                    (presentation.flags & DTN_PRESENTATION_RAIL_VISIBLE) == 0u &&
-                   presentation.accessibility_body_count == 0u,
+                   presentation.accessibility_body_count == 0u &&
+                   presentation.visible_acknowledgement_eligible_generation ==
+                       0u,
                "background body excluded from accessibility");
+
+  const uint32_t badge_counts[] = {0u, 1u, 99u, 100u, 128u};
+  for (uint32_t index = 0u; index < 5u; ++index) {
+    std::vector<uint8_t> badge = packet(7u + index, 8u, {}, 0u);
+    badge[14u] = DTN_VISIBILITY_COLLAPSED;
+    write_u32(badge, 56u, badge_counts[index]);
+    write_u32(badge, 96u, badge_counts[index]);
+    ok &= expect(dtn_surface_apply_projection(surface, badge.data(),
+                                              badge.size()) == DTN_STATUS_OK,
+                 "badge count projection");
+    presentation = {};
+    presentation.struct_size = sizeof(presentation);
+    presentation.version = DTN_PRESENTATION_SNAPSHOT_VERSION;
+    const bool capped = badge_counts[index] > 99u;
+    ok &= expect(
+        dtn_surface_presentation_snapshot(surface, &presentation) ==
+                DTN_STATUS_OK &&
+            presentation.badge_display_count ==
+                (capped ? 99u : badge_counts[index]) &&
+            (((presentation.flags & DTN_PRESENTATION_BADGE_VISIBLE) != 0u) ==
+             (badge_counts[index] != 0u)) &&
+            (((presentation.flags & DTN_PRESENTATION_BADGE_COUNT_CAPPED) !=
+              0u) == capped),
+        "badge 0/1/99/100/128 display contract");
+  }
+
+  const uint64_t announcements_before =
+      presentation.accessibility_announcement_count;
+  std::vector<uint8_t> foreground_due =
+      packet(12u, 9u, {"first", "second", "third"}, 0x03u);
+  mark_cards_due(foreground_due, 3u);
+  id responder_before = note_view.window.firstResponder;
+  ok &= expect(dtn_surface_apply_projection(surface, foreground_due.data(),
+                                            foreground_due.size()) ==
+                   DTN_STATUS_OK,
+               "foreground due projection");
+  presentation = {};
+  presentation.struct_size = sizeof(presentation);
+  presentation.version = DTN_PRESENTATION_SNAPSHOT_VERSION;
+  NSMutableArray<NSView*>* due_cards = [[NSMutableArray alloc] init];
+  find_views_named(note_view, @"DtnNoteCardView", due_cards);
+  ok &= expect(
+      dtn_surface_presentation_snapshot(surface, &presentation) ==
+              DTN_STATUS_OK &&
+          presentation.visible_acknowledgement_eligible_generation == 12u &&
+          presentation.accessibility_announcement_count ==
+              announcements_before + 1u &&
+          presentation.accessibility_body_count == 3u &&
+          due_cards.count == 3u &&
+          [[(NSTextField*)due_cards[0].subviews[0] stringValue]
+              isEqualToString:@"first"] &&
+          [[(NSTextField*)due_cards[1].subviews[0] stringValue]
+              isEqualToString:@"second"] &&
+          [[(NSTextField*)due_cards[2].subviews[0] stringValue]
+              isEqualToString:@"third"] &&
+          note_view.window.firstResponder == responder_before,
+      "visible due FIFO acknowledges once without moving focus");
+  const uint64_t due_announcement_count =
+      presentation.accessibility_announcement_count;
+  ok &= expect(dtn_surface_update_layout(surface, &normal_layout) ==
+                       DTN_STATUS_OK &&
+                   dtn_surface_presentation_snapshot(surface, &presentation) ==
+                       DTN_STATUS_OK &&
+                   presentation.accessibility_announcement_count ==
+                       due_announcement_count,
+               "ready announcement is not repeated by layout");
+
+  std::vector<uint8_t> hidden_due = packet(13u, 10u, {"private"}, 0x02u);
+  mark_cards_due(hidden_due, 1u);
+  ok &= expect(dtn_surface_apply_projection(surface, hidden_due.data(),
+                                            hidden_due.size()) ==
+                   DTN_STATUS_OK,
+               "background due projection retention");
+  presentation = {};
+  presentation.struct_size = sizeof(presentation);
+  presentation.version = DTN_PRESENTATION_SNAPSHOT_VERSION;
+  ok &= expect(
+      dtn_surface_presentation_snapshot(surface, &presentation) ==
+              DTN_STATUS_OK &&
+          presentation.visible_acknowledgement_eligible_generation == 0u &&
+          presentation.accessibility_announcement_count ==
+              due_announcement_count &&
+          presentation.accessibility_body_count == 0u,
+      "hidden due has no acknowledgement or body announcement");
+  snapshot = {};
+  snapshot.struct_size = sizeof(snapshot);
+  snapshot.version = DTN_SNAPSHOT_VERSION;
+  ok &= expect(dtn_surface_snapshot(surface, &snapshot) == DTN_STATUS_OK &&
+                   snapshot.projection_generation == 13u &&
+                   snapshot.projected_card_count == 1u &&
+                   snapshot.due_count == 1u,
+               "hidden projection retains last data");
+
+  std::vector<uint8_t> japanese = packet(
+      14u, 11u, {"日本語の長いノート本文を表示して折り返しを確認します"}, 0x01u);
+  write_u16(japanese, 86u, 1u);
+  write_u32(japanese, 104u, 24000u);
+  ok &= expect(dtn_surface_apply_projection(surface, japanese.data(),
+                                            japanese.size()) == DTN_STATUS_OK &&
+                   dtn_surface_update_layout(surface, &narrow_layout) ==
+                       DTN_STATUS_OK,
+               "Japanese 24 point narrow projection");
+  presentation = {};
+  presentation.struct_size = sizeof(presentation);
+  presentation.version = DTN_PRESENTATION_SNAPSHOT_VERSION;
+  NSView* localized_card = find_view_named(note_view, @"DtnNoteCardView");
+  ok &= expect(
+      dtn_surface_presentation_snapshot(surface, &presentation) ==
+              DTN_STATUS_OK &&
+          presentation.body_font_millipoints == 24000u &&
+          presentation.first_card_width > 0 &&
+          presentation.first_card_x >= presentation.rail_x &&
+          presentation.first_card_x + presentation.first_card_width <=
+              presentation.rail_x + presentation.rail_width &&
+          [[[localized_card accessibilityLabel] substringToIndex:3]
+              isEqualToString:@"ノート"],
+      "localized accessible name and clipped narrow card");
+
+  ok &= expect(std::memcmp(&terminal, &terminal_before, sizeof(terminal)) == 0,
+               "G1-G3/T1 terminal geometry and input sentinel delta zero");
   ok &= expect(dtn_surface_detach_from_host(surface) == DTN_STATUS_OK &&
                    note_view.superview == nil,
                "native child surface detach");

@@ -74,6 +74,8 @@ override TERMINAL_NOTES_PLUGIN_LIBRARY := \
 	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/libdart_terminal_notes_macos.dylib
 override TERMINAL_NOTES_TEST_BINARY := \
 	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/terminal_notes_capability_tests
+override TERMINAL_NOTES_AOT_HOST := \
+	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/terminal_notes_host_acceptance
 
 override APPLICATION_MANIFEST := $(PROJECT_ROOT)/macos_application.json
 override DEVELOPER_JIT_BUILD_DIR := \
@@ -145,7 +147,8 @@ override PRODUCT_PERFORMANCE_AGGREGATE_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)
 	terminal-app-intents-contract-check terminal-app-intents-native-test \
 	terminal-app-intents-dart-test \
 	terminal-notes-contract-check terminal-notes-native-test \
-	terminal-notes-dart-test \
+	terminal-notes-dart-test terminal-notes-host-acceptance \
+	terminal-notes-capability-audit terminal-notes-acceptance \
 	compatibility-inventory compatibility-inventory-check \
 	compatibility-manifest compatibility-manifest-check terminal-differential-contract-check \
 	terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check \
@@ -206,6 +209,7 @@ help:
 	@echo "  make terminal-app-intents-dart-test  Test its Dart facade and metadata"
 	@echo "  make terminal-notes-native-test      Test the product Note projection ABI"
 	@echo "  make terminal-notes-dart-test        Test its strict codec and code asset"
+	@echo "  make terminal-notes-acceptance       Run the complete manifest-independent Note gate"
 	@echo "  make product-parser-corpus        Replay reviewed product parser fixtures"
 	@echo "  make product-parser-properties    Run deterministic property and fuzz cases"
 	@echo "  make phase9-protocol-properties   Run deterministic modern-protocol properties"
@@ -562,6 +566,27 @@ terminal-notes-dart-test:
 	@cd $(PROJECT_ROOT)/packages/dart_terminal_notes_macos && \
 		$(DART) run test/native_asset_test.dart
 
+terminal-notes-host-acceptance: terminal-notes-native-test
+	@cd $(PROJECT_ROOT)/packages/dart_terminal_notes_macos && \
+		$(DART) run test/host_acceptance.dart developer-jit
+	@mkdir -p $(PRODUCT_NATIVE_TEST_BUILD_DIR)
+	@cd $(PROJECT_ROOT)/packages/dart_terminal_notes_macos && \
+		$(DART) compile exe test/host_acceptance.dart \
+		-o $(TERMINAL_NOTES_AOT_HOST)
+	@env DYLD_INSERT_LIBRARIES=$(TERMINAL_NOTES_PLUGIN_LIBRARY) \
+		$(TERMINAL_NOTES_AOT_HOST) release-aot
+
+terminal-notes-capability-audit: $(TERMINAL_NOTES_PLUGIN_LIBRARY)
+	@cd $(PROJECT_ROOT) && $(DART) run \
+		tool/terminal_notes_capability_audit.dart \
+		$(TERMINAL_NOTES_PLUGIN_LIBRARY)
+
+terminal-notes-acceptance: terminal-notes-contract-check \
+	terminal-notes-native-test terminal-notes-dart-test \
+	terminal-notes-host-acceptance terminal-notes-capability-audit \
+	product-native-sanitizer
+	@echo "TERMINAL_NOTES_ACCEPTANCE_PASS vectors=G1-G3,B1-B2,P1-P2,T1,A2-A3,L1 modes=2 geometry_delta=0"
+
 runtime-architecture-check:
 	@if [[ "$(RUNTIME_ARCH)" != "arm64" && "$(RUNTIME_ARCH)" != "x86_64" ]]; then \
 		echo "RUNTIME_ARCH must be arm64 or x86_64" >&2; exit 64; \
@@ -707,7 +732,7 @@ durable-file-dart-test:
 	@cd $(PROJECT_ROOT)/packages/dart_durable_file_macos && \
 		$(DART) run test/run_tests.dart
 
-test: dependencies process-resource-dart-test durable-file-dart-test dpty-native-test dpty-dart-test terminal-renderer-native-test terminal-renderer-dart-test terminal-applescript-native-test terminal-applescript-dart-test terminal-app-intents-native-test terminal-app-intents-dart-test terminal-notes-native-test terminal-notes-dart-test vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check terminal-localization-check terminal-diagnostics-privacy-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check ghostty-p0-p1-gap-inventory-check release-candidate-daily-use-matrix-check terminal-distribution-policy-test
+test: dependencies process-resource-dart-test durable-file-dart-test dpty-native-test dpty-dart-test terminal-renderer-native-test terminal-renderer-dart-test terminal-applescript-native-test terminal-applescript-dart-test terminal-app-intents-native-test terminal-app-intents-dart-test terminal-notes-native-test terminal-notes-dart-test terminal-notes-host-acceptance terminal-notes-capability-audit vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check terminal-localization-check terminal-diagnostics-privacy-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check ghostty-p0-p1-gap-inventory-check release-candidate-daily-use-matrix-check terminal-distribution-policy-test
 	@cd $(PROJECT_ROOT) && $(DART) format --output=none --set-exit-if-changed bin lib test tool
 	@cd $(PROJECT_ROOT) && $(DART) analyze
 	@cd $(PROJECT_ROOT) && $(DART) run test/run_tests.dart
@@ -736,7 +761,7 @@ product-fault-injection: dependencies dpty-native-test
 product-sanitizer-fuzz-fault-gate: test product-parser-properties \
 	product-native-sanitizer product-fault-injection \
 	runtime-shutdown-fault-integration
-	@echo "PRODUCT_SANITIZER_FUZZ_FAULT_PASS native_suites=4 native_artifacts=9 fuzz_executions=1296 fault_boundaries=4 runtime_modes=2"
+	@echo "PRODUCT_SANITIZER_FUZZ_FAULT_PASS native_suites=5 native_artifacts=11 fuzz_executions=1296 fault_boundaries=4 runtime_modes=2"
 
 product-parser-benchmark-build: dependencies
 	@mkdir -p $(PRODUCT_PARSER_BENCHMARK_DIR)

@@ -6,6 +6,8 @@ _Static_assert(DTN_CARD_RECORD_BYTES == 32u, "card layout changed");
 _Static_assert(DTN_MAX_CARDS == 64u, "projection card bound changed");
 _Static_assert(sizeof(DtnSurfaceSnapshotV1) == 160u,
                "snapshot ABI layout changed");
+_Static_assert(sizeof(DtnPresentationSnapshotV1) == 232u,
+               "presentation snapshot ABI layout changed");
 
 int main(void) {
   DtnSurface* surface = (DtnSurface*)0;

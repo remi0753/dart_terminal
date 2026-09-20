@@ -88,11 +88,11 @@ final class TerminalNotesNativePresentationRawSnapshot {
     required this.materializedCardCount,
     required this.accessibilityNodeCount,
     required this.accessibilityBodyCount,
-    required this.firstSurfaceRgba,
-    required this.firstAccentRgba,
-    required this.bodyTextRgba,
+    required this.visibleAcknowledgementEligibleGeneration,
+    required this.accessibilityAnnouncementCount,
     required this.animationMilliseconds,
     required this.bodyFontMilliPoints,
+    required this.badgeDisplayCount,
   });
 
   final int projectionGeneration;
@@ -107,39 +107,11 @@ final class TerminalNotesNativePresentationRawSnapshot {
   final int materializedCardCount;
   final int accessibilityNodeCount;
   final int accessibilityBodyCount;
-  final int firstSurfaceRgba;
-  final int firstAccentRgba;
-  final int bodyTextRgba;
+  final int visibleAcknowledgementEligibleGeneration;
+  final int accessibilityAnnouncementCount;
   final int animationMilliseconds;
   final int bodyFontMilliPoints;
-}
-
-final class TerminalNotesNativeCardPresentationRawSnapshot {
-  const TerminalNotesNativeCardPresentationRawSnapshot({
-    required this.index,
-    required this.order,
-    required this.color,
-    required this.status,
-    required this.due,
-    required this.visibleLineLimit,
-    required this.surfaceRgba,
-    required this.accentRgba,
-    required this.bodyTextRgba,
-    required this.nonColorCue,
-    required this.frame,
-  });
-
-  final int index;
-  final int order;
-  final int color;
-  final int status;
-  final bool due;
-  final int visibleLineLimit;
-  final int surfaceRgba;
-  final int accentRgba;
-  final int bodyTextRgba;
-  final bool nonColorCue;
-  final ({double x, double y, double width, double height}) frame;
+  final int badgeDisplayCount;
 }
 
 abstract interface class TerminalNotesNativeBindings {
@@ -161,11 +133,6 @@ abstract interface class TerminalNotesNativeBindings {
 
   TerminalNotesNativePresentationRawSnapshot presentationSnapshot(
     Object handle,
-  );
-
-  TerminalNotesNativeCardPresentationRawSnapshot cardPresentationSnapshot(
-    Object handle,
-    int index,
   );
 
   void destroySurface(Object handle);
@@ -320,53 +287,13 @@ final class TerminalNotesNativeFfiBindings
         materializedCardCount: snapshot.ref.materializedCardCount,
         accessibilityNodeCount: snapshot.ref.accessibilityNodeCount,
         accessibilityBodyCount: snapshot.ref.accessibilityBodyCount,
-        firstSurfaceRgba: snapshot.ref.firstSurfaceRgba,
-        firstAccentRgba: snapshot.ref.firstAccentRgba,
-        bodyTextRgba: snapshot.ref.bodyTextRgba,
+        visibleAcknowledgementEligibleGeneration:
+            snapshot.ref.visibleAcknowledgementEligibleGeneration,
+        accessibilityAnnouncementCount:
+            snapshot.ref.accessibilityAnnouncementCount,
         animationMilliseconds: snapshot.ref.animationMilliseconds,
         bodyFontMilliPoints: snapshot.ref.bodyFontMilliPoints,
-      );
-    } finally {
-      calloc.free(snapshot);
-    }
-  }
-
-  @override
-  TerminalNotesNativeCardPresentationRawSnapshot cardPresentationSnapshot(
-    Object handle,
-    int index,
-  ) {
-    final Pointer<_DtnCardPresentationSnapshotV1> snapshot =
-        calloc<_DtnCardPresentationSnapshotV1>();
-    try {
-      snapshot.ref
-        ..structSize = sizeOf<_DtnCardPresentationSnapshotV1>()
-        ..version = 1;
-      final int status = _surfaceCardPresentationSnapshot(
-        _handle(handle),
-        index,
-        snapshot,
-      );
-      if (status != nativeStatusOk) {
-        throw StateError('native Note card snapshot failed: $status');
-      }
-      return TerminalNotesNativeCardPresentationRawSnapshot(
-        index: snapshot.ref.index,
-        order: snapshot.ref.order,
-        color: snapshot.ref.color,
-        status: snapshot.ref.status,
-        due: snapshot.ref.due != 0,
-        visibleLineLimit: snapshot.ref.visibleLineLimit,
-        surfaceRgba: snapshot.ref.surfaceRgba,
-        accentRgba: snapshot.ref.accentRgba,
-        bodyTextRgba: snapshot.ref.bodyTextRgba,
-        nonColorCue: snapshot.ref.nonColorCue != 0,
-        frame: (
-          x: snapshot.ref.x,
-          y: snapshot.ref.y,
-          width: snapshot.ref.width,
-          height: snapshot.ref.height,
-        ),
+        badgeDisplayCount: snapshot.ref.badgeDisplayCount,
       );
     } finally {
       calloc.free(snapshot);
@@ -575,14 +502,11 @@ final class _DtnPresentationSnapshotV1 extends Struct {
   @Uint32()
   external int accessibilityBodyCount;
 
-  @Uint32()
-  external int firstSurfaceRgba;
+  @Uint64()
+  external int visibleAcknowledgementEligibleGeneration;
 
-  @Uint32()
-  external int firstAccentRgba;
-
-  @Uint32()
-  external int bodyTextRgba;
+  @Uint64()
+  external int accessibilityAnnouncementCount;
 
   @Uint32()
   external int animationMilliseconds;
@@ -590,60 +514,10 @@ final class _DtnPresentationSnapshotV1 extends Struct {
   @Uint32()
   external int bodyFontMilliPoints;
 
-  @Array<Uint32>(7)
-  external Array<Uint32> reserved;
-}
-
-final class _DtnCardPresentationSnapshotV1 extends Struct {
   @Uint32()
-  external int structSize;
+  external int badgeDisplayCount;
 
-  @Uint32()
-  external int version;
-
-  @Uint32()
-  external int index;
-
-  @Uint32()
-  external int order;
-
-  @Uint32()
-  external int color;
-
-  @Uint32()
-  external int status;
-
-  @Uint32()
-  external int due;
-
-  @Uint32()
-  external int visibleLineLimit;
-
-  @Uint32()
-  external int surfaceRgba;
-
-  @Uint32()
-  external int accentRgba;
-
-  @Uint32()
-  external int bodyTextRgba;
-
-  @Uint32()
-  external int nonColorCue;
-
-  @Double()
-  external double x;
-
-  @Double()
-  external double y;
-
-  @Double()
-  external double width;
-
-  @Double()
-  external double height;
-
-  @Array<Uint32>(8)
+  @Array<Uint32>(5)
   external Array<Uint32> reserved;
 }
 
@@ -691,15 +565,6 @@ external int _surfaceUpdateLayout(
 external int _surfacePresentationSnapshot(
   Pointer<Void> surface,
   Pointer<_DtnPresentationSnapshotV1> snapshot,
-);
-
-@Native<
-  Int32 Function(Pointer<Void>, Uint32, Pointer<_DtnCardPresentationSnapshotV1>)
->(symbol: 'dtn_surface_card_presentation_snapshot', assetId: _assetId)
-external int _surfaceCardPresentationSnapshot(
-  Pointer<Void> surface,
-  int index,
-  Pointer<_DtnCardPresentationSnapshotV1> snapshot,
 );
 
 @Native<Void Function(Pointer<Void>)>(

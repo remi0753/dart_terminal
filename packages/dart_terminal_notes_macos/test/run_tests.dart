@@ -12,6 +12,7 @@ void main() {
   _testMalformedPackets();
   _testDeterministicFuzz();
   _testSurfaceFacade();
+  _testFailSoftOpen();
   stdout.writeln('terminal Notes Dart codec tests passed');
 }
 
@@ -40,6 +41,7 @@ TerminalNotesProjection _projection({
   BigInt? storeRevision,
   TerminalNotesVisibility visibility = TerminalNotesVisibility.expanded,
   bool presentationEligible = true,
+  TerminalNotesLocale locale = TerminalNotesLocale.english,
   List<TerminalNotesCard>? cards,
 }) => TerminalNotesProjection(
   paneId: 11,
@@ -64,6 +66,7 @@ TerminalNotesProjection _projection({
   differentiateWithoutColor: true,
   reduceMotion: true,
   systemBadgeVisible: true,
+  locale: locale,
   bodyFontMilliPoints: 24000,
   cards:
       cards ??
@@ -101,6 +104,7 @@ void _testCanonicalRoundTrip() {
         decoded.differentiateWithoutColor &&
         decoded.reduceMotion &&
         decoded.systemBadgeVisible &&
+        decoded.locale == TerminalNotesLocale.english &&
         decoded.bodyFontMilliPoints == 24000,
     'appearance and accessibility flags',
   );
@@ -204,6 +208,7 @@ void _testMalformedPackets() {
   });
   rejected('non-canonical body offset', (Uint8List bytes) => bytes[136] = 1);
   rejected('unknown feature state', (Uint8List bytes) => bytes[80] = 0xff);
+  rejected('unknown locale', (Uint8List bytes) => bytes[86] = 2);
   rejected('reserved header field', (Uint8List bytes) => bytes[108] = 1);
   rejected(
     'invalid UTF-8',
@@ -271,20 +276,37 @@ void _testSurfaceFacade() {
         presentation.rail.width == 320,
     'typed presentation snapshot',
   );
-  final TerminalNotesNativeCardPresentation card = surface.cardPresentation(0);
   _expect(
-    card.color == TerminalNotesColor.yellow &&
-        card.status == TerminalNotesStatus.active &&
-        card.nonColorCue &&
-        card.visibleLineLimit == 8,
-    'typed card snapshot',
+    presentation.visibleAcknowledgementEligibleGeneration == 3 &&
+        presentation.accessibilityAnnouncementCount == 1 &&
+        presentation.badgeDisplayCount == 2,
+    'content-free presentation state',
   );
   surface.dispose();
   surface.dispose();
   _expect(surface.isDisposed && bindings.destroyCount == 1, 'typed disposal');
 }
 
-final class _FakeBindings implements TerminalNotesNativeBindings {
+void _testFailSoftOpen() {
+  final TerminalNotesProjection lastProjection = _projection();
+  const ({int rows, int columns, int drawable, int winsize, int sigwinch})
+  terminal = (rows: 24, columns: 80, drawable: 1, winsize: 1, sigwinch: 0);
+  final TerminalNotesNativeOpenResult result =
+      TerminalNotesNativeSurface.tryOpen(bindings: _MissingBindings());
+  _expect(
+    result.availability ==
+            TerminalNotesCapabilityAvailability.nativeUnavailable &&
+        result.surface == null,
+    'missing native capability is fail-soft',
+  );
+  _expect(lastProjection.projectionGeneration == 3, 'last data retained');
+  _expect(
+    terminal == (rows: 24, columns: 80, drawable: 1, winsize: 1, sigwinch: 0),
+    'terminal sentinel unchanged',
+  );
+}
+
+class _FakeBindings implements TerminalNotesNativeBindings {
   final Object handle = Object();
   (double, double, double, double)? layout;
   int destroyCount = 0;
@@ -366,29 +388,11 @@ final class _FakeBindings implements TerminalNotesNativeBindings {
     materializedCardCount: 2,
     accessibilityNodeCount: 11,
     accessibilityBodyCount: 2,
-    firstSurfaceRgba: 0xfff3a6ff,
-    firstAccentRgba: 0x7a5a00ff,
-    bodyTextRgba: 0x1f1f1fff,
+    visibleAcknowledgementEligibleGeneration: 3,
+    accessibilityAnnouncementCount: 1,
     animationMilliseconds: 140,
     bodyFontMilliPoints: 15000,
-  );
-
-  @override
-  TerminalNotesNativeCardPresentationRawSnapshot cardPresentationSnapshot(
-    Object handle,
-    int index,
-  ) => TerminalNotesNativeCardPresentationRawSnapshot(
-    index: index,
-    order: 0,
-    color: 1,
-    status: 0,
-    due: false,
-    visibleLineLimit: 8,
-    surfaceRgba: 0xfff3a6ff,
-    accentRgba: 0x7a5a00ff,
-    bodyTextRgba: 0x1f1f1fff,
-    nonColorCue: true,
-    frame: (x: 320, y: 74, width: 284, height: 88),
+    badgeDisplayCount: 2,
   );
 
   @override
@@ -396,6 +400,11 @@ final class _FakeBindings implements TerminalNotesNativeBindings {
     _expect(identical(handle, this.handle), 'fake destroy handle');
     destroyCount++;
   }
+}
+
+final class _MissingBindings extends _FakeBindings {
+  @override
+  int get abiVersion => throw StateError('capability unavailable');
 }
 
 bool _bytesEqual(Uint8List left, Uint8List right) {

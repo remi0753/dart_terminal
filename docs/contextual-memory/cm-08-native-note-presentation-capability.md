@@ -1,7 +1,7 @@
 # CM-08 native Note presentation capability
 
 日付: 2026-09-21
-状態: 実装中
+状態: 完了
 
 ## 目的
 
@@ -164,3 +164,75 @@ read-only accessibilityを提供し、terminal grid、Metal drawable、PTY winsi
 - `make test`: pass。369 root files format 0 changed、root analyze issue 0、全native/package/compatibility/privacy/security test、
   `dart_terminal tests passed`を確認した。Makefile hash証跡を再生成しfresh checkもpassした。
 - Root application manifest/dependency登録0、`dart_appkit`変更0。隣接repositoryは開始前からの3変更だけである。
+
+## 2026-09-21: 第3サブタスク着手
+
+- ROADMAPを再確認し、先頭未完了がCM-08の「manifest-independent native acceptanceとfallbackを完了する」で
+  あることを確認した。CM-09以降のeditor、intent、product wiringには着手しない。
+- 本サブタスクは、package単体のDeveloper JIT/Release AOT host、native AppKit host、ASan/UBSan、G/B/P/T/A/L
+  verification vector、geometry sentinel、missing capability fallback、privacy/source/resource auditを一つのaggregate gateへ
+  接続する。
+- Application manifestへ一時登録して検証する案はCM-10を先行し、missing capabilityの検証もできなくなるため不採用とした。
+  Package自身のcode assetを使うDart hostと、AppKit main threadを所有するnative hostを組み合わせる。
+- Fallbackはproduct stateをnativeへ移すのではなく、native surface open結果を`available`/`nativeUnavailable`で返す
+  fail-soft facadeとする。Projectionのlast dataは呼び出し側authorityが保持し、native欠落がterminal geometry/input stateを
+  変更しないことをsentinelで固定する。
+- 第2サブタスクのpresentation/card snapshotにcolor RGBAが含まれることをprivacy要件と再照合した。色はbodyではないが、
+  machine snapshotがcolorを返さないという確定境界に反するため、production ABIから除去し、palette検証はactual bitmapへ
+  移す。Geometry/count/fixed accessibility stateだけをsnapshotに残す。
+- `dart_appkit`には変更を加えない。隣接repositoryには着手前から3変更があり、本作業では読み取り監査だけを行う。
+
+### 実装中に確定した判断と結果
+
+- Public presentation snapshotからcard color/RGBAとper-card snapshot APIを除去した。Production ABIが返すのはgeometry、count、
+  fixed flags、font/motion、visible acknowledgement **eligible** generation、generic accessibility announcement countだけである。
+  Six-color検証はnative test process内でactual card layerとbitmapを読み、Dart/machine境界へ値を返さない。
+- Headerの未使用領域へbounded locale enum（English/Japanese）を追加した。Native fixed label、status chip、generic ready announcementを
+  localeで選択し、本文はannouncementへ含めない。Visible expanded railでdue batchが初めてmaterializeされた時だけ一度通知し、
+  background/small/collapsedではack eligible generation 0、body AX 0を維持する。Durable acknowledgement mutationはCM-10のままである。
+- `TerminalNotesNativeSurface.tryOpen`はABI欠落、symbol解決失敗、AppKit wrong-thread createを
+  `TerminalNotesCapabilityAvailability.nativeUnavailable`へ変換する。Programming error全般を隠さないよう、捕捉は
+  `StateError`/`ArgumentError`に限定した。Projection/store/sessionは所有しないため、caller authorityのlast dataを変更しない。
+- Native AppKit hostへG1〜G3/B1〜B2/P1〜P2/T1/A2〜A3/L1相当を追加した。0/1/99/100/128 count、due 3件FIFO、
+  system badge inset、small-pane due保持、background非通知、card identityを保つ1×/2× reflow、12/15/24 pt、英日AX label、
+  alternate-screenを含むterminal geometry/input sentinel delta 0をactual hierarchyで検証する。
+- Package単体hostはDeveloper JITでcode assetをdirect loadする。`dart compile exe`はnative asset mappingをbundleしないことが
+  実行時に判明したため、Release AOTでは同じproduction dylibを`DYLD_INSERT_LIBRARIES`でprocessへ明示loadし、`@Native`の
+  process fallbackからABIを解決する。Application manifestは両モードとも未登録であり、この差異を隠すwrapperは追加しない。
+- `terminal-notes-capability-audit`はroot dependency/manifest未登録、public snapshot content-free、11-symbol export allowlist、
+  resource bounds、native log sink不在、隣接`dart_appkit`へのNote code不在をfail-closedで監査する。
+- `native_sanitizer_gate`へNotes library/harnessを追加した。ASan/UBSanは5 suite、11 artifactとなり、Notes library/harnessの
+  両方にinstrumentation markerがあることを確認した。
+
+### 現時点の検証
+
+- `make terminal-notes-contract-check terminal-notes-native-test`: pass。
+- `make terminal-notes-dart-test`: format 9 files 0 changed、package analyze issue 0、codec/fallback/asset pass。
+- `make terminal-notes-host-acceptance terminal-notes-capability-audit`: Developer JIT/Release AOTともpass、manifest 0、
+  fallback `native-unavailable`、geometry delta 0、content-free snapshot、export 11、generic `dart_appkit`を確認。
+- `make product-native-sanitizer`: pass。5 suites、11 ASan artifacts、9 UBSan artifacts。Notes library/harnessはASan/UBSanとも有効。
+- Root `dart analyze`: issue 0。
+- Formatter単独実行は対象fileをformatした後、sandbox外のDart telemetry timestamp更新で非zeroとなった。許可された通常環境の
+  package gateで再実行し、format 0 changesを確認した。Product code/testの失敗ではない。
+
+## 2026-09-21: 第3サブタスクとCM-08完了
+
+### 最終検証
+
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: pass。370 root files format 0 changed、root/package analyze issue 0、
+  全native/package/generated/freshness/compatibility/application/distribution/security testと`dart_terminal tests passed`を確認した。
+  Developer JIT/Release AOT host、capability auditもroot gate内でpassした。
+- `make terminal-notes-acceptance`: pass。G1〜G3/B1〜B2/P1〜P2/T1/A2〜A3/L1、2 modes、geometry delta 0、
+  ASan/UBSan 5 suites/11 artifactsを一つのaggregate markerで確認した。
+- Aggregate初回は既存PTY sanitizerのforeground member取得後にburst/exit/reapが連鎖して失敗した。同一sourceの
+  `make product-native-sanitizer`再実行では全suiteがpassし、その後のcomplete aggregate再実行もPTYを含めpassした。
+  Notes suiteは全実行でpassしており、再現しない一時的PTY lifecycle failureとして記録する。失敗を隠すtimeout緩和や
+  test削除は行っていない。
+- `git diff --check`: pass。Root dependency/application manifestにNotes登録0。`dart_appkit`のNote symbol検索0、同repositoryは
+  着手前からの3変更だけで、本タスクによる変更0。
+
+### 完了境界
+
+- CM-08のnative presentation、read-only accessibility、fail-soft fallback、manifest-independent acceptanceは完了した。
+- Editor、IME、intent/result、mutationはCM-09、application manifestとproduction authority wiring、durable acknowledgementは
+  CM-10として未着手のまま維持した。

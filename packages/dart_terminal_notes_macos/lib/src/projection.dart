@@ -18,6 +18,8 @@ abstract final class TerminalNotesLimits {
 
 enum TerminalNotesVisibility { collapsed, expanded }
 
+enum TerminalNotesLocale { english, japanese }
+
 enum TerminalNotesColor { neutral, yellow, blue, green, pink, purple }
 
 enum TerminalNotesStatus { active, resolved }
@@ -211,6 +213,7 @@ final class TerminalNotesProjection {
     this.differentiateWithoutColor = false,
     this.reduceMotion = false,
     this.systemBadgeVisible = false,
+    this.locale = TerminalNotesLocale.english,
     this.bodyFontMilliPoints = 15000,
   }) : cards = List<TerminalNotesCard>.unmodifiable(cards) {
     final Set<int> tokens = this.cards
@@ -277,6 +280,7 @@ final class TerminalNotesProjection {
   final bool differentiateWithoutColor;
   final bool reduceMotion;
   final bool systemBadgeVisible;
+  final TerminalNotesLocale locale;
   final int bodyFontMilliPoints;
 
   int get aggregateBodyUtf8Bytes => cards.fold<int>(
@@ -341,6 +345,7 @@ abstract final class TerminalNotesProjectionCodec {
     data.setUint8(82, projection.section.index);
     data.setUint8(83, projection.editorMode.index);
     data.setUint16(84, projection.messageKey.index, Endian.little);
+    data.setUint16(86, projection.locale.index, Endian.little);
     _setUint32(data, 88, projection.pageStart);
     _setUint32(data, 92, projection.cards.length);
     _setUint32(data, 96, projection.totalCount);
@@ -425,6 +430,7 @@ abstract final class TerminalNotesProjectionCodec {
     final int section = data.getUint8(82);
     final int editorMode = data.getUint8(83);
     final int messageKey = data.getUint16(84, Endian.little);
+    final int locale = data.getUint16(86, Endian.little);
     final int pageStart = _uint32(data, 88);
     final int pageLength = _uint32(data, 92);
     final int totalCount = _uint32(data, 96);
@@ -434,7 +440,7 @@ abstract final class TerminalNotesProjectionCodec {
         section >= TerminalNotesCollectionSection.values.length ||
         editorMode >= TerminalNotesEditorMode.values.length ||
         messageKey >= TerminalNotesMessageKey.values.length ||
-        data.getUint16(86, Endian.little) != 0 ||
+        locale >= TerminalNotesLocale.values.length ||
         _uint32(data, 100) != 0 ||
         _uint32(data, 108) != 0 ||
         _uint32(data, 112) != 0 ||
@@ -536,6 +542,7 @@ abstract final class TerminalNotesProjectionCodec {
       selectedToken: _nullableToken(_uint64(data, 48)),
       editorMode: TerminalNotesEditorMode.values[editorMode],
       messageKey: TerminalNotesMessageKey.values[messageKey],
+      locale: TerminalNotesLocale.values[locale],
       cards: cards,
       darkAppearance: flags & _flagDarkAppearance != 0,
       increaseContrast: flags & _flagIncreaseContrast != 0,

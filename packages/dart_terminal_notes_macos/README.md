@@ -21,6 +21,10 @@ accepted projection intact.
 Application capability registration and Dart Terminal model adaptation are
 intentionally deferred to product composition. Package tests load the code
 asset directly, so this package can be verified before manifest registration.
+`TerminalNotesNativeSurface.tryOpen` reports `nativeUnavailable` without
+throwing when the capability is absent or cannot be opened. The caller keeps
+the last projection and terminal session state; this package never mutates
+grid, drawable, PTY winsize, `SIGWINCH`, or input ownership as fallback.
 
 The native surface is an AppKit child overlay with a 44×44 point trailing
 badge hit target, an optional 240–360 point rail, and at most 32 materialized
@@ -28,6 +32,10 @@ card views. Cards use the six canonical opaque light/dark sRGB palettes,
 fixed status shapes, an eight-line preview, and bounded 12–24 point body text.
 Small panes retain a non-content badge and never expose a rail. Hidden,
 background, and collapsed card bodies are omitted from the accessibility tree.
+English and Japanese fixed accessibility labels are selected by the bounded
+projection locale. A ready announcement is emitted once only after the rail is
+actually visible; the snapshot exposes eligibility generation/count state, not
+card content or a durable acknowledgement mutation.
 
 `dtn_surface_attach_to_host` is a native-to-native composition seam; its
 opaque `NSView` pointer must never cross Dart FFI. Dart can update bounded

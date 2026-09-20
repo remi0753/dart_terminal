@@ -11,6 +11,32 @@ enum TerminalNotesApplyDisposition {
   failed,
 }
 
+enum TerminalNotesCapabilityAvailability { available, nativeUnavailable }
+
+final class TerminalNotesNativeOpenResult {
+  const TerminalNotesNativeOpenResult._({
+    required this.availability,
+    this.surface,
+  });
+
+  const TerminalNotesNativeOpenResult.available(
+    TerminalNotesNativeSurface surface,
+  ) : this._(
+        availability: TerminalNotesCapabilityAvailability.available,
+        surface: surface,
+      );
+
+  const TerminalNotesNativeOpenResult.unavailable()
+    : this._(
+        availability: TerminalNotesCapabilityAvailability.nativeUnavailable,
+      );
+
+  final TerminalNotesCapabilityAvailability availability;
+  final TerminalNotesNativeSurface? surface;
+
+  bool get isAvailable => surface != null;
+}
+
 final class TerminalNotesNativeException implements Exception {
   const TerminalNotesNativeException(this.operation, this.status);
 
@@ -111,11 +137,11 @@ final class TerminalNotesNativePresentation {
     required this.materializedCardCount,
     required this.accessibilityNodeCount,
     required this.accessibilityBodyCount,
-    required this.firstSurfaceRgba,
-    required this.firstAccentRgba,
-    required this.bodyTextRgba,
+    required this.visibleAcknowledgementEligibleGeneration,
+    required this.accessibilityAnnouncementCount,
     required this.animationMilliseconds,
     required this.bodyFontMilliPoints,
+    required this.badgeDisplayCount,
   });
 
   static const int _badgeVisible = 1 << 0;
@@ -129,6 +155,7 @@ final class TerminalNotesNativePresentation {
   static const int _increaseContrast = 1 << 8;
   static const int _dark = 1 << 9;
   static const int _systemBadgeVisible = 1 << 10;
+  static const int _badgeCountCapped = 1 << 11;
 
   final int projectionGeneration;
   final double paneWidth;
@@ -142,11 +169,11 @@ final class TerminalNotesNativePresentation {
   final int materializedCardCount;
   final int accessibilityNodeCount;
   final int accessibilityBodyCount;
-  final int firstSurfaceRgba;
-  final int firstAccentRgba;
-  final int bodyTextRgba;
+  final int visibleAcknowledgementEligibleGeneration;
+  final int accessibilityAnnouncementCount;
   final int animationMilliseconds;
   final int bodyFontMilliPoints;
+  final int badgeDisplayCount;
 
   bool get badgeVisible => flags & _badgeVisible != 0;
   bool get railVisible => flags & _railVisible != 0;
@@ -159,37 +186,24 @@ final class TerminalNotesNativePresentation {
   bool get increaseContrast => flags & _increaseContrast != 0;
   bool get darkAppearance => flags & _dark != 0;
   bool get systemBadgeVisible => flags & _systemBadgeVisible != 0;
-}
-
-final class TerminalNotesNativeCardPresentation {
-  const TerminalNotesNativeCardPresentation({
-    required this.index,
-    required this.order,
-    required this.color,
-    required this.status,
-    required this.due,
-    required this.visibleLineLimit,
-    required this.surfaceRgba,
-    required this.accentRgba,
-    required this.bodyTextRgba,
-    required this.nonColorCue,
-    required this.frame,
-  });
-
-  final int index;
-  final int order;
-  final TerminalNotesColor color;
-  final TerminalNotesStatus status;
-  final bool due;
-  final int visibleLineLimit;
-  final int surfaceRgba;
-  final int accentRgba;
-  final int bodyTextRgba;
-  final bool nonColorCue;
-  final TerminalNotesRect frame;
+  bool get badgeCountCapped => flags & _badgeCountCapped != 0;
 }
 
 final class TerminalNotesNativeSurface {
+  static TerminalNotesNativeOpenResult tryOpen({
+    TerminalNotesNativeBindings? bindings,
+  }) {
+    try {
+      return TerminalNotesNativeOpenResult.available(
+        TerminalNotesNativeSurface(bindings: bindings),
+      );
+    } on StateError {
+      return const TerminalNotesNativeOpenResult.unavailable();
+    } on ArgumentError {
+      return const TerminalNotesNativeOpenResult.unavailable();
+    }
+  }
+
   factory TerminalNotesNativeSurface({TerminalNotesNativeBindings? bindings}) {
     final TerminalNotesNativeBindings resolved =
         bindings ?? TerminalNotesNativeFfiBindings();
@@ -306,46 +320,12 @@ final class TerminalNotesNativeSurface {
       materializedCardCount: raw.materializedCardCount,
       accessibilityNodeCount: raw.accessibilityNodeCount,
       accessibilityBodyCount: raw.accessibilityBodyCount,
-      firstSurfaceRgba: raw.firstSurfaceRgba,
-      firstAccentRgba: raw.firstAccentRgba,
-      bodyTextRgba: raw.bodyTextRgba,
+      visibleAcknowledgementEligibleGeneration:
+          raw.visibleAcknowledgementEligibleGeneration,
+      accessibilityAnnouncementCount: raw.accessibilityAnnouncementCount,
       animationMilliseconds: raw.animationMilliseconds,
       bodyFontMilliPoints: raw.bodyFontMilliPoints,
-    );
-  }
-
-  TerminalNotesNativeCardPresentation cardPresentation(int index) {
-    if (index < 0 || index >= TerminalNotesLimits.maximumMaterializedCards) {
-      throw RangeError.range(
-        index,
-        0,
-        TerminalNotesLimits.maximumMaterializedCards - 1,
-        'index',
-      );
-    }
-    final TerminalNotesNativeCardPresentationRawSnapshot raw = _bindings
-        .cardPresentationSnapshot(_requireHandle(), index);
-    if (raw.color >= TerminalNotesColor.values.length ||
-        raw.status >= TerminalNotesStatus.values.length) {
-      throw const TerminalNotesNativeException('cardPresentation.enum', -1);
-    }
-    return TerminalNotesNativeCardPresentation(
-      index: raw.index,
-      order: raw.order,
-      color: TerminalNotesColor.values[raw.color],
-      status: TerminalNotesStatus.values[raw.status],
-      due: raw.due,
-      visibleLineLimit: raw.visibleLineLimit,
-      surfaceRgba: raw.surfaceRgba,
-      accentRgba: raw.accentRgba,
-      bodyTextRgba: raw.bodyTextRgba,
-      nonColorCue: raw.nonColorCue,
-      frame: TerminalNotesRect(
-        x: raw.frame.x,
-        y: raw.frame.y,
-        width: raw.frame.width,
-        height: raw.frame.height,
-      ),
+      badgeDisplayCount: raw.badgeDisplayCount,
     );
   }
 

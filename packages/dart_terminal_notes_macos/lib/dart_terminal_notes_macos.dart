@@ -9,6 +9,7 @@ export 'src/projection.dart'
         TerminalNotesEditorMode,
         TerminalNotesFeatureState,
         TerminalNotesLimits,
+        TerminalNotesLocale,
         TerminalNotesMessageKey,
         TerminalNotesProjection,
         TerminalNotesProjectionCodec,
@@ -21,8 +22,9 @@ export 'src/projection.dart'
 export 'src/surface.dart'
     show
         TerminalNotesApplyDisposition,
+        TerminalNotesCapabilityAvailability,
+        TerminalNotesNativeOpenResult,
         TerminalNotesNativeException,
-        TerminalNotesNativeCardPresentation,
         TerminalNotesNativePresentation,
         TerminalNotesNativeSnapshot,
         TerminalNotesNativeSurface,

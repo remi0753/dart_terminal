@@ -43,7 +43,7 @@
   "evidence_sources": [
     {
       "path": "Makefile",
-      "sha256": "c0c3c38d15c029bde9988a014cccc490ddc9f054ce174665f13dfa59e020c178"
+      "sha256": "be4bf31692b6eaf3363ef785df6f9a72853ca4b64d4477f08c09a3d030d9a7df"
     },
     {
       "path": "test/corpus/applications/matrix_v1.json",
@@ -99,7 +99,7 @@
     },
     {
       "path": "tool/native_sanitizer_gate.dart",
-      "sha256": "85fdb21a860d4b6cd4abff5d62252f8129b16f1cc79d026a25557eeb2dab9f34"
+      "sha256": "19b7b98c43112bab55452da7f1f8296bd912ca3a95d96439d1d514e8424cf523"
     },
     {
       "path": "tool/runtime_integration_smoke.dart",

@@ -9,7 +9,6 @@
 #define DTN_SNAPSHOT_VERSION 1u
 #define DTN_LAYOUT_VERSION 1u
 #define DTN_PRESENTATION_SNAPSHOT_VERSION 1u
-#define DTN_CARD_PRESENTATION_SNAPSHOT_VERSION 1u
 #define DTN_PROJECTION_MAGIC 0x31504e44u
 #define DTN_PROJECTION_HEADER_BYTES 128u
 #define DTN_CARD_RECORD_BYTES 32u
@@ -119,6 +118,7 @@ enum {
   DTN_PRESENTATION_INCREASE_CONTRAST = 1u << 8,
   DTN_PRESENTATION_DARK = 1u << 9,
   DTN_PRESENTATION_SYSTEM_BADGE_VISIBLE = 1u << 10,
+  DTN_PRESENTATION_BADGE_COUNT_CAPPED = 1u << 11,
 };
 
 typedef struct DtnLayoutV1 {
@@ -158,33 +158,13 @@ typedef struct DtnPresentationSnapshotV1 {
   uint32_t materialized_card_count;
   uint32_t accessibility_node_count;
   uint32_t accessibility_body_count;
-  uint32_t first_surface_rgba;
-  uint32_t first_accent_rgba;
-  uint32_t body_text_rgba;
+  uint64_t visible_acknowledgement_eligible_generation;
+  uint64_t accessibility_announcement_count;
   uint32_t animation_milliseconds;
   uint32_t body_font_millipoints;
-  uint32_t reserved[7];
+  uint32_t badge_display_count;
+  uint32_t reserved[5];
 } DtnPresentationSnapshotV1;
-
-typedef struct DtnCardPresentationSnapshotV1 {
-  uint32_t struct_size;
-  uint32_t version;
-  uint32_t index;
-  uint32_t order;
-  uint32_t color;
-  uint32_t status;
-  uint32_t due;
-  uint32_t visible_line_limit;
-  uint32_t surface_rgba;
-  uint32_t accent_rgba;
-  uint32_t body_text_rgba;
-  uint32_t non_color_cue;
-  double x;
-  double y;
-  double width;
-  double height;
-  uint32_t reserved[8];
-} DtnCardPresentationSnapshotV1;
 
 #if defined(__cplusplus)
 extern "C" {
@@ -208,11 +188,6 @@ __attribute__((visibility("default"))) int32_t dtn_surface_update_layout(
 __attribute__((visibility("default"))) int32_t
 dtn_surface_presentation_snapshot(
     DtnSurface* surface, DtnPresentationSnapshotV1* snapshot);
-
-__attribute__((visibility("default"))) int32_t
-dtn_surface_card_presentation_snapshot(
-    DtnSurface* surface, uint32_t index,
-    DtnCardPresentationSnapshotV1* snapshot);
 
 // Native-to-native composition seam. The returned view is unretained and must
 // never cross Dart FFI. attach consumes neither object.

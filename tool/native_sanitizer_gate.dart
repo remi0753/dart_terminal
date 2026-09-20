@@ -129,6 +129,7 @@ final class _NativeSanitizerGate {
     artifacts.addAll(await _runRendererSuite());
     artifacts.addAll(await _runAppleScriptSuite());
     artifacts.addAll(await _runAppIntentsSuite());
+    artifacts.addAll(await _runNotesSuite());
 
     var undefinedArtifacts = 0;
     final Set<String> ownersWithUndefinedInstrumentation = <String>{};
@@ -144,13 +145,13 @@ final class _NativeSanitizerGate {
         'ubsan=${instrumentation.undefinedMarkers}',
       );
     }
-    if (ownersWithUndefinedInstrumentation.length != 4) {
+    if (ownersWithUndefinedInstrumentation.length != 5) {
       throw StateError(
         'undefined-behavior instrumentation did not reach every native suite',
       );
     }
     stdout.writeln(
-      'PRODUCT_NATIVE_SANITIZER_PASS suites=4 artifacts=${artifacts.length} '
+      'PRODUCT_NATIVE_SANITIZER_PASS suites=5 artifacts=${artifacts.length} '
       'asan_artifacts=${artifacts.length} '
       'ubsan_artifacts=$undefinedArtifacts architecture=$architecture',
     );
@@ -411,6 +412,55 @@ final class _NativeSanitizerGate {
       _InstrumentedArtifact('app-intents', 'library', library),
       _InstrumentedArtifact('app-intents', 'abi-harness', abiTests),
       _InstrumentedArtifact('app-intents', 'perform-harness', performTests),
+    ];
+  }
+
+  Future<List<_InstrumentedArtifact>> _runNotesSuite() async {
+    final String native = _projectPath(
+      'packages/dart_terminal_notes_macos/native',
+    );
+    final String library = _path('libdart_terminal_notes_macos.dylib');
+    final String tests = _path('terminal_notes_capability_tests');
+    await _compile(clang, <String>[
+      ..._commonClangFlags,
+      '-fobjc-arc',
+      '-fblocks',
+      '-dynamiclib',
+      '-I$native',
+      '$native/TerminalNotesPlugin.m',
+      '-framework',
+      'AppKit',
+      '-framework',
+      'Foundation',
+      '-Wl,-install_name,@rpath/libdart_terminal_notes_macos.dylib',
+      '-o',
+      library,
+    ], 'Notes sanitizer library');
+    await _compile(clangxx, <String>[
+      ..._commonClangFlags,
+      '-std=c++20',
+      '-fobjc-arc',
+      '-fblocks',
+      '-I$native',
+      '$native/test/TerminalNotesCapabilityTests.mm',
+      library,
+      '-framework',
+      'AppKit',
+      '-framework',
+      'Foundation',
+      '-Wl,-rpath,${buildDirectory.path}',
+      '-o',
+      tests,
+    ], 'Notes sanitizer tests');
+    await _expectSuitePass(
+      'Notes',
+      tests,
+      const <String>[],
+      'terminal Notes native codec tests passed',
+    );
+    return <_InstrumentedArtifact>[
+      _InstrumentedArtifact('notes', 'library', library),
+      _InstrumentedArtifact('notes', 'harness', tests),
     ];
   }
 

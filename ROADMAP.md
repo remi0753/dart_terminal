@@ -94,12 +94,12 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
   - [x] generation-bound pure authorityとfuture Note owner contractを実装する
   - [x] Context Dock、system surface、input family routingをauthorityへ統合する
   - [x] responder、focus report、両runtime受け入れを完了する
-- [ ] CM-08 native Note presentation capabilityを実装する
+- [x] CM-08 native Note presentation capabilityを実装する
   （[`cm-08-native-note-presentation-capability.md`](docs/contextual-memory/cm-08-native-note-presentation-capability.md)
   を参照して実施する）
   - [x] package、ABI v1、strict projection codecを実装する
   - [x] badge、rail、card、appearance、read-only accessibilityを実装する
-  - [ ] manifest-independent native acceptanceとfallbackを完了する
+  - [x] manifest-independent native acceptanceとfallbackを完了する
 - [ ] CM-09 native Note editor、intent、accessibility interactionを実装する
 - [ ] CM-10 S1 Basic memoryをproductへ統合する
 - [ ] CM-11 S2 On Returnをproductへ統合する

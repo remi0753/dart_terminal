@@ -31,6 +31,7 @@ typedef struct DtnParsedProjection {
   uint32_t message_key;
   uint32_t page_start;
   uint32_t total_count;
+  uint32_t locale;
   uint32_t body_font_millipoints;
   uint32_t projection_flags;
 } DtnParsedProjection;
@@ -68,6 +69,7 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 }
 
 @interface DtnCardModel : NSObject
+@property(nonatomic) uint64_t token;
 @property(nonatomic, copy) NSString* body;
 @property(nonatomic) uint32_t color;
 @property(nonatomic) uint32_t status;
@@ -171,7 +173,8 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 - (void)applyModel:(DtnCardModel*)model
               dark:(BOOL)dark
      bodyFontPoints:(CGFloat)bodyFontPoints
-  increaseContrast:(BOOL)increaseContrast;
+  increaseContrast:(BOOL)increaseContrast
+     japaneseLocale:(BOOL)japaneseLocale;
 @end
 
 @implementation DtnNoteCardView
@@ -205,7 +208,8 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 - (void)applyModel:(DtnCardModel*)model
               dark:(BOOL)dark
      bodyFontPoints:(CGFloat)bodyFontPoints
-  increaseContrast:(BOOL)increaseContrast {
+  increaseContrast:(BOOL)increaseContrast
+     japaneseLocale:(BOOL)japaneseLocale {
   self.model = model;
   self.surfaceRgba = DtnSurfaceRgba(model.color, dark);
   self.accentRgba = DtnAccentRgba(model.color, dark);
@@ -222,15 +226,15 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   self.bodyLabel.textColor = DtnColor(self.bodyRgba);
   NSString* chip = nil;
   if (model.status == 1u) {
-    chip = @"✓ Resolved";
+    chip = japaneseLocale ? @"✓ 解決済み" : @"✓ Resolved";
   } else if (model.due) {
-    chip = @"● Ready";
+    chip = japaneseLocale ? @"● 準備完了" : @"● Ready";
   } else if (model.triggerKind == 1u) {
-    chip = @"◆ On Return";
+    chip = japaneseLocale ? @"◆ Return時" : @"◆ On Return";
   } else if (model.triggerKind == 2u) {
-    chip = @"▶ Next Prompt";
+    chip = japaneseLocale ? @"▶ 次のプロンプト" : @"▶ Next Prompt";
   } else {
-    chip = @"○ Active";
+    chip = japaneseLocale ? @"○ 有効" : @"○ Active";
   }
   self.chipLabel.stringValue = chip;
   self.chipLabel.textColor = DtnColor(self.accentRgba);
@@ -268,10 +272,14 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 @property(nonatomic) uint32_t accessibilityNodeCount;
 @property(nonatomic) uint32_t accessibilityBodyCount;
 @property(nonatomic) uint32_t animationMilliseconds;
+@property(nonatomic) uint64_t visibleAcknowledgementEligibleGeneration;
+@property(nonatomic) uint64_t lastAnnouncedGeneration;
+@property(nonatomic) uint64_t accessibilityAnnouncementCount;
 - (void)applyProjection:(DtnParsedProjection)projection
                   cards:(NSArray<DtnCardModel*>*)cards;
 - (void)applyLayout:(DtnLayoutV1)layout;
 - (void)layoutPresentation;
+- (void)reconcileReadyAnnouncement;
 @end
 
 @implementation DtnNoteSurfaceView
@@ -350,6 +358,7 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
           : DTN_MAX_MATERIALIZED_CARDS;
   const BOOL dark = (projection.projection_flags & (1u << 2)) != 0u;
   const BOOL contrast = (projection.projection_flags & (1u << 3)) != 0u;
+  const BOOL japanese = projection.locale == 1u;
   const CGFloat font_points = projection.body_font_millipoints / 1000.0;
   for (NSUInteger index = 0; index < materialized; ++index) {
     DtnNoteCardView* card =
@@ -357,12 +366,16 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     [card applyModel:cards[index]
                 dark:dark
        bodyFontPoints:font_points
-    increaseContrast:contrast];
+    increaseContrast:contrast
+       japaneseLocale:japanese];
     card.layer.contentsScale = self.backingScale;
-    [card setAccessibilityLabel:
-              [NSString stringWithFormat:@"Note %lu of %u",
-                                         (unsigned long)index + 1,
-                                         projection.total_count]];
+    [card setAccessibilityLabel:japanese
+              ? [NSString stringWithFormat:@"ノート %lu / %u",
+                                           (unsigned long)index + 1,
+                                           projection.total_count]
+              : [NSString stringWithFormat:@"Note %lu of %u",
+                                           (unsigned long)index + 1,
+                                           projection.total_count]];
     [self.cardList addSubview:card];
     [card_views addObject:card];
   }
@@ -373,17 +386,27 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
                          ? @"99+"
                          : [NSString stringWithFormat:@"%u",
                                                        projection.active_count];
-  [self.badge setAccessibilityLabel:
-                  [NSString stringWithFormat:@"Notes, %u active, %u ready",
-                                             projection.active_count,
-                                             projection.due_count]];
+  [self.badge setAccessibilityHelp:japanese ? @"ノートを表示" : @"Show Notes"];
+  [self.badge setAccessibilityLabel:japanese
+                  ? [NSString stringWithFormat:@"ノート、有効%u件、準備完了%u件",
+                                               projection.active_count,
+                                               projection.due_count]
+                  : [NSString stringWithFormat:@"Notes, %u active, %u ready",
+                                               projection.active_count,
+                                               projection.due_count]];
   self.rail.darkAppearance = dark;
   self.rail.increaseContrast = contrast;
+  [self.rail setAccessibilityLabel:japanese ? @"ノート" : @"Notes"];
+  self.titleLabel.stringValue = japanese ? @"ノート" : @"Notes";
+  [self.sectionControl setLabel:japanese ? @"現在" : @"Current" forSegment:0];
+  [self.sectionControl setLabel:japanese ? @"切り離し" : @"Detached"
+                     forSegment:1];
   self.titleLabel.textColor =
       DtnColor(dark ? 0xf5f5f5ffu : 0x1f1f1fffu);
   self.sectionControl.selectedSegment = projection.section;
   self.animationMilliseconds =
       (projection.projection_flags & (1u << 5)) != 0u ? 0u : 140u;
+  self.visibleAcknowledgementEligibleGeneration = 0u;
   [self layoutPresentation];
 }
 
@@ -422,20 +445,27 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   self.badge.hidden = !badge_visible;
   if (self.smallPane) {
     self.badge.title = @"!";
-    [self.badge setAccessibilityLabel:@"Notes, pane too small"];
+    [self.badge setAccessibilityLabel:self.projection.locale == 1u
+                    ? @"ノート、ペインが小さすぎます"
+                    : @"Notes, pane too small"];
   } else if (!available) {
     self.badge.title = @"!";
-    [self.badge setAccessibilityLabel:@"Notes unavailable"];
+    [self.badge setAccessibilityLabel:self.projection.locale == 1u
+                    ? @"ノートを利用できません"
+                    : @"Notes unavailable"];
   } else {
     self.badge.title = self.projection.active_count > 99u
                            ? @"99+"
                            : [NSString
                                  stringWithFormat:@"%u",
                                                   self.projection.active_count];
-    [self.badge setAccessibilityLabel:
-                    [NSString stringWithFormat:@"Notes, %u active, %u ready",
-                                               self.projection.active_count,
-                                               self.projection.due_count]];
+    [self.badge setAccessibilityLabel:self.projection.locale == 1u
+                    ? [NSString stringWithFormat:@"ノート、有効%u件、準備完了%u件",
+                                                 self.projection.active_count,
+                                                 self.projection.due_count]
+                    : [NSString stringWithFormat:@"Notes, %u active, %u ready",
+                                                 self.projection.active_count,
+                                                 self.projection.due_count]];
   }
   self.badge.frame = NSMakeRect(fmax(0, width - 8 - 44),
                                 fmax(0, (height - 44) / 2), 44, 44);
@@ -481,8 +511,35 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   self.accessibilityNodeCount =
       rail_visible ? 5u + (uint32_t)self.cardViews.count * 3u
                    : (badge_visible ? 1u : 0u);
+  [self reconcileReadyAnnouncement];
   [self.badge setNeedsDisplay:YES];
   [self.rail setNeedsDisplay:YES];
+}
+
+- (void)reconcileReadyAnnouncement {
+  const BOOL visible_ready = !self.rail.hidden &&
+      self.projection.due_count > 0u &&
+      (self.projection.projection_flags & (1u << 1)) != 0u;
+  if (!visible_ready) {
+    self.visibleAcknowledgementEligibleGeneration = 0u;
+    return;
+  }
+  self.visibleAcknowledgementEligibleGeneration =
+      self.projection.projection_generation;
+  if (self.lastAnnouncedGeneration == self.projection.projection_generation) {
+    return;
+  }
+  self.lastAnnouncedGeneration = self.projection.projection_generation;
+  ++self.accessibilityAnnouncementCount;
+  NSString* announcement = self.projection.locale == 1u
+      ? [NSString stringWithFormat:@"%u件のノートが準備できました",
+                                   self.projection.due_count]
+      : [NSString stringWithFormat:@"%u notes ready",
+                                   self.projection.due_count];
+  NSAccessibilityPostNotificationWithUserInfo(
+      self, NSAccessibilityAnnouncementRequestedNotification,
+      @{NSAccessibilityAnnouncementKey : announcement,
+        NSAccessibilityPriorityKey : @(NSAccessibilityPriorityMedium)});
 }
 
 @end
@@ -533,6 +590,7 @@ static NSArray<DtnCardModel*>* dtn_build_card_models(const uint8_t* bytes,
              encoding:NSUTF8StringEncoding];
     if (body == nil) return nil;
     DtnCardModel* model = [[DtnCardModel alloc] init];
+    model.token = dtn_read_u64(record);
     model.body = body;
     model.order = dtn_read_u32(record + 16u);
     model.color = record[20u];
@@ -647,6 +705,7 @@ static int32_t dtn_parse_projection(const uint8_t* bytes, size_t length,
   const uint8_t section = bytes[82u];
   const uint8_t editor_mode = bytes[83u];
   const uint16_t message_key = dtn_read_u16(bytes + 84u);
+  const uint16_t locale = dtn_read_u16(bytes + 86u);
   const uint32_t page_start = dtn_read_u32(bytes + 88u);
   const uint32_t page_length = dtn_read_u32(bytes + 92u);
   const uint32_t total_count = dtn_read_u32(bytes + 96u);
@@ -662,7 +721,7 @@ static int32_t dtn_parse_projection(const uint8_t* bytes, size_t length,
                          card_count * DTN_CARD_RECORD_BYTES ||
       (size_t)body_offset + body_bytes != length || feature_state > 6u ||
       surface_state > 4u || section > 1u || editor_mode > 2u ||
-      message_key > 5u || dtn_read_u16(bytes + 86u) != 0u ||
+      message_key > 5u || locale > 1u ||
       page_length != card_count ||
       total_count > (section == DTN_SECTION_CURRENT ? DTN_MAX_CONTEXT_NOTES
                                                     : 2048u) ||
@@ -750,6 +809,7 @@ static int32_t dtn_parse_projection(const uint8_t* bytes, size_t length,
   output->section = section;
   output->editor_mode = editor_mode;
   output->message_key = message_key;
+  output->locale = locale;
   output->page_start = page_start;
   output->total_count = total_count;
   output->body_font_millipoints = body_font_millipoints;
@@ -939,9 +999,6 @@ int32_t dtn_surface_presentation_snapshot(
     snapshot->first_card_y = frame.origin.y;
     snapshot->first_card_width = frame.size.width;
     snapshot->first_card_height = frame.size.height;
-    snapshot->first_surface_rgba = first.surfaceRgba;
-    snapshot->first_accent_rgba = first.accentRgba;
-    snapshot->body_text_rgba = first.bodyRgba;
   }
   uint32_t flags = DTN_PRESENTATION_OPAQUE_CARDS;
   if (!view.badge.hidden) flags |= DTN_PRESENTATION_BADGE_VISIBLE;
@@ -967,46 +1024,21 @@ int32_t dtn_surface_presentation_snapshot(
   if ((view.projection.projection_flags & (1u << 6)) != 0u) {
     flags |= DTN_PRESENTATION_SYSTEM_BADGE_VISIBLE;
   }
+  if (view.projection.active_count > 99u) {
+    flags |= DTN_PRESENTATION_BADGE_COUNT_CAPPED;
+  }
   snapshot->flags = flags;
   snapshot->materialized_card_count = (uint32_t)view.cardViews.count;
   snapshot->accessibility_node_count = view.accessibilityNodeCount;
   snapshot->accessibility_body_count = view.accessibilityBodyCount;
+  snapshot->visible_acknowledgement_eligible_generation =
+      view.visibleAcknowledgementEligibleGeneration;
+  snapshot->accessibility_announcement_count =
+      view.accessibilityAnnouncementCount;
   snapshot->animation_milliseconds = view.animationMilliseconds;
   snapshot->body_font_millipoints = view.projection.body_font_millipoints;
-  return DTN_STATUS_OK;
-}
-
-int32_t dtn_surface_card_presentation_snapshot(
-    DtnSurface* surface, uint32_t index,
-    DtnCardPresentationSnapshotV1* snapshot) {
-  if (surface == NULL || snapshot == NULL ||
-      snapshot->struct_size != sizeof(DtnCardPresentationSnapshotV1)) {
-    return DTN_STATUS_INVALID_ARGUMENT;
-  }
-  if (snapshot->version != DTN_CARD_PRESENTATION_SNAPSHOT_VERSION) {
-    return DTN_STATUS_UNSUPPORTED_VERSION;
-  }
-  if (![NSThread isMainThread]) return DTN_STATUS_WRONG_THREAD;
-  if (index >= surface->view.cardViews.count) return DTN_STATUS_NOT_FOUND;
-  DtnNoteCardView* card = surface->view.cardViews[index];
-  memset(snapshot, 0, sizeof(*snapshot));
-  snapshot->struct_size = sizeof(*snapshot);
-  snapshot->version = DTN_CARD_PRESENTATION_SNAPSHOT_VERSION;
-  snapshot->index = index;
-  snapshot->order = card.model.order;
-  snapshot->color = card.model.color;
-  snapshot->status = card.model.status;
-  snapshot->due = card.model.due ? 1u : 0u;
-  snapshot->visible_line_limit = 8u;
-  snapshot->surface_rgba = card.surfaceRgba;
-  snapshot->accent_rgba = card.accentRgba;
-  snapshot->body_text_rgba = card.bodyRgba;
-  snapshot->non_color_cue = 1u;
-  NSRect frame = [surface->view convertRect:card.bounds fromView:card];
-  snapshot->x = frame.origin.x;
-  snapshot->y = frame.origin.y;
-  snapshot->width = frame.size.width;
-  snapshot->height = frame.size.height;
+  snapshot->badge_display_count =
+      view.projection.active_count > 99u ? 99u : view.projection.active_count;
   return DTN_STATUS_OK;
 }
 
