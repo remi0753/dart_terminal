@@ -321,3 +321,4 @@ export 'src/terminal_tab_presentation.dart';
 export 'src/terminal_update_controller.dart';
 export 'src/terminal_update_feed.dart';
 export 'src/terminal_update_transaction.dart';
+export 'src/terminal_window_interaction.dart';

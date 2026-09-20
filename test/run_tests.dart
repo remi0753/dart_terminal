@@ -150,6 +150,7 @@ import 'terminal_view_badge_projection_test.dart';
 import 'terminal_viewport_render_model_test.dart';
 import 'terminal_viewport_test.dart';
 import 'terminal_wide_grapheme_test.dart';
+import 'terminal_window_interaction_test.dart';
 import 'vt_parser_inspector_test.dart';
 import 'vt_parser_test.dart';
 import 'vt_parser_trace_test.dart';
@@ -296,6 +297,7 @@ Future<void> main() async {
   await runTerminalUpdateFeedTests();
   await runTerminalUpdateControllerTests();
   await runTerminalUpdateTransactionTests();
+  await runTerminalWindowInteractionTests();
   await runTerminalReleaseSymbolsTests();
   runTerminalViewportTests();
   runTerminalViewportRenderModelTests();
