@@ -487,6 +487,14 @@ final class TerminalContextDockDirectoryController {
           );
           continue;
         }
+        if (_resumeRetainedForegroundRoot(
+          dock,
+          refreshPaneIds: refreshPaneIds,
+          deferRefreshWhileNavigatorOwnsInput:
+              deferRefreshWhileNavigatorOwnsInput,
+        )) {
+          continue;
+        }
         final _TerminalContextDockDirectoryWindowState? suspended =
             _windows[logicalWindow.id];
         if (suspended?.paneId == dock.targetPaneId &&
@@ -788,6 +796,57 @@ final class TerminalContextDockDirectoryController {
     _synchronizeHiddenVisibility(retained, showHiddenEntries);
     _publishResultCount(retained);
     if (changed) _onChanged?.call();
+    return true;
+  }
+
+  /// Resumes the command-start root selected by an explicit foreground-job
+  /// Directory override. A foreground process does not own the shell cwd
+  /// authority, so resolving cwd here can transiently return unavailable and
+  /// destroy the retained tree before the next process poll.
+  bool _resumeRetainedForegroundRoot(
+    TerminalContextDockWindowSnapshot dock, {
+    required Set<PaneId> refreshPaneIds,
+    required bool deferRefreshWhileNavigatorOwnsInput,
+  }) {
+    if (!_readCanRetainPane(dock.targetPaneId)) return false;
+    final _TerminalContextDockDirectoryWindowState? retained =
+        _windows[dock.windowId];
+    if (retained == null ||
+        retained.paneId != dock.targetPaneId ||
+        retained.privacyRestricted ||
+        retained.resolution?.isAvailable != true ||
+        retained.rootSnapshot == null) {
+      return false;
+    }
+
+    final bool resumed = retained.isFrozen;
+    retained.isFrozen = false;
+    _synchronizeHiddenVisibility(retained, dock.pane.showHiddenEntries);
+    _recordRecentRoot(retained.resolution!.path!);
+
+    final bool incomingRefresh = refreshPaneIds.contains(dock.targetPaneId);
+    if (incomingRefresh &&
+        deferRefreshWhileNavigatorOwnsInput &&
+        dock.navigatorOwnsInput) {
+      _deferredRefreshPaneIds.add(dock.targetPaneId);
+    }
+    final bool applyIncomingRefresh =
+        incomingRefresh &&
+        (!deferRefreshWhileNavigatorOwnsInput || !dock.navigatorOwnsInput);
+    final bool applyDeferredRefresh =
+        !dock.navigatorOwnsInput &&
+        _deferredRefreshPaneIds.contains(dock.targetPaneId);
+    if (applyIncomingRefresh || applyDeferredRefresh) {
+      _deferredRefreshPaneIds.remove(dock.targetPaneId);
+      _startRefresh(retained, dock);
+      return true;
+    }
+
+    _ensureExpandedLoads(retained);
+    _ensureSearch(retained, dock);
+    _publishResultCount(retained);
+    _ensureGoTo(retained, dock);
+    if (resumed) _onChanged?.call();
     return true;
   }
 

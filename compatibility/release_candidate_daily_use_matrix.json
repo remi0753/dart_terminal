@@ -67,7 +67,7 @@
     },
     {
       "path": "test/corpus/appkit/phase7_acceptance_v1.json",
-      "sha256": "cfc4790847092c7b97fe52152706b22b730affac51f246162c16b85c8ef74232"
+      "sha256": "8ca0ccfeac0ab561ca4903012d0ffbb213749fbbf1bffd8d7c552925120cd69f"
     },
     {
       "path": "test/corpus/fuzz/phase11_v1.json",

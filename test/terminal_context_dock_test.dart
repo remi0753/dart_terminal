@@ -1340,6 +1340,7 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
   bool remote = false;
   bool canObserve = true;
   bool canRetain = false;
+  bool canResolveWorkingDirectory = true;
   var resolutionCount = 0;
   var projectionChangeCount = 0;
   final TerminalContextDockDirectoryController controller =
@@ -1361,6 +1362,9 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
         ),
         resolveWorkingDirectory: (PaneId paneId, int generation) {
           resolutionCount++;
+          if (!canResolveWorkingDirectory) {
+            throw StateError('foreground cwd is unavailable');
+          }
           final TerminalPaneProcessSnapshot process = harness.state
               .paneForId(paneId)!
               .processSnapshot();
@@ -1931,6 +1935,33 @@ Future<void> _testDirectoryTreeFollowsPaneAndCancelsHiddenWork() async {
         files.listCount('/other') == retainedListBaseline,
     'process suspension freezes the immutable tree without granting fresh filesystem observation',
   );
+  canObserve = true;
+  canResolveWorkingDirectory = false;
+  controller.synchronize();
+  controller.synchronize();
+  snapshot = controller.snapshotForWindow(window.id)!;
+  _expect(
+    !snapshot.isFrozen &&
+        snapshot.status == TerminalContextDockDirectoryStatus.ready &&
+        snapshot.workingDirectory == '/other' &&
+        snapshot.rows.single.entry.name == 'other.txt' &&
+        controller.hasRetainedSnapshot(secondPane.id) &&
+        controller.canRefreshWindow(window.id, secondPane.id) &&
+        resolutionCount == resolutionBaseline,
+    'explicit foreground Directory observation reuses its retained root across polls without resolving unavailable cwd',
+  );
+  final int foregroundRefreshBaseline = controller.refreshCommitCount;
+  _expect(
+    controller.refreshWindow(window.id, secondPane.id),
+    'explicit foreground Directory observation can refresh its retained root',
+  );
+  await _waitUntil(() => controller.activeOperationCount == 0);
+  _expect(
+    controller.refreshCommitCount == foregroundRefreshBaseline + 1 &&
+        resolutionCount == resolutionBaseline,
+    'foreground manual refresh replaces the retained root without resolving cwd',
+  );
+  canResolveWorkingDirectory = true;
   canObserve = true;
   canRetain = false;
   controller.synchronize();
