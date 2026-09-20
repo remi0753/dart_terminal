@@ -562,6 +562,8 @@ final class TerminalLocalization {
   String get settingsAfterSave => _ja ? '保存後' : 'After save';
   String get settingsOpenTerminals => _ja ? '開いているターミナル' : 'Open terminals';
   String get settingsNewTerminals => _ja ? '新しいターミナル' : 'New terminals';
+  String get settingsApplicationRestart =>
+      _ja ? 'アプリ再起動後' : 'After app restart';
   String get settingsChangeImmediately => _ja ? 'ただちに変更' : 'Change immediately';
   String get settingsKeepCurrentValue => _ja ? '現在の値を維持' : 'Keep current value';
   String get settingsUseSavedValue => _ja ? '保存した値を使用' : 'Use saved value';
@@ -583,6 +585,8 @@ final class TerminalLocalization {
       ? '承認世代: $generation    再読み込み: ${inProgress ? '処理中' : '待機中'}'
       : 'Accepted generation: $generation    '
             'Reload: ${inProgress ? 'in progress' : 'idle'}';
+  String settingsInspectorPendingRestart(int count) =>
+      _ja ? '再起動待ちの設定: $count' : 'Pending restart settings: $count';
   String settingsInspectorConfigFile(String path) =>
       _ja ? '設定ファイル: $path' : 'Config file: $path';
   String settingsInspectorMatches({required int matches, required int total}) =>

@@ -520,6 +520,10 @@ final class TerminalSettingsEditorState {
         option.applicationPolicy == TerminalConfigApplicationPolicy.live
         ? localization.settingsChangeImmediately
         : localization.settingsKeepCurrentValue;
+    final String newTerminals =
+        option.applicationPolicy == TerminalConfigApplicationPolicy.nextLaunch
+        ? localization.settingsKeepCurrentValue
+        : localization.settingsUseSavedValue;
     final StringBuffer buffer = StringBuffer()
       ..writeln(option.name)
       ..writeln()
@@ -534,8 +538,16 @@ final class TerminalSettingsEditorState {
       ..writeln('  ${localization.settingsOpenTerminals}   $openTerminals')
       ..writeln(
         '  ${localization.settingsNewTerminals}    '
+        '$newTerminals',
+      );
+    if (option.applicationPolicy ==
+        TerminalConfigApplicationPolicy.nextLaunch) {
+      buffer.writeln(
+        '  ${localization.settingsApplicationRestart}   '
         '${localization.settingsUseSavedValue}',
-      )
+      );
+    }
+    buffer
       ..writeln()
       ..writeln(
         localization.settingsOptionDescription(option.name, option.description),

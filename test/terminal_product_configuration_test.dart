@@ -18,6 +18,100 @@ Future<void> runTerminalProductConfigurationTests() async {
   _testConsumerResourceFactoriesAndMappings();
   _testApplicationPoliciesAndSemanticChangePlan();
   await _testAcceptedConfigurationAuthority();
+  await _testNoteConfigurationProjection();
+}
+
+Future<void> _testNoteConfigurationProjection() async {
+  final TerminalConfigSnapshot initial = TerminalConfigLoader().resolve(
+    const <String>['--no-config'],
+    environment: const <String, String>{},
+  ).snapshot;
+  TerminalConfigSnapshot candidate = TerminalConfigLoader().resolve(
+    const <String>[
+      '--no-config',
+      '--notes=true',
+      '--notes-on-return=false',
+      '--notes-next-prompt=true',
+      '--notes-font-size=24',
+    ],
+    environment: const <String, String>{},
+  ).snapshot;
+  final TerminalConfigReloadController controller =
+      TerminalConfigReloadController(
+        initialSnapshot: initial,
+        resolver: () => TerminalConfigResolution(
+          snapshot: candidate,
+          remainingArguments: const <String>[],
+        ),
+      );
+  final List<TerminalNoteFeatureConfiguration> projections =
+      <TerminalNoteFeatureConfiguration>[];
+  final TerminalProductConfigurationAuthority authority =
+      TerminalProductConfigurationAuthority(
+        TerminalProductConfiguration.fromSnapshot(initial),
+        onNoteConfigurationChanged: projections.add,
+      );
+  final TerminalKeyBindingEngine inputBefore = authority.keyBindingEngine;
+  final TerminalKeyEncoder encoderBefore = authority.keyEncoder;
+
+  final TerminalConfigReloadResult mixed = await controller.reload();
+  authority.applyReload(mixed);
+  _expect(
+    controller.hasPendingRestart &&
+        authority.acceptedGeneration == 1 &&
+        authority.liveGeneration == 0 &&
+        authority.noteConfigurationGeneration == 1 &&
+        identical(authority.keyBindingEngine, inputBefore) &&
+        identical(authority.keyEncoder, encoderBefore) &&
+        !authority.newSessionConfiguration.notes &&
+        authority.newSessionConfiguration.notesOnReturn &&
+        !authority.newSessionConfiguration.notesNextPrompt &&
+        authority.newSessionConfiguration.notesFontSize == 24 &&
+        !authority.noteConfiguration.surfaceEnabled &&
+        !authority.noteConfiguration.onReturnEnabled &&
+        !authority.noteConfiguration.nextPromptEnabled &&
+        authority.noteConfiguration.fontSize == 24 &&
+        projections.length == 1 &&
+        projections.single == authority.noteConfiguration,
+    'C-02/C-03 keep launch flags fixed while only Note font projects live',
+  );
+
+  candidate = TerminalConfigLoader().resolve(const <String>[
+    '--no-config',
+    '--notes=true',
+    '--notes-on-return=true',
+    '--notes-next-prompt=true',
+    '--notes-font-size=24',
+  ], environment: const <String, String>{}).snapshot;
+  final TerminalConfigReloadResult nextLaunchOnly = await controller.reload();
+  authority.applyReload(nextLaunchOnly);
+  _expect(
+    nextLaunchOnly.changePlan!.liveChanges.isEmpty &&
+        authority.noteConfigurationGeneration == 1 &&
+        projections.length == 1 &&
+        !authority.noteConfiguration.surfaceEnabled,
+    'next-launch-only reload cannot notify or mutate the current Note runtime',
+  );
+
+  final TerminalProductConfiguration enabledLaunch =
+      TerminalProductConfiguration.fromSnapshot(
+        TerminalConfigLoader().resolve(const <String>[
+          '--no-config',
+          '--notes=true',
+          '--notes-on-return=false',
+          '--notes-next-prompt=true',
+        ], environment: const <String, String>{}).snapshot,
+      );
+  final TerminalNoteFeatureConfiguration enabled =
+      TerminalNoteFeatureConfiguration.fromProduct(enabledLaunch);
+  _expect(
+    enabled.surfaceEnabled &&
+        !enabled.onReturnEnabled &&
+        enabled.nextPromptEnabled &&
+        enabled.toString().contains('surface=true') &&
+        !enabled.toString().contains('NoteId'),
+    'effective runtime flags are exact conjunctions with content-free diagnostics',
+  );
 }
 
 void _testContextDockConfiguration() {

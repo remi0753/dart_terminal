@@ -22,6 +22,7 @@ final class TerminalConfigReloadResult {
     required this.effectiveSnapshot,
     this.candidateSnapshot,
     this.changePlan,
+    this.pendingRestartChanges = const <TerminalConfigChange>[],
     this.error,
     this.stackTrace,
   });
@@ -30,6 +31,7 @@ final class TerminalConfigReloadResult {
   final TerminalConfigSnapshot effectiveSnapshot;
   final TerminalConfigSnapshot? candidateSnapshot;
   final TerminalConfigChangePlan? changePlan;
+  final List<TerminalConfigChange> pendingRestartChanges;
   final Object? error;
   final StackTrace? stackTrace;
 
@@ -46,6 +48,8 @@ final class TerminalConfigReloadResult {
         'generation=$acceptedGeneration changes=${plan?.changes.length ?? 0} '
         'live=${plan?.liveChanges.length ?? 0} '
         'new_session=${plan?.newSessionChanges.length ?? 0} '
+        'next_launch=${plan?.nextLaunchChanges.length ?? 0} '
+        'pending_restart=${pendingRestartChanges.length} '
         'diagnostics=${diagnostics.length}';
   }
 }
@@ -60,6 +64,7 @@ final class TerminalConfigReloadController {
     required TerminalConfigSnapshot initialSnapshot,
     required TerminalConfigReloadResolver resolver,
   }) : _effectiveSnapshot = initialSnapshot,
+       _launchSnapshot = initialSnapshot,
        _resolver = resolver;
 
   factory TerminalConfigReloadController.fromStartup({
@@ -92,6 +97,7 @@ final class TerminalConfigReloadController {
   }
 
   final TerminalConfigReloadResolver _resolver;
+  final TerminalConfigSnapshot _launchSnapshot;
   TerminalConfigSnapshot _effectiveSnapshot;
   TerminalConfigSnapshot? _lastAttemptedSnapshot;
   List<TerminalConfigDiagnostic> _lastAttemptDiagnostics =
@@ -101,6 +107,8 @@ final class TerminalConfigReloadController {
   var _inProgress = false;
   var _disposed = false;
   var _acceptedGeneration = 0;
+  List<TerminalConfigChange> _pendingRestartChanges =
+      const <TerminalConfigChange>[];
 
   TerminalConfigSnapshot get effectiveSnapshot => _effectiveSnapshot;
   TerminalConfigSnapshot? get lastAttemptedSnapshot => _lastAttemptedSnapshot;
@@ -111,6 +119,9 @@ final class TerminalConfigReloadController {
   bool get inProgress => _inProgress;
   bool get isDisposed => _disposed;
   int get acceptedGeneration => _acceptedGeneration;
+  List<TerminalConfigChange> get pendingRestartChanges =>
+      _pendingRestartChanges;
+  bool get hasPendingRestart => _pendingRestartChanges.isNotEmpty;
 
   Future<TerminalConfigReloadResult> reload() {
     if (_disposed) {
@@ -118,6 +129,7 @@ final class TerminalConfigReloadController {
         TerminalConfigReloadResult._(
           disposition: TerminalConfigReloadDisposition.disposed,
           effectiveSnapshot: _effectiveSnapshot,
+          pendingRestartChanges: _pendingRestartChanges,
         ),
       );
     }
@@ -126,6 +138,7 @@ final class TerminalConfigReloadController {
         TerminalConfigReloadResult._(
           disposition: TerminalConfigReloadDisposition.busy,
           effectiveSnapshot: _effectiveSnapshot,
+          pendingRestartChanges: _pendingRestartChanges,
         ),
       );
     }
@@ -142,6 +155,7 @@ final class TerminalConfigReloadController {
           disposition: TerminalConfigReloadDisposition.disposed,
           effectiveSnapshot: _effectiveSnapshot,
           candidateSnapshot: candidate,
+          pendingRestartChanges: _pendingRestartChanges,
         );
       }
       if (!identical(candidate.schema, _effectiveSnapshot.schema)) {
@@ -162,11 +176,18 @@ final class TerminalConfigReloadController {
           disposition: TerminalConfigReloadDisposition.rejected,
           effectiveSnapshot: _effectiveSnapshot,
           candidateSnapshot: candidate,
+          pendingRestartChanges: _pendingRestartChanges,
         );
       }
       final TerminalConfigChangePlan plan = TerminalConfigChangePlan.between(
         _effectiveSnapshot,
         candidate,
+      );
+      _pendingRestartChanges = List<TerminalConfigChange>.unmodifiable(
+        TerminalConfigChangePlan.between(
+          _launchSnapshot,
+          candidate,
+        ).nextLaunchChanges,
       );
       _effectiveSnapshot = candidate;
       _acceptedGeneration++;
@@ -177,6 +198,7 @@ final class TerminalConfigReloadController {
         effectiveSnapshot: candidate,
         candidateSnapshot: candidate,
         changePlan: plan,
+        pendingRestartChanges: _pendingRestartChanges,
       );
     } on Object catch (error, stackTrace) {
       return _recordFailure(error, stackTrace);
@@ -191,6 +213,7 @@ final class TerminalConfigReloadController {
       return TerminalConfigReloadResult._(
         disposition: TerminalConfigReloadDisposition.disposed,
         effectiveSnapshot: _effectiveSnapshot,
+        pendingRestartChanges: _pendingRestartChanges,
       );
     }
     return _recordFailure(error, stackTrace);
@@ -205,6 +228,7 @@ final class TerminalConfigReloadController {
     return TerminalConfigReloadResult._(
       disposition: TerminalConfigReloadDisposition.failed,
       effectiveSnapshot: _effectiveSnapshot,
+      pendingRestartChanges: _pendingRestartChanges,
       error: error,
       stackTrace: stackTrace,
     );

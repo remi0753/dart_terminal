@@ -224,6 +224,11 @@ final class TerminalSettingsInspectorState {
         ),
       )
       ..line(
+        localization.settingsInspectorPendingRestart(
+          controller.pendingRestartChanges.length,
+        ),
+      )
+      ..line(
         localization.settingsInspectorConfigFile(
           _field(_effective.rootPath ?? localization.settingsNoValue),
         ),

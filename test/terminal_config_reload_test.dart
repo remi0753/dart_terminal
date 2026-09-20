@@ -7,8 +7,95 @@ Future<void> main() => runTerminalConfigReloadTests();
 
 Future<void> runTerminalConfigReloadTests() async {
   await _testAcceptedRejectedAndCorrectedTransactions();
+  await _testNextLaunchPendingRestartProjection();
   await _testFixedCommandLinePriorityAndWarningAcceptance();
   await _testSingleFlightFailureAndDispose();
+}
+
+Future<void> _testNextLaunchPendingRestartProjection() async {
+  final TerminalConfigLoader loader = TerminalConfigLoader(
+    fileSystem: _ReloadMemoryFileSystem(<String, String>{
+      '/candidate':
+          'notes = true\nnotes-font-size = 24\nmacos-option-key = text\n',
+    }),
+  );
+  final TerminalConfigSnapshot initial = loader.resolve(const <String>[
+    '--no-config',
+  ], environment: const <String, String>{}).snapshot;
+  TerminalConfigSnapshot candidate = loader.resolve(const <String>[
+    '--config=/candidate',
+  ], environment: const <String, String>{}).snapshot;
+  final TerminalConfigReloadController controller =
+      TerminalConfigReloadController(
+        initialSnapshot: initial,
+        resolver: () => TerminalConfigResolution(
+          snapshot: candidate,
+          remainingArguments: const <String>[],
+        ),
+      );
+
+  final TerminalConfigReloadResult enabled = await controller.reload();
+  _expect(
+    enabled.disposition == TerminalConfigReloadDisposition.applied &&
+        enabled.changePlan!.nextLaunchChanges.single.option ==
+            TerminalProductConfigSchema.notes &&
+        enabled.changePlan!.liveChanges.any(
+          (TerminalConfigChange change) =>
+              change.option == TerminalProductConfigSchema.notesFontSize,
+        ) &&
+        enabled.pendingRestartChanges.single.option ==
+            TerminalProductConfigSchema.notes &&
+        controller.hasPendingRestart &&
+        controller.pendingRestartChanges.single.option ==
+            TerminalProductConfigSchema.notes &&
+        enabled
+            .machineLine(acceptedGeneration: 1)
+            .contains('next_launch=1 pending_restart=1'),
+    'C-02 accepts next-launch values and projects one content-free pending restart',
+  );
+  _expectThrows(
+    () => controller.pendingRestartChanges.add(
+      TerminalConfigChange(TerminalProductConfigSchema.notes),
+    ),
+    'pending restart projection is immutable',
+  );
+
+  candidate = loader.resolve(const <String>[
+    '--no-config',
+    '--notes-font-size=24',
+    '--macos-option-key=text',
+  ], environment: const <String, String>{}).snapshot;
+  final TerminalConfigReloadResult reverted = await controller.reload();
+  _expect(
+    reverted.disposition == TerminalConfigReloadDisposition.applied &&
+        reverted.changePlan!.nextLaunchChanges.single.option ==
+            TerminalProductConfigSchema.notes &&
+        reverted.pendingRestartChanges.isEmpty &&
+        !controller.hasPendingRestart,
+    'pending restart compares against startup and clears when the launch value returns',
+  );
+
+  candidate =
+      TerminalConfigLoader(
+        fileSystem: _ReloadMemoryFileSystem(<String, String>{
+          '/invalid': 'notes = true\nnotes-font-size = 25\n',
+        }),
+      ).resolve(const <String>[
+        '--config=/invalid',
+      ], environment: const <String, String>{}).snapshot;
+  final TerminalConfigReloadResult rejected = await controller.reload();
+  _expect(
+    rejected.disposition == TerminalConfigReloadDisposition.rejected &&
+        !controller.hasPendingRestart &&
+        !controller.effectiveSnapshot.value(
+          TerminalProductConfigSchema.notes,
+        ) &&
+        controller.effectiveSnapshot.value(
+              TerminalProductConfigSchema.notesFontSize,
+            ) ==
+            24,
+    'invalid mixed reload cannot publish a next-launch flag or live Note font',
+  );
 }
 
 Future<void> _testAcceptedRejectedAndCorrectedTransactions() async {
@@ -246,4 +333,13 @@ final class _ReloadMemoryFileSystem implements TerminalConfigFileSystem {
 
 void _expect(bool condition, String message) {
   if (!condition) throw StateError(message);
+}
+
+void _expectThrows(void Function() body, String message) {
+  try {
+    body();
+  } on UnsupportedError {
+    return;
+  }
+  throw StateError(message);
 }

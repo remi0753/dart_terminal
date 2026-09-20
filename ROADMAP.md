@@ -86,7 +86,7 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
   （[`cm-06-typed-configuration-disabled-lifecycle.md`](docs/contextual-memory/cm-06-typed-configuration-disabled-lifecycle.md)
   を参照して実施する）
   - [x] typed optionと露出制御を実装する
-  - [ ] `nextLaunch` reloadとlive Note projectionを実装する
+  - [x] `nextLaunch` reloadとlive Note projectionを実装する
   - [ ] composition-root disabled lifecycleと受け入れを完了する
 - [ ] CM-07 unified window interaction authorityへ既存input ownerを統合する
 - [ ] CM-08 native Note presentation capabilityを実装する

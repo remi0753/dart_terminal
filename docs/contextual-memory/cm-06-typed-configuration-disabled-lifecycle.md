@@ -129,3 +129,50 @@ Reloadではrestart境界とlive変更を混同せず、invalid candidateを従�
   machine/UI表示は未実装である。
 - `TerminalProductConfigurationAuthority`はまだaccepted snapshot全体を`newSessionConfiguration`へ置換する。第2サブタスクでは
   current launch Notes flagsを固定し、`notes-font-size`だけをlive Note projectionへ通知する。
+
+## 2026-09-21: 第2サブタスク完了
+
+### 現在地と設計確認
+
+- 着手前にROADMAPを再確認し、先頭未完了がCM-06第2サブタスクであること、C-02/C-03だけを実装してcomposition rootは
+  第3サブタスクへ残すことを確認した。
+- Pending restartはaccepted candidateとprocess startup snapshotのsemantic差から毎回再計算する。直前candidateとの差だけを蓄積せず、
+  startup値へ戻せば空になる方式を採用した。
+- Product configurationはaccepted configとcurrent launch runtimeを分離する。`TerminalProductConfiguration.fromSnapshot`へ
+  launch-fixed値の注入点を設け、generic AppKitやglobal mutable flagを増やさない。
+
+### 実装結果
+
+- Reload controllerがimmutable `pendingRestartChanges`と`hasPendingRestart`を所有し、applied/unchanged/rejected/busy/disposed/failureの
+  固定結果へ現在値を投影するようにした。Machine lineはcurrent changeの`next_launch`件数とstartup差の`pending_restart`件数だけを出す。
+- C-02として、`notes`等のreloadはlast-known-good effective snapshotへacceptされる一方、current
+  `TerminalProductConfigurationAuthority`のlaunch flagsと新規terminalから参照される同値は起動時のまま維持する。
+  Current authority create/disposeやshell token注入は行わない。
+- `TerminalNoteFeatureConfiguration`をproduct-owned immutable projectionとして追加し、effective flagsを
+  `notes`、`notes && notesOnReturn`、`notes && notesNextPrompt`のexact conjunctionにした。
+- C-03として、`notes-font-size` changeだけが専用generation/observerを更新する。Note fontだけのreloadでは既存key binding engineと
+  key encoderを再生成せず、terminal input/grid/drawable/winsize/SIGWINCH経路へ接続しない。
+- Settings inspectorはpublic option filterを維持したままpending restart件数を表示する。Root fileへ明示されたinternal optionの
+  editor detailはopen/new terminalがcurrent値を維持し、app restart後だけsaved値を使うと英日両方で示す。
+
+### 検証結果
+
+- `dart format`（reload/product configuration/Settings/localizationとfocused tests）: format済み。
+- `dart analyze`: repository全体 issue 0。
+- `terminal_config_reload_test.dart`: C-02 accept、startup差、起動値へ戻したpending clear、immutable projection、invalid mixed
+  reloadのall-or-nothingをpass。
+- `terminal_product_configuration_test.dart`: launch flags不変、Note font 15→24の一回通知、key binding/encoder identity不変、
+  next-launch-only通知0、effective conjunctionをpass。
+- Settings editor/inspector/localization focused tests: pending restart表示、internal option非列挙、next-launch detailをpass。
+- `dart test/run_tests.dart`: pass。Note store acceptanceはcommit p95 135,698 us、primitive p95 16,024 us、
+  contention/recovery/privacyすべてpass。全aggregate regressionもpass。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: pass。364 filesのformat変更0、全analyze/test/privacy/security/
+  compatibility/release gate pass。Note store 20 runsはcommit p95 132,633 us、primitive p95 14,118 us、
+  contention/recovery/privacyすべてpass。
+- Ghostty gap inventoryとrelease-candidate daily-use matrixは変更source hashだけを再生成し、freshness checkをpass。
+
+### 第3サブタスクへの引き継ぎ
+
+- 次はこのlaunch-fixed `TerminalNoteFeatureConfiguration`を唯一のadmission入力にするcomposition rootを追加する。
+  `notes=false` branchではfactory/location/store/context/surface/timerを評価せず、font observerも登録しない。
+- Enabled rootはCM-05 authorityをinjected factoryで所有し、shutdown/stopを一回だけ完了してから参照を破棄する。

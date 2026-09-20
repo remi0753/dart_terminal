@@ -10,9 +10,37 @@ void runTerminalSettingsEditorTests() {
   _testDisabledAssignmentSyntax();
   _testModeInvariantSyntaxAndWholeDocumentSynchronization();
   _testContextDetailOutcomesAndDiagnostics();
+  _testNextLaunchDetail();
   _testJapaneseProjection();
   _testSelectionAndBounds();
   _testFunctionPageNavigation();
+}
+
+void _testNextLaunchDetail() {
+  final _EditorFixture fixture = _EditorFixture.create(
+    initialText: 'notes = true\n',
+  );
+  final TerminalSettingsEditorState state = fixture.state..open();
+  try {
+    final TerminalSettingsOptionOccurrence notes = state.occurrences
+        .singleWhere(
+          (TerminalSettingsOptionOccurrence occurrence) =>
+              occurrence.option == TerminalProductConfigSchema.notes,
+        );
+    state.setSelection(TerminalSettingsTextSelection(start: notes.nameStart));
+    final String detail = state.renderDetail();
+    _expect(
+      notes.option.applicationPolicy ==
+              TerminalConfigApplicationPolicy.nextLaunch &&
+          detail.contains('Open terminals   Keep current value') &&
+          detail.contains('New terminals    Keep current value') &&
+          detail.contains('After app restart   Use saved value'),
+      'next-launch detail does not clearly defer the value until app restart',
+    );
+  } finally {
+    state.dismiss();
+    fixture.dispose();
+  }
 }
 
 void _testFunctionPageNavigation() {
@@ -531,9 +559,10 @@ final class _EditorFixture {
   factory _EditorFixture.create({
     TerminalSettingsEditorLimits limits = const TerminalSettingsEditorLimits(),
     TerminalLocalization? localization,
+    String initialText = '',
   }) {
     final _MemoryEditorFileSystem files = _MemoryEditorFileSystem(
-      <String, String>{'/config': ''},
+      <String, String>{'/config': initialText},
     );
     final TerminalConfigLoader loader = TerminalConfigLoader(fileSystem: files);
     final List<String> arguments = const <String>['--config=/config'];

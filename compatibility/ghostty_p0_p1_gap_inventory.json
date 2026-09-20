@@ -188,7 +188,7 @@
     },
     {
       "path": "lib/src/terminal_product_configuration.dart",
-      "sha256": "ef1570009176d9ae10b690f6b4d774d05945e5a792c72e02e20824854459e113"
+      "sha256": "a203f3e694554592a270fdccbbe059f1567e1ef566adc965e61499ca1d90fd9d"
     },
     {
       "path": "lib/src/terminal_diagnostics.dart",
@@ -216,7 +216,7 @@
     },
     {
       "path": "test/terminal_product_configuration_test.dart",
-      "sha256": "471c625da27fa6c12d3ee14ccc9556c5dd39897274cd37e32e112262a5db7b59"
+      "sha256": "657d69861cb22e71d2600fc7cf2de8993b0e058147fa4e0f7d1d97558aabb8ca"
     },
     {
       "path": "test/terminal_diagnostics_test.dart",

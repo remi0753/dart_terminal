@@ -50,6 +50,7 @@ Future<void> _testSearchRenderingAndReloadProjection() async {
     fileSystem: _MemoryFileSystem(const <String, String>{
       '/invalid': 'font-size = enormous\n',
       '/valid': 'font-size = 18\n',
+      '/pending': 'font-size = 18\nnotes = true\n',
     }),
   );
   final TerminalConfigSnapshot initial = loader.resolve(const <String>[
@@ -64,6 +65,9 @@ Future<void> _testSearchRenderingAndReloadProjection() async {
     ], environment: const <String, String>{}),
     loader.resolve(const <String>[
       '--config=/valid',
+    ], environment: const <String, String>{}),
+    loader.resolve(const <String>[
+      '--config=/pending',
     ], environment: const <String, String>{}),
   ];
   var nextCandidate = 0;
@@ -146,6 +150,18 @@ Future<void> _testSearchRenderingAndReloadProjection() async {
           state.diagnostics.isEmpty &&
           state.render().contains('Diagnostics — latest reload attempt (0)'),
       'accepted reload is not reflected by the same inspector state',
+    );
+
+    final TerminalConfigReloadResult pending = await controller.reload();
+    state.refresh();
+    state.setQuery('notes');
+    _expect(
+      pending.isAccepted &&
+          pending.pendingRestartChanges.single.option ==
+              TerminalProductConfigSchema.notes &&
+          state.results.isEmpty &&
+          state.render().contains('Pending restart settings: 1'),
+      'Settings hides preview options but does not expose their pending restart state',
     );
   } finally {
     state.dismiss();

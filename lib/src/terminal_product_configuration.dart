@@ -195,8 +195,9 @@ final class TerminalProductConfiguration {
        );
 
   factory TerminalProductConfiguration.fromSnapshot(
-    TerminalConfigSnapshot snapshot,
-  ) => TerminalProductConfiguration._(
+    TerminalConfigSnapshot snapshot, {
+    TerminalProductConfiguration? nextLaunchValuesFrom,
+  }) => TerminalProductConfiguration._(
     workingDirectory: snapshot.value(
       TerminalProductConfigSchema.workingDirectory,
     ),
@@ -217,11 +218,15 @@ final class TerminalProductConfiguration {
       TerminalProductConfigSchema.contextDockWidth,
     ),
     fontSize: snapshot.value(TerminalProductConfigSchema.fontSize),
-    notes: snapshot.value(TerminalProductConfigSchema.notes),
-    notesOnReturn: snapshot.value(TerminalProductConfigSchema.notesOnReturn),
-    notesNextPrompt: snapshot.value(
-      TerminalProductConfigSchema.notesNextPrompt,
-    ),
+    notes:
+        nextLaunchValuesFrom?.notes ??
+        snapshot.value(TerminalProductConfigSchema.notes),
+    notesOnReturn:
+        nextLaunchValuesFrom?.notesOnReturn ??
+        snapshot.value(TerminalProductConfigSchema.notesOnReturn),
+    notesNextPrompt:
+        nextLaunchValuesFrom?.notesNextPrompt ??
+        snapshot.value(TerminalProductConfigSchema.notesNextPrompt),
     notesFontSize: snapshot.value(TerminalProductConfigSchema.notesFontSize),
     fontSyntheticStyle: snapshot.value(
       TerminalProductConfigSchema.fontSyntheticStyle,
@@ -527,24 +532,86 @@ final class _TerminalLiveInputConfiguration {
   final TerminalKeyEncoder keyEncoder;
 }
 
+/// Launch-fixed Note feature flags plus the one live Note presentation value.
+final class TerminalNoteFeatureConfiguration {
+  const TerminalNoteFeatureConfiguration({
+    required this.notes,
+    required this.notesOnReturn,
+    required this.notesNextPrompt,
+    required this.fontSize,
+  });
+
+  factory TerminalNoteFeatureConfiguration.fromProduct(
+    TerminalProductConfiguration configuration,
+  ) => TerminalNoteFeatureConfiguration(
+    notes: configuration.notes,
+    notesOnReturn: configuration.notesOnReturn,
+    notesNextPrompt: configuration.notesNextPrompt,
+    fontSize: configuration.notesFontSize,
+  );
+
+  final bool notes;
+  final bool notesOnReturn;
+  final bool notesNextPrompt;
+  final double fontSize;
+
+  bool get surfaceEnabled => notes;
+  bool get onReturnEnabled => notes && notesOnReturn;
+  bool get nextPromptEnabled => notes && notesNextPrompt;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TerminalNoteFeatureConfiguration &&
+      notes == other.notes &&
+      notesOnReturn == other.notesOnReturn &&
+      notesNextPrompt == other.notesNextPrompt &&
+      fontSize == other.fontSize;
+
+  @override
+  int get hashCode =>
+      Object.hash(notes, notesOnReturn, notesNextPrompt, fontSize);
+
+  @override
+  String toString() =>
+      'TerminalNoteFeatureConfiguration('
+      'surface=$surfaceEnabled, onReturn=$onReturnEnabled, '
+      'nextPrompt=$nextPromptEnabled, fontSize=$fontSize)';
+}
+
+typedef TerminalNoteConfigurationObserver = void Function(
+  TerminalNoteFeatureConfiguration configuration,
+);
+
 /// Application-owned accepted profile and atomically replaceable live input.
 final class TerminalProductConfigurationAuthority {
   TerminalProductConfigurationAuthority(
-    TerminalProductConfiguration initialConfiguration,
-  ) : _newSessionConfiguration = initialConfiguration,
-      _liveInput = _createLiveInput(initialConfiguration);
+    TerminalProductConfiguration initialConfiguration, {
+    TerminalNoteConfigurationObserver? onNoteConfigurationChanged,
+  }) : _newSessionConfiguration = initialConfiguration,
+       _launchConfiguration = initialConfiguration,
+       _noteConfiguration = TerminalNoteFeatureConfiguration.fromProduct(
+         initialConfiguration,
+       ),
+       _onNoteConfigurationChanged = onNoteConfigurationChanged,
+       _liveInput = _createLiveInput(initialConfiguration);
 
+  final TerminalProductConfiguration _launchConfiguration;
   TerminalProductConfiguration _newSessionConfiguration;
   _TerminalLiveInputConfiguration _liveInput;
+  TerminalNoteFeatureConfiguration _noteConfiguration;
+  final TerminalNoteConfigurationObserver? _onNoteConfigurationChanged;
   var _acceptedGeneration = 0;
   var _liveGeneration = 0;
+  var _noteConfigurationGeneration = 0;
 
   TerminalProductConfiguration get newSessionConfiguration =>
       _newSessionConfiguration;
   TerminalKeyBindingEngine get keyBindingEngine => _liveInput.keyBindingEngine;
   TerminalKeyEncoder get keyEncoder => _liveInput.keyEncoder;
+  TerminalNoteFeatureConfiguration get noteConfiguration => _noteConfiguration;
   int get acceptedGeneration => _acceptedGeneration;
   int get liveGeneration => _liveGeneration;
+  int get noteConfigurationGeneration => _noteConfigurationGeneration;
 
   void applyReload(TerminalConfigReloadResult result) {
     final TerminalConfigChangePlan? plan = result.changePlan;
@@ -556,14 +623,29 @@ final class TerminalProductConfigurationAuthority {
       );
     }
     final TerminalProductConfiguration next =
-        TerminalProductConfiguration.fromSnapshot(result.effectiveSnapshot);
-    final _TerminalLiveInputConfiguration? nextLive = plan.liveChanges.isEmpty
+        TerminalProductConfiguration.fromSnapshot(
+          result.effectiveSnapshot,
+          nextLaunchValuesFrom: _launchConfiguration,
+        );
+    final bool hasNonNoteLiveChange = plan.liveChanges.any(
+      (TerminalConfigChange change) =>
+          !identical(change.option, TerminalProductConfigSchema.notesFontSize),
+    );
+    final _TerminalLiveInputConfiguration? nextLive = !hasNonNoteLiveChange
         ? null
         : _createLiveInput(next);
     _newSessionConfiguration = next;
     if (nextLive != null) {
       _liveInput = nextLive;
       _liveGeneration++;
+    }
+    if (plan.liveChanges.any(
+      (TerminalConfigChange change) =>
+          identical(change.option, TerminalProductConfigSchema.notesFontSize),
+    )) {
+      _noteConfiguration = TerminalNoteFeatureConfiguration.fromProduct(next);
+      _noteConfigurationGeneration++;
+      _onNoteConfigurationChanged?.call(_noteConfiguration);
     }
     _acceptedGeneration++;
   }
