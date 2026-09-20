@@ -165,3 +165,54 @@ startup reconciliationサブタスクへ残す。
 
 このサブタスクではrestoration-first shutdown commit、Note-second commit、transaction failure/crash recoveryの受け入れを実装していない。
 次のordered persistenceサブタスクへ残す。
+
+## 2026-09-21: ordered persistence、rollback、crash acceptance着手
+
+- ROADMAPを再読し、先頭未完了項目がCM-04の第3サブタスクであることを確認した。CM-05のapplication authority、queue、product wiringへは
+  進まず、shutdown candidate、注入可能な二段commit、既存storeでの受け入れだけを対象とする。
+- 二ファイル間のatomic commitは提供しない。Restoration exact bytesを先にcommitし、成功応答後だけ同じbytesのSHA-256 bindingを持つNote
+  candidateをcommitする。Restorationの公開後failure、Note commit failure/応答喪失、rollbackによる片側変更はいずれも次回startupで
+  exact hash一致または全件Detachedのどちらかになることを検査する。
+- Shutdown candidateはcapture traversalとruntime bindingの完全一致を要求し、live standard contextを`restorable`へ遷移する。余分な
+  standard contextは`contextUnavailable`でdetachし、Quick Terminalはactive singletonのままbinding外に保持する。
+- Existing restoration persistenceにはvalidなexact encoded stringを再encodeせず保存・再読できる境界を追加する。Coordinator自体は
+  callback portだけへ依存させ、CM-05で既存restoration persistenceとCM-03 Note workerを注入できる形にする。
+
+## 2026-09-21: ordered persistence、rollback、crash acceptance完了
+
+- `TerminalNoteShutdownCandidateBuilder`を追加した。Capture traversalとruntime pane bindingは同数・同一pane集合・unique known standard
+  contextを要求し、live contextを`restorable`へ遷移する。Capture外に残るstandard contextは`contextUnavailable`でdetachし、Quick
+  Terminalはstore/runtimeのsingleton IDが一致する場合だけactiveのまま保持する。
+- Candidateはcaptureしたexact restoration artifactと、そのSHA-256およびordered context IDsを持つNote documentを一体で返す。
+  Bindingだけが変わるのにsnapshot revisionを前進できない不正入力はcommit不能candidateを作らずcontent-freeにrejectする。
+- `TerminalNoteOrderedPersistenceCoordinator`は注入されたcallbackへrestoration、次にNoteの順でだけcommitする。Restoration失敗または
+  exceptionではNote callbackを呼ばず、Note失敗はrestoration成功応答後だけ発生する。返却値は実disk状態を断定せず、commit
+  acknowledgementとattemptだけをcontent-freeに表すため、公開後の応答喪失も正しく扱える。
+- Existing `TerminalRestorationPersistence`はload時のexact encoded stringを保持し、`saveExactEncoded`でstrict decode後の同一文字列を
+  再encodeせずstoreへ渡す。既存`save(snapshot)`は同じ境界をcanonical encode経由で利用し、version 1 schema/encodingは変更していない。
+- Failure injectionではrestoration reject/throw、restoration公開後の応答喪失、Note reject/throw、Note公開後の応答喪失、両方成功、
+  Note no-changeを検査した。いずれもcall順はrestoration→Noteで、次回startupはexact matchかhash mismatchによる全件fresh/Detachedとなった。
+- Pre-Notes rollbackはlayout/bytes不変ならB-04 match、layout変更ならB-05 mismatchとなる。Real `FileTerminalRestorationStore`と
+  `TerminalNoteStoreTransactionEngine`へpaddingを含むvalid v1 exact bytesとcandidateをcommitし、disk byte一致、lock release、process内
+  reopen、ordered context reattachを確認した。
+- 最初のfocused analyzeは`save()`の`try`内Future returnへ明示`await`を要求するlint 1件で停止した。最初のreal filesystem fixtureは
+  macOSの`/var` symlink表記をdurable-file capabilityが正しく`unsafeFile`拒否した。`await`を追加し、CM-03 acceptanceと同じく
+  `resolveSymbolicLinks()`済みの一時rootを使って両方を解消した。Policyやfilesystem validationを緩めていない。
+
+### 検証
+
+- Focused format: 変更0。Focused analyze: issue 0。
+- Developer JIT: `terminal_restoration_test.dart`成功。実restoration/Note fileへのcommit/reopenを含む。
+- Existing lifecycle regression: `terminal_native_hierarchy_test.dart`成功。
+- Release AOT: `dart build cli --target=test/terminal_restoration_test.dart --target-os=macos --target-arch=arm64`で4 native assetsを
+  含むbundleを生成し、生成binaryの実filesystem acceptanceが成功。検証後の一時bundleは削除した。
+- `make phase7-appkit-acceptance release-candidate-daily-use-matrix`: 成功。正規生成差分はrestoration test hashと、そのartifactを参照する
+  release-candidate hashだけである。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: 成功。361 files format変更0、root/package analyze issue 0、
+  `PHASE7_APPKIT_ACCEPTANCE_PASS`、release gate 31/release blocker 0、Note store p95 136,676/16,668 us、全native/security/
+  integration testを通過し、`dart_terminal tests passed`で終了した。
+- `git diff --check`: pass。変更はroot packageのcontext/restoration API、test/evidence、ROADMAP/task memoだけである。隣接
+  `dart_appkit`の着手前modified 3 filesには変更・stageしておらず、汎用libraryへDart Terminal固有codeを追加していない。
+
+CM-04の3サブタスクと親完了条件をすべて満たした。CM-05でこのpure candidate/coordinatorへapplication-root authority、CM-03 worker、
+existing restoration lifecycleを注入し、commit成功後だけsnapshot/UIへpublishする。

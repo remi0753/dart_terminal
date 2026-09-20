@@ -12,6 +12,7 @@ Future<void> runTerminalRestorationTests() async {
   _testExactRestorationArtifact();
   _testQuickTerminalContextInvariant();
   _testContextRestorationReconciliation();
+  await _testOrderedContextPersistence();
   _testWindowPlacementPolicy();
   _testStrictCodecRejection();
   await _testBoundedFileStore();
@@ -448,6 +449,423 @@ void _testContextRestorationReconciliation() {
   );
 }
 
+Future<void> _testOrderedContextPersistence() async {
+  final TerminalNoteRestorationArtifact oldRestoration =
+      TerminalNoteRestorationArtifact.fromSnapshot(
+        _twoPaneRestoration('/private/tmp/old'),
+      );
+  final String paddedNewEncoded =
+      '\n${TerminalRestorationCodec.encode(_twoPaneRestoration('/private/tmp/new'))}\n';
+  final TerminalNoteRestorationArtifact newRestoration =
+      TerminalNoteRestorationArtifact.fromExactEncoded(paddedNewEncoded);
+  final List<PaneId> panes = <PaneId>[const PaneId(70), const PaneId(80)];
+  final TerminalNoteContextId first = _contextId(200);
+  final TerminalNoteContextId second = _contextId(201);
+  final TerminalNoteContextId extra = _contextId(202);
+  final TerminalNoteContextId quick = _contextId(203);
+  final TerminalNoteStoreDocument stored = _activeNoteDocument(
+    contextIds: <TerminalNoteContextId>[first, second, extra],
+    quickTerminalContextId: quick,
+    bindingSha256: oldRestoration.restorationSha256,
+    bindingContextIds: <TerminalNoteContextId>[first, second],
+  );
+  final TerminalNoteRestorationCaptureArtifact capture =
+      TerminalNoteRestorationCaptureArtifact.fromArtifact(
+        restoration: newRestoration,
+        paneIdsInTraversalOrder: panes,
+      );
+  final TerminalNoteContextBindings bindings = TerminalNoteContextBindings(
+    standardPaneContexts: <PaneId, TerminalNoteContextId>{
+      panes[0]: first,
+      panes[1]: second,
+    },
+    quickTerminalContextId: quick,
+  );
+  final TerminalNoteShutdownCandidate candidate =
+      const TerminalNoteShutdownCandidateBuilder().prepare(
+        stored: stored,
+        capture: capture,
+        bindings: bindings,
+        updatedAtUtcMicros: 2000,
+      );
+  _expect(
+    candidate.requiresNoteCommit &&
+        candidate.restoration.exactEncoded == paddedNewEncoded &&
+        candidate.document.restorationBinding!.restorationSha256 ==
+            newRestoration.restorationSha256 &&
+        candidate.document.restorationBinding!.paneContextIds[0] == first &&
+        candidate.document.restorationBinding!.paneContextIds[1] == second &&
+        candidate.document.snapshot.contextFor(first)!.state ==
+            TerminalNoteContextState.restorable &&
+        candidate.document.snapshot.contextFor(second)!.state ==
+            TerminalNoteContextState.restorable &&
+        candidate.document.snapshot.contextFor(extra)!.state ==
+            TerminalNoteContextState.detached &&
+        candidate.document.snapshot.contextFor(quick)!.state ==
+            TerminalNoteContextState.active &&
+        candidate.document.snapshot
+                .noteFor(_noteId(102))!
+                .attachment
+                .detachReason ==
+            TerminalNoteDetachReason.contextUnavailable &&
+        !candidate.toString().contains(first.canonicalValue) &&
+        !candidate.toString().contains(newRestoration.restorationSha256),
+    'shutdown candidate binds exact bytes, marks live contexts restorable, '
+    'detaches stale contexts, and preserves the Quick singleton',
+  );
+
+  _expectThrows<TerminalNoteShutdownPreparationException>(
+    () => const TerminalNoteShutdownCandidateBuilder().prepare(
+      stored: stored,
+      capture: capture,
+      bindings: TerminalNoteContextBindings(
+        standardPaneContexts: <PaneId, TerminalNoteContextId>{
+          panes.first: first,
+        },
+        quickTerminalContextId: quick,
+      ),
+      updatedAtUtcMicros: 2001,
+    ),
+    'shutdown preparation rejects a partial traversal binding',
+  );
+  _expectThrows<TerminalNoteShutdownPreparationException>(
+    () => const TerminalNoteShutdownCandidateBuilder().prepare(
+      stored: stored,
+      capture: capture,
+      bindings: TerminalNoteContextBindings(
+        standardPaneContexts: <PaneId, TerminalNoteContextId>{
+          panes[0]: first,
+          panes[1]: second,
+        },
+        quickTerminalContextId: null,
+      ),
+      updatedAtUtcMicros: 2002,
+    ),
+    'shutdown preparation rejects a missing Quick singleton binding',
+  );
+
+  final List<String> restorationFailureTrace = <String>[];
+  final TerminalNoteOrderedPersistenceResult restorationFailure =
+      await TerminalNoteOrderedPersistenceCoordinator(
+        commitRestoration: (TerminalNoteRestorationArtifact _) async {
+          restorationFailureTrace.add('restoration');
+          return false;
+        },
+        commitNoteDocument: (TerminalNoteStoreDocument _) async {
+          restorationFailureTrace.add('note');
+          return true;
+        },
+      ).commit(candidate);
+  _expect(
+    restorationFailure.disposition ==
+            TerminalNoteOrderedPersistenceDisposition.restorationCommitFailed &&
+        !restorationFailure.restorationCommitAcknowledged &&
+        !restorationFailure.noteCommitAttempted &&
+        restorationFailureTrace.join(',') == 'restoration',
+    'restoration rejection prevents the Note binding commit',
+  );
+  TerminalNoteRestorationArtifact publishedBeforeRestorationFailure =
+      oldRestoration;
+  var noteCalledAfterRestorationException = false;
+  final TerminalNoteOrderedPersistenceResult ambiguousRestorationFailure =
+      await TerminalNoteOrderedPersistenceCoordinator(
+        commitRestoration: (TerminalNoteRestorationArtifact artifact) async {
+          publishedBeforeRestorationFailure = artifact;
+          throw StateError('injected restoration acknowledgement loss');
+        },
+        commitNoteDocument: (TerminalNoteStoreDocument _) async {
+          noteCalledAfterRestorationException = true;
+          return true;
+        },
+      ).commit(candidate);
+  final TerminalNoteContextReconciliationResult ambiguousRestorationRestart =
+      TerminalNoteContextReconciler(_sequentialContextGenerator(0x90))
+          .reconcile(
+            stored: stored,
+            restoration: publishedBeforeRestorationFailure,
+            paneIdsInTraversalOrder: panes,
+            ensureQuickTerminalContext: true,
+            updatedAtUtcMicros: 2001,
+          );
+  _expect(
+    ambiguousRestorationFailure.disposition ==
+            TerminalNoteOrderedPersistenceDisposition.restorationCommitFailed &&
+        !noteCalledAfterRestorationException &&
+        ambiguousRestorationRestart.disposition ==
+            TerminalNoteContextReconciliationDisposition.fresh &&
+        ambiguousRestorationRestart.freshReason ==
+            TerminalNoteContextFreshReason.hashMismatch,
+    'restoration publication followed by acknowledgement loss still skips '
+    'the Note commit and fails closed on restart',
+  );
+
+  final List<String> noteFailureTrace = <String>[];
+  final TerminalNoteOrderedPersistenceResult noteFailure =
+      await TerminalNoteOrderedPersistenceCoordinator(
+        commitRestoration: (TerminalNoteRestorationArtifact _) async {
+          noteFailureTrace.add('restoration');
+          return true;
+        },
+        commitNoteDocument: (TerminalNoteStoreDocument _) async {
+          noteFailureTrace.add('note');
+          return false;
+        },
+      ).commit(candidate);
+  _expect(
+    noteFailure.disposition ==
+            TerminalNoteOrderedPersistenceDisposition.noteCommitFailed &&
+        noteFailure.restorationCommitAcknowledged &&
+        noteFailure.noteCommitAttempted &&
+        !noteFailure.noteCommitAcknowledged &&
+        noteFailureTrace.join(',') == 'restoration,note',
+    'Note rejection occurs only after the restoration commit',
+  );
+  TerminalNoteStoreDocument publishedBeforeNoteFailure = stored;
+  final TerminalNoteOrderedPersistenceResult ambiguousNoteFailure =
+      await TerminalNoteOrderedPersistenceCoordinator(
+        commitRestoration: (TerminalNoteRestorationArtifact _) async => true,
+        commitNoteDocument: (TerminalNoteStoreDocument document) async {
+          publishedBeforeNoteFailure = document;
+          throw StateError('injected Note acknowledgement loss');
+        },
+      ).commit(candidate);
+  final TerminalNoteContextReconciliationResult ambiguousNoteRestart =
+      TerminalNoteContextReconciler(_sequentialContextGenerator(0x98))
+          .reconcile(
+            stored: publishedBeforeNoteFailure,
+            restoration: newRestoration,
+            paneIdsInTraversalOrder: panes,
+            ensureQuickTerminalContext: true,
+            updatedAtUtcMicros: 2002,
+          );
+  _expect(
+    ambiguousNoteFailure.disposition ==
+            TerminalNoteOrderedPersistenceDisposition.noteCommitFailed &&
+        !ambiguousNoteFailure.noteCommitAcknowledged &&
+        ambiguousNoteRestart.disposition ==
+            TerminalNoteContextReconciliationDisposition.matched &&
+        !ambiguousNoteFailure.toString().contains('acknowledgement loss'),
+    'Note publication followed by acknowledgement loss remains a matching '
+    'generation without exposing the injected failure',
+  );
+
+  final List<String> successTrace = <String>[];
+  final TerminalNoteOrderedPersistenceResult success =
+      await TerminalNoteOrderedPersistenceCoordinator(
+        commitRestoration: (TerminalNoteRestorationArtifact _) async {
+          successTrace.add('restoration');
+          return true;
+        },
+        commitNoteDocument: (TerminalNoteStoreDocument _) async {
+          successTrace.add('note');
+          return true;
+        },
+      ).commit(candidate);
+  _expect(
+    success.isSuccess &&
+        success.restorationCommitAcknowledged &&
+        success.noteCommitAcknowledged &&
+        successTrace.join(',') == 'restoration,note',
+    'successful shutdown commits restoration before its Note binding',
+  );
+
+  final TerminalNoteShutdownCandidate unchanged =
+      const TerminalNoteShutdownCandidateBuilder().prepare(
+        stored: candidate.document,
+        capture: capture,
+        bindings: bindings,
+        updatedAtUtcMicros: 2003,
+      );
+  var unexpectedNoChangeNoteCommit = false;
+  final TerminalNoteOrderedPersistenceResult noChange =
+      await TerminalNoteOrderedPersistenceCoordinator(
+        commitRestoration: (TerminalNoteRestorationArtifact _) async => true,
+        commitNoteDocument: (TerminalNoteStoreDocument _) async {
+          unexpectedNoChangeNoteCommit = true;
+          return true;
+        },
+      ).commit(unchanged);
+  _expect(
+    !unchanged.requiresNoteCommit &&
+        noChange.isSuccess &&
+        !noChange.noteCommitAttempted &&
+        !unexpectedNoChangeNoteCommit,
+    'an unchanged binding rewrites restoration without a stale Note commit',
+  );
+
+  final TerminalNoteContextReconciliationResult noteFailureRestart =
+      TerminalNoteContextReconciler(_sequentialContextGenerator(0xa0))
+          .reconcile(
+            stored: stored,
+            restoration: newRestoration,
+            paneIdsInTraversalOrder: panes,
+            ensureQuickTerminalContext: true,
+            updatedAtUtcMicros: 2004,
+          );
+  _expect(
+    noteFailureRestart.disposition ==
+            TerminalNoteContextReconciliationDisposition.fresh &&
+        noteFailureRestart.freshReason ==
+            TerminalNoteContextFreshReason.hashMismatch,
+    'crash after restoration commit and before Note commit fails closed',
+  );
+  final TerminalNoteContextReconciliationResult committedRestart =
+      TerminalNoteContextReconciler(_sequentialContextGenerator(0xb0))
+          .reconcile(
+            stored: candidate.document,
+            restoration: newRestoration,
+            paneIdsInTraversalOrder: panes,
+            ensureQuickTerminalContext: true,
+            updatedAtUtcMicros: 2005,
+          );
+  _expect(
+    committedRestart.disposition ==
+            TerminalNoteContextReconciliationDisposition.matched &&
+        committedRestart.bindings.contextForPane(panes.first) == first,
+    'both committed files reopen with the exact ordered context generation',
+  );
+  final TerminalNoteContextReconciliationResult rollbackUnchanged =
+      TerminalNoteContextReconciler(_sequentialContextGenerator(0xc0))
+          .reconcile(
+            stored: candidate.document,
+            restoration: TerminalNoteRestorationArtifact.fromExactEncoded(
+              paddedNewEncoded,
+            ),
+            paneIdsInTraversalOrder: panes,
+            ensureQuickTerminalContext: true,
+            updatedAtUtcMicros: 2006,
+          );
+  _expect(
+    rollbackUnchanged.disposition ==
+        TerminalNoteContextReconciliationDisposition.matched,
+    'pre-Notes rewrite without layout change preserves exact binding',
+  );
+  final TerminalNoteContextReconciliationResult rollbackChanged =
+      TerminalNoteContextReconciler(_sequentialContextGenerator(0xd0))
+          .reconcile(
+            stored: candidate.document,
+            restoration: oldRestoration,
+            paneIdsInTraversalOrder: panes,
+            ensureQuickTerminalContext: true,
+            updatedAtUtcMicros: 2007,
+          );
+  _expect(
+    rollbackChanged.disposition ==
+            TerminalNoteContextReconciliationDisposition.fresh &&
+        rollbackChanged.freshReason ==
+            TerminalNoteContextFreshReason.hashMismatch,
+    'pre-Notes layout change after rollback detaches instead of guessing',
+  );
+
+  await _testRealOrderedContextPersistence(
+    stored: stored,
+    capture: capture,
+    bindings: bindings,
+    panes: panes,
+    expectedContext: first,
+  );
+}
+
+Future<void> _testRealOrderedContextPersistence({
+  required TerminalNoteStoreDocument stored,
+  required TerminalNoteRestorationCaptureArtifact capture,
+  required TerminalNoteContextBindings bindings,
+  required List<PaneId> panes,
+  required TerminalNoteContextId expectedContext,
+}) async {
+  final Directory temporary = await Directory.systemTemp.createTemp(
+    'dart-terminal-context-persistence-',
+  );
+  final Directory root = Directory(await temporary.resolveSymbolicLinks());
+  TerminalNoteStoreTransactionEngine? engine;
+  TerminalNoteStoreTransactionEngine? reopened;
+  try {
+    final String restorationPath = '${root.path}/restoration.json';
+    final TerminalRestorationPersistence restorationPersistence =
+        TerminalRestorationPersistence(
+          FileTerminalRestorationStore(restorationPath),
+        );
+    engine = TerminalNoteStoreTransactionEngine.open(
+      location: TerminalNoteStoreLocation.fromAbsolutePath(
+        '${root.path}/notes',
+      ),
+    );
+    _expect(
+      engine.load().disposition == TerminalNoteStoreDisposition.empty,
+      'real Note store starts empty',
+    );
+    final TerminalNoteShutdownCandidate realCandidate =
+        const TerminalNoteShutdownCandidateBuilder().prepare(
+          stored: stored,
+          capture: capture,
+          bindings: bindings,
+          updatedAtUtcMicros: 3000,
+        );
+    final TerminalNoteOrderedPersistenceResult persisted =
+        await TerminalNoteOrderedPersistenceCoordinator(
+          commitRestoration: (TerminalNoteRestorationArtifact artifact) async =>
+              (await restorationPersistence.saveExactEncoded(
+                artifact.exactEncoded,
+              )).disposition ==
+              TerminalRestorationSaveDisposition.saved,
+          commitNoteDocument: (TerminalNoteStoreDocument document) async =>
+              engine!.commitCandidate(document).disposition ==
+              TerminalNoteStoreDisposition.committed,
+        ).commit(realCandidate);
+    _expect(persisted.isSuccess, 'real ordered persistence commits both files');
+    final List<int> diskRestoration = await File(restorationPath).readAsBytes();
+    _expectBytesEqual(
+      diskRestoration,
+      realCandidate.restoration.exactUtf8Bytes,
+      'real restoration store commits the exact bytes used by the binding',
+    );
+    final TerminalRestorationLoadResult loadedRestoration =
+        await restorationPersistence.load();
+    _expect(
+      loadedRestoration.disposition ==
+              TerminalRestorationLoadDisposition.restored &&
+          loadedRestoration.exactEncoded ==
+              realCandidate.restoration.exactEncoded,
+      'real restoration load retains exact encoded bytes',
+    );
+    _expect(
+      engine.stop().disposition == TerminalNoteStoreDisposition.stopped,
+      'real Note writer releases its lock',
+    );
+    engine = null;
+    reopened = TerminalNoteStoreTransactionEngine.open(
+      location: TerminalNoteStoreLocation.fromAbsolutePath(
+        '${root.path}/notes',
+      ),
+    );
+    final TerminalNoteStoreResult loadedNote = reopened.load();
+    final TerminalNoteRestorationArtifact reopenedArtifact =
+        TerminalNoteRestorationArtifact.fromExactEncoded(
+          loadedRestoration.exactEncoded!,
+        );
+    final TerminalNoteContextReconciliationResult reconciled =
+        TerminalNoteContextReconciler(_sequentialContextGenerator(0xe0))
+            .reconcile(
+              stored: loadedNote.document!,
+              restoration: reopenedArtifact,
+              paneIdsInTraversalOrder: panes,
+              ensureQuickTerminalContext: true,
+              updatedAtUtcMicros: 3001,
+            );
+    _expect(
+      loadedNote.disposition == TerminalNoteStoreDisposition.loaded &&
+          reconciled.disposition ==
+              TerminalNoteContextReconciliationDisposition.matched &&
+          reconciled.bindings.contextForPane(panes.first) == expectedContext,
+      'real files reopen as one exact matching generation',
+    );
+  } finally {
+    engine?.stop();
+    reopened?.stop();
+    await temporary.delete(recursive: true);
+  }
+}
+
 void _expectFreshDetached(
   TerminalNoteContextReconciliationResult result,
   TerminalNoteContextFreshReason reason,
@@ -540,6 +958,36 @@ TerminalNoteStoreDocument _restorableNoteDocument({
       restorationSha256: bindingSha256,
       paneContextIds: bindingContextIds,
     ),
+  );
+}
+
+TerminalNoteStoreDocument _activeNoteDocument({
+  required List<TerminalNoteContextId> contextIds,
+  TerminalNoteContextId? quickTerminalContextId,
+  required String bindingSha256,
+  required List<TerminalNoteContextId> bindingContextIds,
+}) {
+  final TerminalNoteStoreDocument restorable = _restorableNoteDocument(
+    contextIds: contextIds,
+    quickTerminalContextId: quickTerminalContextId,
+    bindingSha256: bindingSha256,
+    bindingContextIds: bindingContextIds,
+  );
+  TerminalNoteSnapshot snapshot = restorable.snapshot;
+  for (final TerminalNoteContextId contextId in contextIds) {
+    final NoteContextRecord context = snapshot.contextFor(contextId)!;
+    snapshot = _acceptedNoteSnapshot(
+      snapshot.setContextState(
+        contextId: contextId,
+        state: TerminalNoteContextState.active,
+        expectedStoreRevision: snapshot.storeRevision,
+        expectedContextRevision: context.revision,
+      ),
+    );
+  }
+  return TerminalNoteStoreDocument(
+    snapshot: snapshot,
+    restorationBinding: restorable.restorationBinding,
   );
 }
 
@@ -1363,6 +1811,17 @@ final class _RestorationFakeSession implements TerminalPaneSession {
 
 void _expect(bool condition, String message) {
   if (!condition) throw StateError(message);
+}
+
+void _expectBytesEqual(List<int> left, List<int> right, String message) {
+  _expect(
+    left.length == right.length &&
+        List<int>.generate(
+          left.length,
+          (int index) => index,
+        ).every((int index) => left[index] == right[index]),
+    message,
+  );
 }
 
 void _expectThrows<T extends Object>(void Function() body, String message) {

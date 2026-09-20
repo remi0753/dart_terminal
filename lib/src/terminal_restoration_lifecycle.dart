@@ -100,10 +100,12 @@ final class TerminalRestorationLoadResult {
   const TerminalRestorationLoadResult({
     required this.disposition,
     this.snapshot,
+    this.exactEncoded,
   });
 
   final TerminalRestorationLoadDisposition disposition;
   final TerminalRestorationSnapshot? snapshot;
+  final String? exactEncoded;
 }
 
 enum TerminalRestorationSaveDisposition { saved, captureRejected, unavailable }
@@ -131,6 +133,7 @@ final class TerminalRestorationPersistence {
       return TerminalRestorationLoadResult(
         disposition: TerminalRestorationLoadDisposition.restored,
         snapshot: TerminalRestorationCodec.decode(encoded),
+        exactEncoded: encoded,
       );
     } on FormatException catch (_) {
       return const TerminalRestorationLoadResult(
@@ -155,9 +158,33 @@ final class TerminalRestorationPersistence {
     TerminalRestorationSnapshot snapshot,
   ) async {
     try {
-      await store.write(TerminalRestorationCodec.encode(snapshot));
+      return await saveExactEncoded(TerminalRestorationCodec.encode(snapshot));
+    } on Object catch (_) {
+      return const TerminalRestorationSaveResult(
+        TerminalRestorationSaveDisposition.captureRejected,
+      );
+    }
+  }
+
+  /// Persists already validated restoration text without re-encoding it.
+  Future<TerminalRestorationSaveResult> saveExactEncoded(String encoded) async {
+    try {
+      TerminalRestorationCodec.decode(encoded);
+      await store.write(encoded);
       return const TerminalRestorationSaveResult(
         TerminalRestorationSaveDisposition.saved,
+      );
+    } on FormatException catch (_) {
+      return const TerminalRestorationSaveResult(
+        TerminalRestorationSaveDisposition.captureRejected,
+      );
+    } on ArgumentError catch (_) {
+      return const TerminalRestorationSaveResult(
+        TerminalRestorationSaveDisposition.captureRejected,
+      );
+    } on TerminalRestorationLimitException catch (_) {
+      return const TerminalRestorationSaveResult(
+        TerminalRestorationSaveDisposition.captureRejected,
       );
     } on Object catch (_) {
       return const TerminalRestorationSaveResult(

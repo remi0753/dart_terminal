@@ -111,6 +111,14 @@ final class TerminalNoteRestorationArtifact {
 
 /// Captured restoration bytes plus live standard panes in exact codec order.
 final class TerminalNoteRestorationCaptureArtifact {
+  factory TerminalNoteRestorationCaptureArtifact.fromArtifact({
+    required TerminalNoteRestorationArtifact restoration,
+    required Iterable<PaneId> paneIdsInTraversalOrder,
+  }) => TerminalNoteRestorationCaptureArtifact._(
+    restoration: restoration,
+    paneIdsInTraversalOrder: paneIdsInTraversalOrder,
+  );
+
   TerminalNoteRestorationCaptureArtifact._({
     required this.restoration,
     required Iterable<PaneId> paneIdsInTraversalOrder,
@@ -224,6 +232,285 @@ final class TerminalNoteContextReconciliationResult {
   final TerminalNoteContextReconciliationDisposition disposition;
   final TerminalNoteContextFreshReason? freshReason;
   final bool requiresCommit;
+}
+
+enum TerminalNoteShutdownPreparationFailure {
+  invalidTraversal,
+  invalidTimestamp,
+  bindingMismatch,
+  mutationRejected,
+}
+
+/// Fixed, content-free shutdown candidate failure.
+final class TerminalNoteShutdownPreparationException implements Exception {
+  const TerminalNoteShutdownPreparationException(this.failure);
+
+  final TerminalNoteShutdownPreparationFailure failure;
+
+  @override
+  String toString() =>
+      'Terminal note shutdown preparation failed: ${failure.name}';
+}
+
+/// Exact restoration bytes and the Note document that binds to those bytes.
+final class TerminalNoteShutdownCandidate {
+  const TerminalNoteShutdownCandidate({
+    required this.restoration,
+    required this.document,
+    required this.requiresNoteCommit,
+  });
+
+  final TerminalNoteRestorationArtifact restoration;
+  final TerminalNoteStoreDocument document;
+  final bool requiresNoteCommit;
+
+  @override
+  String toString() =>
+      'TerminalNoteShutdownCandidate('
+      'panes=${restoration.snapshot.paneCount}, '
+      'noteCommit=$requiresNoteCommit)';
+}
+
+/// Produces one fail-closed shutdown candidate without performing I/O.
+final class TerminalNoteShutdownCandidateBuilder {
+  const TerminalNoteShutdownCandidateBuilder();
+
+  TerminalNoteShutdownCandidate prepare({
+    required TerminalNoteStoreDocument stored,
+    required TerminalNoteRestorationCaptureArtifact capture,
+    required TerminalNoteContextBindings bindings,
+    required int updatedAtUtcMicros,
+  }) {
+    if (updatedAtUtcMicros < 0 ||
+        BigInt.from(updatedAtUtcMicros) >
+            TerminalNoteLimits.maximumUnsigned64) {
+      throw const TerminalNoteShutdownPreparationException(
+        TerminalNoteShutdownPreparationFailure.invalidTimestamp,
+      );
+    }
+    final List<PaneId> paneIds = capture.paneIdsInTraversalOrder;
+    if (bindings.standardPaneContexts.length != paneIds.length ||
+        !bindings.standardPaneContexts.keys.toSet().containsAll(paneIds)) {
+      throw const TerminalNoteShutdownPreparationException(
+        TerminalNoteShutdownPreparationFailure.invalidTraversal,
+      );
+    }
+    final List<TerminalNoteContextId> contextIds = <TerminalNoteContextId>[];
+    for (final PaneId paneId in paneIds) {
+      final TerminalNoteContextId? contextId = bindings.contextForPane(paneId);
+      final NoteContextRecord? context = contextId == null
+          ? null
+          : stored.snapshot.contextFor(contextId);
+      if (contextId == null ||
+          context == null ||
+          context.kind != TerminalNoteContextKind.standard ||
+          context.state == TerminalNoteContextState.detached) {
+        throw const TerminalNoteShutdownPreparationException(
+          TerminalNoteShutdownPreparationFailure.bindingMismatch,
+        );
+      }
+      contextIds.add(contextId);
+    }
+    if (contextIds.toSet().length != contextIds.length) {
+      throw const TerminalNoteShutdownPreparationException(
+        TerminalNoteShutdownPreparationFailure.bindingMismatch,
+      );
+    }
+    final TerminalNoteContextId? storedQuickContextId = stored
+        .snapshot
+        .contexts
+        .values
+        .where(
+          (NoteContextRecord context) =>
+              context.kind == TerminalNoteContextKind.quickTerminal,
+        )
+        .firstOrNull
+        ?.id;
+    if (storedQuickContextId != bindings.quickTerminalContextId) {
+      throw const TerminalNoteShutdownPreparationException(
+        TerminalNoteShutdownPreparationFailure.bindingMismatch,
+      );
+    }
+
+    TerminalNoteSnapshot working = stored.snapshot;
+    final int safeUpdatedAt = working.notes.values.fold<int>(
+      updatedAtUtcMicros,
+      (int current, NoteRecord note) =>
+          note.updatedAtUtcMicros > current ? note.updatedAtUtcMicros : current,
+    );
+    final Set<TerminalNoteContextId> retainedIds = contextIds.toSet();
+    final List<NoteContextRecord> existingStandard =
+        working.contexts.values
+            .where(
+              (NoteContextRecord context) =>
+                  context.kind == TerminalNoteContextKind.standard,
+            )
+            .toList()
+          ..sort(
+            (NoteContextRecord left, NoteContextRecord right) =>
+                left.id.compareTo(right.id),
+          );
+    for (final NoteContextRecord original in existingStandard) {
+      if (retainedIds.contains(original.id) ||
+          original.state == TerminalNoteContextState.detached) {
+        continue;
+      }
+      final NoteContextRecord current = working.contextFor(original.id)!;
+      working = _acceptedShutdownSnapshot(
+        working.detachContext(
+          contextId: current.id,
+          reason: TerminalNoteDetachReason.contextUnavailable,
+          updatedAtUtcMicros: safeUpdatedAt,
+          expectedStoreRevision: working.storeRevision,
+          expectedContextRevision: current.revision,
+        ),
+      );
+    }
+    for (final TerminalNoteContextId contextId in contextIds) {
+      final NoteContextRecord context = working.contextFor(contextId)!;
+      if (context.state == TerminalNoteContextState.active) {
+        working = _acceptedShutdownSnapshot(
+          working.setContextState(
+            contextId: contextId,
+            state: TerminalNoteContextState.restorable,
+            expectedStoreRevision: working.storeRevision,
+            expectedContextRevision: context.revision,
+          ),
+        );
+      }
+    }
+    final TerminalNoteRestorationBinding nextBinding =
+        TerminalNoteRestorationBinding(
+          restorationSha256: capture.restoration.restorationSha256,
+          paneContextIds: contextIds,
+        );
+    final bool snapshotChanged =
+        working.storeRevision != stored.snapshot.storeRevision;
+    final bool bindingChanged = !_sameRestorationBinding(
+      stored.restorationBinding,
+      nextBinding,
+    );
+    if (bindingChanged && !snapshotChanged) {
+      throw const TerminalNoteShutdownPreparationException(
+        TerminalNoteShutdownPreparationFailure.mutationRejected,
+      );
+    }
+    return TerminalNoteShutdownCandidate(
+      restoration: capture.restoration,
+      document: TerminalNoteStoreDocument(
+        snapshot: working,
+        restorationBinding: nextBinding,
+      ),
+      requiresNoteCommit: snapshotChanged || bindingChanged,
+    );
+  }
+
+  static TerminalNoteSnapshot _acceptedShutdownSnapshot(
+    TerminalNoteMutationResult result,
+  ) {
+    if (result.disposition == TerminalNoteMutationDisposition.rejected) {
+      throw const TerminalNoteShutdownPreparationException(
+        TerminalNoteShutdownPreparationFailure.mutationRejected,
+      );
+    }
+    return result.snapshot;
+  }
+}
+
+typedef TerminalNoteRestorationCommit = Future<bool> Function(
+  TerminalNoteRestorationArtifact restoration,
+);
+typedef TerminalNoteDocumentCommit = Future<bool> Function(
+  TerminalNoteStoreDocument document,
+);
+
+enum TerminalNoteOrderedPersistenceDisposition {
+  committed,
+  restorationCommitFailed,
+  noteCommitFailed,
+}
+
+/// Content-free outcome for the restoration-first two-file commit sequence.
+final class TerminalNoteOrderedPersistenceResult {
+  const TerminalNoteOrderedPersistenceResult._({
+    required this.disposition,
+    required this.restorationCommitAcknowledged,
+    required this.noteCommitAttempted,
+    required this.noteCommitAcknowledged,
+  });
+
+  final TerminalNoteOrderedPersistenceDisposition disposition;
+  final bool restorationCommitAcknowledged;
+  final bool noteCommitAttempted;
+  final bool noteCommitAcknowledged;
+
+  bool get isSuccess =>
+      disposition == TerminalNoteOrderedPersistenceDisposition.committed;
+
+  @override
+  String toString() =>
+      'TerminalNoteOrderedPersistenceResult(${disposition.name})';
+}
+
+/// Commits exact restoration bytes before the Note document that binds them.
+final class TerminalNoteOrderedPersistenceCoordinator {
+  const TerminalNoteOrderedPersistenceCoordinator({
+    required this.commitRestoration,
+    required this.commitNoteDocument,
+  });
+
+  final TerminalNoteRestorationCommit commitRestoration;
+  final TerminalNoteDocumentCommit commitNoteDocument;
+
+  Future<TerminalNoteOrderedPersistenceResult> commit(
+    TerminalNoteShutdownCandidate candidate,
+  ) async {
+    try {
+      if (!await commitRestoration(candidate.restoration)) {
+        return const TerminalNoteOrderedPersistenceResult._(
+          disposition:
+              TerminalNoteOrderedPersistenceDisposition.restorationCommitFailed,
+          restorationCommitAcknowledged: false,
+          noteCommitAttempted: false,
+          noteCommitAcknowledged: false,
+        );
+      }
+    } on Object {
+      return const TerminalNoteOrderedPersistenceResult._(
+        disposition:
+            TerminalNoteOrderedPersistenceDisposition.restorationCommitFailed,
+        restorationCommitAcknowledged: false,
+        noteCommitAttempted: false,
+        noteCommitAcknowledged: false,
+      );
+    }
+    if (!candidate.requiresNoteCommit) {
+      return const TerminalNoteOrderedPersistenceResult._(
+        disposition: TerminalNoteOrderedPersistenceDisposition.committed,
+        restorationCommitAcknowledged: true,
+        noteCommitAttempted: false,
+        noteCommitAcknowledged: false,
+      );
+    }
+    try {
+      if (await commitNoteDocument(candidate.document)) {
+        return const TerminalNoteOrderedPersistenceResult._(
+          disposition: TerminalNoteOrderedPersistenceDisposition.committed,
+          restorationCommitAcknowledged: true,
+          noteCommitAttempted: true,
+          noteCommitAcknowledged: true,
+        );
+      }
+    } on Object {
+      // Failure classification is intentionally content-free.
+    }
+    return const TerminalNoteOrderedPersistenceResult._(
+      disposition: TerminalNoteOrderedPersistenceDisposition.noteCommitFailed,
+      restorationCommitAcknowledged: true,
+      noteCommitAttempted: true,
+      noteCommitAcknowledged: false,
+    );
+  }
 }
 
 /// Produces one all-or-nothing startup reconciliation candidate without I/O.
@@ -383,7 +670,7 @@ final class TerminalNoteContextReconciler {
       freshReason: decision.freshReason,
       requiresCommit:
           working.storeRevision != stored.snapshot.storeRevision ||
-          !_sameBinding(stored.restorationBinding, nextBinding),
+          !_sameRestorationBinding(stored.restorationBinding, nextBinding),
     );
   }
 
@@ -436,23 +723,21 @@ final class TerminalNoteContextReconciler {
     }
     return result.snapshot;
   }
+}
 
-  static bool _sameBinding(
-    TerminalNoteRestorationBinding? left,
-    TerminalNoteRestorationBinding? right,
-  ) {
-    if (left == null || right == null) return left == null && right == null;
-    if (left.restorationSha256 != right.restorationSha256 ||
-        left.paneContextIds.length != right.paneContextIds.length) {
-      return false;
-    }
-    for (var index = 0; index < left.paneContextIds.length; index++) {
-      if (left.paneContextIds[index] != right.paneContextIds[index]) {
-        return false;
-      }
-    }
-    return true;
+bool _sameRestorationBinding(
+  TerminalNoteRestorationBinding? left,
+  TerminalNoteRestorationBinding? right,
+) {
+  if (left == null || right == null) return left == null && right == null;
+  if (left.restorationSha256 != right.restorationSha256 ||
+      left.paneContextIds.length != right.paneContextIds.length) {
+    return false;
   }
+  for (var index = 0; index < left.paneContextIds.length; index++) {
+    if (left.paneContextIds[index] != right.paneContextIds[index]) return false;
+  }
+  return true;
 }
 
 final class _TerminalNoteBindingDecision {
