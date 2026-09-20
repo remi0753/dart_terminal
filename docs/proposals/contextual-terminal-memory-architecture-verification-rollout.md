@@ -1,6 +1,6 @@
 # Contextual terminal memory architecture, verification, and rollout
 
-- 状態: Gate 7 完了（製品コード実装未承認）
+- 状態: Gate 7 完了（implementation plan登録済み、製品コード未着手）
 - 作成日: 2026-09-20
 - Branch: `codex/contextual-memory-design`
 - 親文書: [`contextual-terminal-memory-design-decisions.md`](contextual-terminal-memory-design-decisions.md)
@@ -9,6 +9,7 @@
 - Data/privacy仕様: [`contextual-terminal-memory-data-persistence-privacy.md`](contextual-terminal-memory-data-persistence-privacy.md)
 - Overlay/input仕様: [`contextual-terminal-memory-overlay-editor-accessibility.md`](contextual-terminal-memory-overlay-editor-accessibility.md)
 - Checkpoint採否: [`contextual-terminal-memory-checkpoint-feasibility.md`](contextual-terminal-memory-checkpoint-feasibility.md)
+- 実装計画: [`contextual-terminal-memory-implementation-plan.md`](contextual-terminal-memory-implementation-plan.md)
 
 ## 目的
 
@@ -122,7 +123,7 @@ restoration、shell capability、rollbackの責任が重複する。
 | D-45 | 採用 | Note store v1、restoration binding v1、native surface ABI v1、S3 shell integration v3を独立versionにする。Restoration本体はv1を維持し、exact-byte hash bindingで旧版rollbackを可能にする。 |
 | D-46 | 採用 | Pure model／codec／fault／native UI／real PTY／Developer JIT・Release AOT／manual accessibilityを必須test pyramidとし、queue、latency、memory、file budgetをhard gateにする。 |
 | D-47 | 採用 | Hidden test→internal opt-in→user opt-in→S1/S2 default-on→S3 opt-in→S3 default-onの順とし、local restart kill switchとdata-preserving rollbackを各stageに要求する。 |
-| D-48 | 採用 | S1/S2 initialとS3 next incrementのspecificationを凍結する。S4は延期、S5/S6は不採用のまま、次のroadmap taskで採用sliceだけをimplementation subtaskへ分割して完了する。 |
+| D-48 | 採用 | S1/S2 initialとS3 next incrementのspecificationを凍結する。S4は延期、S5/S6は不採用のまま、採用sliceだけをlinked implementation planのCM-01〜CM-19へ分割した。 |
 
 ## Ownership and concurrency
 
@@ -453,8 +454,9 @@ S3 incrementだけshell integration resource/protocol v3を追加する。S1/S2 
 - Deferred: S4、workspace、import、app-level encryption、notification。Implementation中に必要と見つけても
   current taskへ混ぜず、roadmapの適切な後続位置へ新規decision taskとして追加する。
 
-D-01〜D-47のcurrent release判断とD-48のfreeze条件は閉じた。D-48のimplementation task登録だけを
-次のroadmap taskで行う。`延期`は明示的にscope外であり実装blockerではない。
+D-01〜D-47のcurrent release判断とD-48のfreeze／implementation task登録は閉じた。実装順と個別完了条件は
+[`implementation plan`](contextual-terminal-memory-implementation-plan.md)を正本とする。`延期`は明示的に
+scope外であり実装blockerではない。
 Class/file分割等のmechanical detailはimplementation taskで調整できるが、scope、owner、message bound、version、
 privacy、failure、acceptance、rolloutを変更する場合は本specを再度開いてdecision/roadmapを更新する。
 

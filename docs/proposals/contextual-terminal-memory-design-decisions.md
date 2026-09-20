@@ -1,8 +1,9 @@
 # Contextual terminal memory 設計判断一覧
 
-- 状態: Gate 1/2/3/4/5/6/7 完了、D-48 task化は未完了（実装未承認）
+- 状態: Gate 1〜7とD-48 task化完了（採用sliceの実装未着手）
 - 作成日: 2026-09-20
 - 対象提案: [`contextual-terminal-memory-and-input-checkpoints.md`](contextual-terminal-memory-and-input-checkpoints.md)
+- 実装計画: [`contextual-terminal-memory-implementation-plan.md`](contextual-terminal-memory-implementation-plan.md)
 
 ## 目的
 
@@ -201,7 +202,18 @@ persistence、trigger、input authority、shell adapter、privacy、UX などに
   hidden→internal opt-in→user opt-in→S1/S2 default-on→S3 opt-in/default-onのstageを固定した。
 - S1/S2 initialとS3 next incrementのspecをfreezeした。D-43〜D-47とD-48のfreeze判断の正本は
   [`architecture, verification, and rollout`](contextual-terminal-memory-architecture-verification-rollout.md) とする。
-  D-48のordered implementation task登録は次のroadmap itemで行う。
+  D-48のordered implementation taskは
+  [`implementation plan`](contextual-terminal-memory-implementation-plan.md)へ登録した。
+
+### 2026-09-20: D-48 implementation subdivision
+
+- Frozen contractをCM-01〜CM-19へ分割し、pure model→codec→durable worker→restoration→root authority→
+  config→window input owner→native presentation/editor→S1/S2→R0〜R3→shell v3/S3→R4/R5のstrict
+  linear orderをroot roadmapへ登録した。
+- Native Note UIはgeneric `dart_appkit`へproduct behaviorを追加せず、repository-owned capability packageで
+  実装する。R0はtest-only injection、R1以降はtyped local optionを使い、remote flag/telemetryを導入しない。
+- S4〜S6、workspace、sync、notification、import、rich text、command matcher/digest、bidirectional reply、
+  simulationにimplementation packageを割り当てていない。
 
 ## 判断方法
 
@@ -225,7 +237,8 @@ Gate 6 のD-35〜D-42は
 [`checkpoint feasibility`](contextual-terminal-memory-checkpoint-feasibility.md) で完了し、すべて不採用とした。
 Gate 7 のD-43〜D-47とD-48のfreeze方針は
 [`architecture, verification, and rollout`](contextual-terminal-memory-architecture-verification-rollout.md)で完了した。
-D-48のroadmap task登録は**未完了**であり、次の作業で実施する。
+D-48のroadmap task登録も
+[`implementation plan`](contextual-terminal-memory-implementation-plan.md)とroot roadmapで完了した。
 
 ## 機能 slice
 
@@ -356,10 +369,11 @@ load-order conflict、existing preexecの非blocking性、transport／secret／r
 
 ### Gate 7 — Architecture、検証、rollout、仕様凍結
 
-**状態: architecture/verification/rollout/spec freeze完了。** D-43〜D-47を採用し、D-48は採用sliceだけを
-次のroadmap taskで依存順にtask化する方針まで確定した。Owner/message/version/config/budget/stageの正本は
+**状態: architecture/verification/rollout/spec freezeとtask化完了。** D-43〜D-47を採用し、D-48で
+採用sliceだけをCM-01〜CM-19へ依存順に登録した。Owner/message/version/config/budget/stageの正本は
 [`contextual-terminal-memory-architecture-verification-rollout.md`](contextual-terminal-memory-architecture-verification-rollout.md)
-を参照する。
+、実装順と個別完了条件は
+[`contextual-terminal-memory-implementation-plan.md`](contextual-terminal-memory-implementation-plan.md)を参照する。
 
 | ID | 決めること | 主な選択肢・問い | 完了証拠と影響 |
 | --- | --- | --- | --- |
@@ -403,9 +417,9 @@ S5/S6を不採用へ閉じた。S4だけが延期を維持する。
 
 ## 次の検討で最初に閉じる事項
 
-`ROADMAP.md` の次の未完了taskはD-48のimplementation subdivisionである。Frozen specificationから
-S1/S2 initial、S3 increment、rollout evidenceをtask-scoped commitに分け、依存順、個別completion、
-verification、参照文書をroot roadmapへ登録する。S4〜S6や旧roadmap follow-upは混入させない。
+`ROADMAP.md` の次の未完了taskはCM-01 Pure Note domain model / trigger state machineである。
+[`implementation plan`](contextual-terminal-memory-implementation-plan.md)のCM-01をtask memoへ具体化し、
+pure boundaryをcommitするまでCM-02以降へ進まない。S4〜S6や旧roadmap follow-upは混入させない。
 
 ## 検証記録
 

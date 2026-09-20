@@ -1,12 +1,13 @@
 # Contextual terminal memory overlay, editor, and accessibility
 
-- 状態: Gate 5 完了（製品コード実装未承認）
+- 状態: Gate 5 完了（採用sliceはimplementation planへ登録済み）
 - 作成日: 2026-09-20
 - Branch: `codex/contextual-memory-design`
 - 親文書: [`contextual-terminal-memory-design-decisions.md`](contextual-terminal-memory-design-decisions.md)
 - Data/privacy仕様: [`contextual-terminal-memory-data-persistence-privacy.md`](contextual-terminal-memory-data-persistence-privacy.md)
 - Checkpoint採否: [`contextual-terminal-memory-checkpoint-feasibility.md`](contextual-terminal-memory-checkpoint-feasibility.md)
 - Architecture/rollout仕様: [`contextual-terminal-memory-architecture-verification-rollout.md`](contextual-terminal-memory-architecture-verification-rollout.md)
+- 実装計画: [`contextual-terminal-memory-implementation-plan.md`](contextual-terminal-memory-implementation-plan.md)
 
 ## 目的
 

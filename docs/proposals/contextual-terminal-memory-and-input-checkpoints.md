@@ -1,6 +1,6 @@
 # Contextual terminal memory and input checkpoints
 
-- Status: S1–S3 specification frozen; S4 deferred; S5/S6 rejected; implementation tasking pending
+- Status: S1–S3 specification frozen and implementation sequenced; S4 deferred; S5/S6 rejected
 - Date: 2026-09-20
 - Design intake: [`contextual-terminal-memory-design-decisions.md`](contextual-terminal-memory-design-decisions.md)
 - Product decisions: [`contextual-terminal-memory-product-slices.md`](contextual-terminal-memory-product-slices.md)
@@ -9,6 +9,7 @@
 - Overlay and interaction: [`contextual-terminal-memory-overlay-editor-accessibility.md`](contextual-terminal-memory-overlay-editor-accessibility.md)
 - Checkpoint feasibility: [`contextual-terminal-memory-checkpoint-feasibility.md`](contextual-terminal-memory-checkpoint-feasibility.md)
 - Architecture and rollout: [`contextual-terminal-memory-architecture-verification-rollout.md`](contextual-terminal-memory-architecture-verification-rollout.md)
+- Implementation plan: [`contextual-terminal-memory-implementation-plan.md`](contextual-terminal-memory-implementation-plan.md)
 - Target: Dart Terminal
 
 ## Current decision status
@@ -42,8 +43,8 @@ toolbar, collaboration model, and brand are not requirements.
   adapter, checkpoint owner, or simulation mode. Reconsideration requires a separate product proposal.
 - The application-root Note authority, store/native protocols, restoration hash binding, local kill
   switches, verification budgets, and staged rollout are frozen in the linked architecture record.
-- The linked product decision record supersedes the original all-in-one MVP and implementation order
-  below. Adoption means the slice proceeds to detailed design; it does not authorize product-code work.
+- The linked product decision and implementation records supersede the original all-in-one MVP and
+  implementation order below. Product work is authorized only in the registered CM-01→CM-19 order.
 
 ## Purpose
 

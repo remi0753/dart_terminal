@@ -1,7 +1,7 @@
-# Dart Terminal — contextual memory 設計ロードマップ
+# Dart Terminal — contextual memory ロードマップ
 
 最終更新: 2026-09-20<br>
-状態: 設計検討中。製品実装は未承認。
+状態: 設計仕様と実装順序を確定。採用sliceの製品実装は未着手。
 
 主要な terminal emulator 機能と配布版リリースまでの計画は達成済みであり、
 [`docs/archive/terminal-emulator-release-roadmap.md`](docs/archive/terminal-emulator-release-roadmap.md)
@@ -14,10 +14,11 @@
 [`docs/proposals/contextual-terminal-memory-design-decisions.md`](docs/proposals/contextual-terminal-memory-design-decisions.md)
 を参照する。Gate 1の製品判断は
 [`docs/proposals/contextual-terminal-memory-product-slices.md`](docs/proposals/contextual-terminal-memory-product-slices.md)
-を正本とする。原案内の一括 MVP と実装順は superseded されており、以下の判断が完了するまで
-採用 slice も実装 backlog とみなさない。
+を正本とする。原案内の一括 MVP と実装順は superseded されている。Gate 1〜7の凍結仕様と
+[`implementation plan`](docs/proposals/contextual-terminal-memory-implementation-plan.md)に従い、
+S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不採用である。
 
-## 作業順序
+## 完了した設計順序
 
 - [x] 旧 roadmap を履歴と未完了 follow-up を保ったままアーカイブし、新機能の設計論点を洗い出す
   （実施記録は
@@ -47,7 +48,34 @@
   （判断結果は
   [`contextual-terminal-memory-architecture-verification-rollout.md`](docs/proposals/contextual-terminal-memory-architecture-verification-rollout.md)
   を参照する）
-- [ ] 採用した slice だけを実装可能な subtask へ分割し、依存順と個別の完了条件を本書へ追加する
+- [x] 採用した slice だけを実装可能な work package へ分割し、依存順と個別の完了条件を登録する
+  （判断結果は
+  [`contextual-terminal-memory-implementation-plan.md`](docs/proposals/contextual-terminal-memory-implementation-plan.md)
+  を参照する）
 
-最後の項目が完了するまで、提案にある schema、overlay、input mode、shell adapter を
-製品コードへ先行実装しない。
+## 実装・rollout順序
+
+各項目は、実施時に
+[`contextual-terminal-memory-implementation-plan.md`](docs/proposals/contextual-terminal-memory-implementation-plan.md)
+の同じIDを参照する。現在の先頭未完了taskをcommitする前に後続へ進まない。Stage taskはcode mergeだけで
+完了にせず、指定された実測evidenceを満たすまで未完了とする。
+
+- [ ] CM-01 Pure Note domain model と trigger state machineを実装する
+- [ ] CM-02 Note store version 1 codecを実装する
+- [ ] CM-03 durable Note store workerを実装する
+- [ ] CM-04 durable context identityとrestoration bindingを実装する
+- [ ] CM-05 application-root Note authorityを実装する
+- [ ] CM-06 typed configurationとdisabled lifecycleを実装する
+- [ ] CM-07 unified window interaction authorityへ既存input ownerを統合する
+- [ ] CM-08 native Note presentation capabilityを実装する
+- [ ] CM-09 native Note editor、intent、accessibility interactionを実装する
+- [ ] CM-10 S1 Basic memoryをproductへ統合する
+- [ ] CM-11 S2 On Returnをproductへ統合する
+- [ ] CM-12 R0 hidden qualificationを完了する
+- [ ] CM-13 R1 internal S1/S2 opt-inを完了する
+- [ ] CM-14 R2 public S1/S2 opt-inを完了する
+- [ ] CM-15 R3 S1/S2 default-on promotionを完了する
+- [ ] CM-16 shell integration version 3 lifecycle protocolを実装する
+- [ ] CM-17 S3 At Next Promptをproductへ統合する
+- [ ] CM-18 R4 public S3 opt-inを完了する
+- [ ] CM-19 R5 S3 default-on decisionを完了する

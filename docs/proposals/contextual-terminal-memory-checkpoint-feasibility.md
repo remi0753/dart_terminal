@@ -1,11 +1,12 @@
 # Contextual terminal memory checkpoint feasibility
 
-- 状態: Gate 6 完了（製品コード実装未承認）
+- 状態: Gate 6 完了（S5/S6不採用、implementation taskなし）
 - 作成日: 2026-09-20
 - Branch: `codex/contextual-memory-design`
 - 親文書: [`contextual-terminal-memory-design-decisions.md`](contextual-terminal-memory-design-decisions.md)
 - Product判断: [`contextual-terminal-memory-product-slices.md`](contextual-terminal-memory-product-slices.md)
 - Overlay/input仕様: [`contextual-terminal-memory-overlay-editor-accessibility.md`](contextual-terminal-memory-overlay-editor-accessibility.md)
+- 実装計画: [`contextual-terminal-memory-implementation-plan.md`](contextual-terminal-memory-implementation-plan.md)
 
 ## 目的
 
