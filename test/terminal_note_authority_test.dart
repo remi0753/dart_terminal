@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dart_terminal/dart_terminal.dart';
 
@@ -9,7 +10,11 @@ Future<void> runTerminalNoteAuthorityTests() async {
   await _testDuplicateRevisionAndAdmissionBounds();
   await _testBoundedTopologyAndFocusIngress();
   await _testPromptOverflowAndSessionReplacement();
+  await _testProjectionAcknowledgementAndClose();
+  await _testExpandedProjectionHardBounds();
   await _testSixtyFourPaneAndSessionBound();
+  await _testApplicationShutdownAndReopen();
+  await _testRealWorkerAuthorityReopen();
   await _testCommitFailurePreservesPublishedDocument();
   await _testStartupFailureStates();
 }
@@ -636,6 +641,267 @@ Future<void> _testPromptOverflowAndSessionReplacement() async {
   await authority.stop();
 }
 
+Future<void> _testProjectionAcknowledgementAndClose() async {
+  final _FakeAuthorityStore store = _FakeAuthorityStore();
+  final TerminalNoteAuthority authority = await _startAuthority(store);
+  final TerminalNoteContextId contextId = authority.contextForPane(
+    const PaneId(1),
+  )!;
+  await _mutate(
+    authority,
+    source: 56,
+    event: 1,
+    transition: _createNote(
+      contextId: contextId,
+      noteId: _noteId(56),
+      body: 'projected-private-body',
+      timestamp: 90,
+    ),
+  );
+  await _armOnReturn(
+    authority,
+    noteId: _noteId(56),
+    source: 56,
+    event: 2,
+    isEligible: false,
+  );
+  authority.observeEligibleFocus(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    isEligible: true,
+  );
+  await authority.whenIdle();
+
+  final _FakeNoteSurface surface = _FakeNoteSurface();
+  final TerminalNoteSurfaceResult attached = authority.attachSurface(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    port: surface,
+  );
+  _expect(
+    attached.disposition == TerminalNoteSurfaceDisposition.applied &&
+        attached.projection!.visibility ==
+            TerminalNoteSurfaceVisibility.collapsed &&
+        attached.projection!.cards.isEmpty &&
+        attached.projection!.activeCount == 1 &&
+        attached.projection!.dueCount == 1 &&
+        !attached.projection!.toString().contains('projected-private-body'),
+    'collapsed projection is content-free while retaining exact badge counts',
+  );
+
+  final TerminalNoteSurfaceResult background = authority.updateSurface(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    surfaceGeneration: attached.projection!.surfaceGeneration,
+    visibility: TerminalNoteSurfaceVisibility.expanded,
+    foreground: false,
+    occluded: false,
+  );
+  final TerminalNoteCardToken backgroundToken =
+      background.projection!.cards.single.token;
+  final TerminalNoteAuthorityMutationResult backgroundAck = await authority
+      .acknowledgePresentation(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        surfaceGeneration: background.projection!.surfaceGeneration,
+        projectionGeneration: background.projection!.projectionGeneration,
+        cardToken: backgroundToken,
+        visiblyLaidOut: true,
+      );
+  _expect(
+    background.disposition == TerminalNoteSurfaceDisposition.applied &&
+        background.projection!.cards.single.body == 'projected-private-body' &&
+        !background.projection!.presentationEligible &&
+        backgroundAck.disposition ==
+            TerminalNoteAuthorityMutationDisposition.stale &&
+        authority.document.snapshot.deliveryFor(_noteId(56)) != null,
+    'background expanded content cannot acknowledge a due delivery',
+  );
+
+  final TerminalNoteSurfaceResult foreground = authority.updateSurface(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    surfaceGeneration: background.projection!.surfaceGeneration,
+    visibility: TerminalNoteSurfaceVisibility.expanded,
+    foreground: true,
+    occluded: false,
+  );
+  surface.rejectNext = true;
+  final TerminalNoteSurfaceResult rejected = authority.updateSurface(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    surfaceGeneration: foreground.projection!.surfaceGeneration,
+    visibility: TerminalNoteSurfaceVisibility.expanded,
+    foreground: true,
+    occluded: false,
+  );
+  _expect(
+    rejected.disposition == TerminalNoteSurfaceDisposition.rejected &&
+        identical(rejected.projection, foreground.projection),
+    'surface apply rejection preserves the latest accepted projection',
+  );
+
+  final TerminalNoteCardToken token = foreground.projection!.cards.single.token;
+  final Completer<void> ackGate = store.blockNextCommit();
+  final Future<TerminalNoteAuthorityMutationResult> acceptedAck = authority
+      .acknowledgePresentation(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        surfaceGeneration: foreground.projection!.surfaceGeneration,
+        projectionGeneration: foreground.projection!.projectionGeneration,
+        cardToken: token,
+        visiblyLaidOut: true,
+      );
+  final TerminalNoteAuthorityMutationResult duplicateAck = await authority
+      .acknowledgePresentation(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        surfaceGeneration: foreground.projection!.surfaceGeneration,
+        projectionGeneration: foreground.projection!.projectionGeneration,
+        cardToken: token,
+        visiblyLaidOut: true,
+      );
+  ackGate.complete();
+  final TerminalNoteAuthorityMutationResult ackResult = await acceptedAck;
+  await authority.whenIdle();
+  _expect(
+    ackResult.disposition ==
+            TerminalNoteAuthorityMutationDisposition.committed &&
+        duplicateAck.disposition ==
+            TerminalNoteAuthorityMutationDisposition.duplicate &&
+        authority.document.snapshot.deliveryFor(_noteId(56)) == null &&
+        surface.applied.last.storeRevision ==
+            authority.document.snapshot.storeRevision,
+    'visible current acknowledgement commits once and republishes the latest '
+    'store revision',
+  );
+
+  await _mutate(
+    authority,
+    source: 56,
+    event: 3,
+    transition: _createNote(
+      contextId: contextId,
+      noteId: _noteId(57),
+      body: 'late-ack',
+      timestamp: 91,
+    ),
+  );
+  await _armOnReturn(
+    authority,
+    noteId: _noteId(57),
+    source: 56,
+    event: 4,
+    isEligible: false,
+  );
+  authority.observeEligibleFocus(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    isEligible: false,
+  );
+  authority.observeEligibleFocus(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    isEligible: true,
+  );
+  await authority.whenIdle();
+  final TerminalNoteSurfaceProjection beforeClose = surface.applied.last;
+  final TerminalNoteCardProjection lateCard = beforeClose.cards.firstWhere(
+    (TerminalNoteCardProjection card) => card.due,
+  );
+  final Completer<void> closeGate = store.blockNextCommit();
+  final Future<TerminalNoteAuthorityMutationResult> closing = authority
+      .closePane(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        updatedAtUtcMicros: 92,
+      );
+  final TerminalNoteAuthorityMutationResult lateAck = await authority
+      .acknowledgePresentation(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        surfaceGeneration: beforeClose.surfaceGeneration,
+        projectionGeneration: beforeClose.projectionGeneration,
+        cardToken: lateCard.token,
+        visiblyLaidOut: true,
+      );
+  closeGate.complete();
+  await closing;
+  _expect(
+    lateAck.disposition == TerminalNoteAuthorityMutationDisposition.stale &&
+        surface.disposeCount == 1 &&
+        authority.liveSurfaceCount == 0,
+    'O-03 pane close invalidates the surface before durable detach and rejects '
+    'a late native acknowledgement',
+  );
+  await authority.stop();
+}
+
+Future<void> _testExpandedProjectionHardBounds() async {
+  final _FakeAuthorityStore store = _FakeAuthorityStore();
+  final TerminalNoteAuthority authority = await _startAuthority(store);
+  final TerminalNoteContextId contextId = authority.contextForPane(
+    const PaneId(1),
+  )!;
+  final String maximumBody = List<String>.filled(
+    TerminalNoteLimits.maximumBodyUtf8Bytes,
+    'x',
+  ).join();
+  final TerminalNoteAuthorityMutationResult created = await _mutate(
+    authority,
+    source: 58,
+    event: 1,
+    transition: (TerminalNoteSnapshot original) {
+      TerminalNoteSnapshot working = original;
+      late TerminalNoteMutationResult last;
+      for (var index = 0; index < 65; index++) {
+        last = working.createNote(
+          id: _noteId(100 + index),
+          contextId: contextId,
+          body: maximumBody,
+          color: NoteColorKey.yellow,
+          utcMicros: 100 + index,
+          expectedStoreRevision: working.storeRevision,
+        );
+        working = last.snapshot;
+      }
+      return TerminalNoteAuthorityMutationPlan(mutation: last);
+    },
+  );
+  final _FakeNoteSurface surface = _FakeNoteSurface();
+  final TerminalNoteSurfaceResult collapsed = authority.attachSurface(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    port: surface,
+  );
+  final TerminalNoteSurfaceResult expanded = authority.updateSurface(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    surfaceGeneration: collapsed.projection!.surfaceGeneration,
+    visibility: TerminalNoteSurfaceVisibility.expanded,
+    foreground: true,
+    occluded: false,
+  );
+  _expect(
+    created.disposition == TerminalNoteAuthorityMutationDisposition.committed &&
+        collapsed.projection!.cards.isEmpty &&
+        expanded.projection!.activeCount == 65 &&
+        expanded.projection!.cards.length ==
+            TerminalNoteProjectionLimits.maximumExpandedCards &&
+        expanded.projection!.aggregateBodyUtf8Bytes ==
+            TerminalNoteProjectionLimits.maximumExpandedBodyUtf8Bytes &&
+        expanded.projection!.cards
+                .map((TerminalNoteCardProjection card) => card.token)
+                .toSet()
+                .length ==
+            TerminalNoteProjectionLimits.maximumExpandedCards,
+    'expanded projection stops at exactly 64 cards and 256 KiB with unique '
+    'ephemeral tokens',
+  );
+  await authority.stop();
+  _expect(surface.disposeCount == 1, 'stop disposes the bounded surface once');
+}
+
 Future<void> _testSixtyFourPaneAndSessionBound() async {
   final _FakeAuthorityStore store = _FakeAuthorityStore();
   final TerminalNoteAuthority authority = await _startAuthority(
@@ -670,11 +936,30 @@ Future<void> _testSixtyFourPaneAndSessionBound() async {
       semanticGeneration: BigInt.one,
     );
   }
+  final List<_FakeNoteSurface> surfaces = <_FakeNoteSurface>[];
+  for (
+    var pane = 1;
+    pane <= TerminalNoteAuthorityLimits.maximumLiveContexts;
+    pane++
+  ) {
+    final _FakeNoteSurface surface = _FakeNoteSurface();
+    surfaces.add(surface);
+    final TerminalNoteSurfaceResult result = authority.attachSurface(
+      sequence: authority.nextSequence(),
+      paneId: PaneId(pane),
+      port: surface,
+    );
+    _expect(
+      result.disposition == TerminalNoteSurfaceDisposition.applied,
+      'every surface through the 64-pane bound is attached',
+    );
+  }
   _expect(
     authority.livePaneCount == 64 &&
         authority.liveSessionCount == 64 &&
+        authority.liveSurfaceCount == 64 &&
         extraPane.disposition == TerminalNoteAuthorityMutationDisposition.busy,
-    'topology and prompt session ownership stop exactly at 64',
+    'topology, session, and surface ownership stop exactly at 64',
   );
   final TerminalNoteAuthorityMutationResult closed = await authority.closePane(
     sequence: authority.nextSequence(),
@@ -693,11 +978,309 @@ Future<void> _testSixtyFourPaneAndSessionBound() async {
     closed.disposition == TerminalNoteAuthorityMutationDisposition.committed &&
         authority.livePaneCount == 63 &&
         authority.liveSessionCount == 63 &&
+        authority.liveSurfaceCount == 63 &&
+        surfaces.last.disposeCount == 1 &&
         late.disposition == TerminalNoteLifecycleDisposition.stale,
     'structural close releases both hard-bound registries and rejects late '
     'session input',
   );
   await authority.stop();
+  _expect(
+    surfaces.every((_FakeNoteSurface surface) => surface.disposeCount == 1),
+    'full teardown disposes all 64 surface ports exactly once',
+  );
+}
+
+Future<void> _testApplicationShutdownAndReopen() async {
+  final int authorityBaseline = TerminalNoteAuthority.debugLiveAuthorityCount;
+  final _FakeAuthorityStore store = _FakeAuthorityStore();
+  final TerminalNoteAuthority authority = await _startAuthority(
+    store,
+    authorityGeneration: 30,
+  );
+  final TerminalNoteContextId contextId = authority.contextForPane(
+    const PaneId(1),
+  )!;
+  await _mutate(
+    authority,
+    source: 59,
+    event: 1,
+    transition: _createNote(
+      contextId: contextId,
+      noteId: _noteId(59),
+      body: 'shutdown-note',
+      timestamp: 200,
+    ),
+  );
+  final _FakeNoteSurface surface = _FakeNoteSurface();
+  authority.attachSurface(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    port: surface,
+  );
+  final TerminalNoteRestorationArtifact restoration =
+      TerminalNoteRestorationArtifact.fromSnapshot(_onePaneRestoration());
+  final TerminalNoteRestorationCaptureArtifact capture =
+      TerminalNoteRestorationCaptureArtifact.fromArtifact(
+        restoration: restoration,
+        paneIdsInTraversalOrder: const <PaneId>[PaneId(1)],
+      );
+
+  store.events.clear();
+  final Completer<void> drainGate = store.blockNextCommit();
+  final Future<TerminalNoteAuthorityMutationResult> drainingMutation = _mutate(
+    authority,
+    source: 59,
+    event: 2,
+    transition: _createNote(
+      contextId: contextId,
+      noteId: _noteId(60),
+      body: 'drained-note',
+      timestamp: 201,
+    ),
+  );
+  TerminalNoteRestorationArtifact? persistedRestoration;
+  final Future<TerminalNoteAuthorityShutdownResult> shuttingDown = authority
+      .shutdownApplication(
+        capture: capture,
+        updatedAtUtcMicros: 202,
+        commitRestoration: (TerminalNoteRestorationArtifact artifact) async {
+          store.events.add('restoration');
+          persistedRestoration = artifact;
+          return true;
+        },
+      );
+  final TerminalNoteAuthorityMutationResult frozen = await authority
+      .submitMutation(
+        sequence: authority.nextSequence(),
+        token: _token(authority, source: 59, event: 3),
+        bodyUtf8Bytes: 0,
+        transition: _noChangeContext(contextId),
+      );
+  drainGate.complete();
+  await drainingMutation;
+  final TerminalNoteAuthorityShutdownResult shutdown = await shuttingDown;
+  _expect(
+    frozen.disposition ==
+            TerminalNoteAuthorityMutationDisposition.unavailable &&
+        shutdown.isSuccess &&
+        shutdown.persistence!.isSuccess &&
+        shutdown.surfaceDisposeCount == 1 &&
+        surface.disposeCount == 1 &&
+        authority.capability == TerminalNoteAuthorityCapability.stopped &&
+        authority.livePaneCount == 0 &&
+        authority.liveSessionCount == 0 &&
+        authority.liveSurfaceCount == 0 &&
+        store.events.indexOf('restoration') > store.events.indexOf('commit') &&
+        store.events.last == 'stop' &&
+        TerminalNoteAuthority.debugLiveAuthorityCount == authorityBaseline,
+    'application shutdown freezes ingress, drains admitted work, persists '
+    'restoration before its Note binding, disposes surfaces, and stops',
+  );
+
+  final _FakeAuthorityStore reopenedStore = _FakeAuthorityStore()
+    ..current = store.current;
+  final TerminalNoteAuthority reopened = await TerminalNoteAuthority.start(
+    authorityGeneration: 31,
+    store: reopenedStore,
+    loadResult: reopenedStore.loadResult,
+    restoration: persistedRestoration,
+    paneIdsInTraversalOrder: const <PaneId>[PaneId(1)],
+    ensureQuickTerminalContext: false,
+    updatedAtUtcMicros: 203,
+    idGenerator: _contextGenerator(31),
+  );
+  _expect(
+    reopened.capability == TerminalNoteAuthorityCapability.ready &&
+        reopened.document.snapshot.noteFor(_noteId(59)) != null &&
+        reopened.document.snapshot.noteFor(_noteId(60)) != null &&
+        reopened.contextForPane(const PaneId(1)) == contextId,
+    'a new authority generation reopens the exact bound context and both '
+    'pre-freeze mutations',
+  );
+  final _FakeNoteSurface reopenedSurface = _FakeNoteSurface();
+  final TerminalNoteSurfaceResult reopenedProjection = reopened.attachSurface(
+    sequence: reopened.nextSequence(),
+    paneId: const PaneId(1),
+    port: reopenedSurface,
+  );
+  _expect(
+    reopenedProjection.projection!.surfaceGeneration !=
+            surface.applied.first.surfaceGeneration &&
+        reopenedProjection.projection!.surfaceGeneration == 31,
+    'reopen derives a fresh surface generation from the new authority '
+    'generation',
+  );
+  final TerminalNoteAuthorityShutdownResult reopenedShutdown = await reopened
+      .shutdownApplication(
+        capture: capture,
+        updatedAtUtcMicros: 204,
+        commitRestoration: (_) async => true,
+      );
+  _expect(
+    reopenedShutdown.isSuccess &&
+        reopenedSurface.disposeCount == 1 &&
+        TerminalNoteAuthority.debugLiveAuthorityCount == authorityBaseline,
+    'reopened authority performs a complete second teardown',
+  );
+
+  final _FakeAuthorityStore failedStore = _FakeAuthorityStore();
+  final TerminalNoteAuthority failed = await _startAuthority(
+    failedStore,
+    authorityGeneration: 32,
+  );
+  failedStore.events.clear();
+  final TerminalNoteAuthorityShutdownResult persistenceFailure = await failed
+      .shutdownApplication(
+        capture: capture,
+        updatedAtUtcMicros: 205,
+        commitRestoration: (_) async => false,
+      );
+  _expect(
+    persistenceFailure.disposition ==
+            TerminalNoteAuthorityShutdownDisposition.persistenceFailed &&
+        !persistenceFailure.persistence!.noteCommitAttempted &&
+        failedStore.events.where((String event) => event == 'commit').isEmpty &&
+        failedStore.events.last == 'stop',
+    'restoration failure skips Note commit but still releases the store',
+  );
+
+  final _FakeAuthorityStore timeoutStore = _FakeAuthorityStore();
+  final TerminalNoteAuthority timedOut = await _startAuthority(
+    timeoutStore,
+    authorityGeneration: 33,
+  );
+  final TerminalNoteContextId timeoutContext = timedOut.contextForPane(
+    const PaneId(1),
+  )!;
+  final Completer<void> timeoutGate = timeoutStore.blockNextCommit();
+  final Future<TerminalNoteAuthorityMutationResult> lateMutation = _mutate(
+    timedOut,
+    source: 60,
+    event: 1,
+    transition: _createNote(
+      contextId: timeoutContext,
+      noteId: _noteId(61),
+      body: 'timeout-candidate',
+      timestamp: 206,
+    ),
+  );
+  final TerminalNoteAuthorityShutdownResult timeout = await timedOut
+      .shutdownApplication(
+        capture: capture,
+        updatedAtUtcMicros: 207,
+        commitRestoration: (_) async => true,
+        drainTimeout: const Duration(milliseconds: 1),
+      );
+  timeoutGate.complete();
+  final TerminalNoteAuthorityMutationResult lateResult = await lateMutation;
+  _expect(
+    timeout.disposition ==
+            TerminalNoteAuthorityShutdownDisposition.drainTimedOut &&
+        lateResult.disposition ==
+            TerminalNoteAuthorityMutationDisposition.unavailable &&
+        timedOut.capability == TerminalNoteAuthorityCapability.stopped &&
+        TerminalNoteAuthority.debugLiveAuthorityCount == authorityBaseline,
+    'drain deadline discards a late candidate and still completes teardown',
+  );
+}
+
+Future<void> _testRealWorkerAuthorityReopen() async {
+  final int authorityBaseline = TerminalNoteAuthority.debugLiveAuthorityCount;
+  final int clientBaseline = TerminalNoteStoreWorkerClient.debugLiveClientCount;
+  final Directory temporary = await Directory.systemTemp.createTemp(
+    'dart-terminal-authority-reopen-',
+  );
+  final Directory root = Directory(await temporary.resolveSymbolicLinks());
+  final TerminalNoteStoreLocation location =
+      TerminalNoteStoreLocation.fromAbsolutePath('${root.path}/notes');
+  final TerminalNoteRestorationArtifact restoration =
+      TerminalNoteRestorationArtifact.fromSnapshot(_onePaneRestoration());
+  final TerminalNoteRestorationCaptureArtifact capture =
+      TerminalNoteRestorationCaptureArtifact.fromArtifact(
+        restoration: restoration,
+        paneIdsInTraversalOrder: const <PaneId>[PaneId(1)],
+      );
+  TerminalNoteAuthority? first;
+  TerminalNoteAuthority? reopened;
+  try {
+    first = await TerminalNoteAuthority.startWorker(
+      location: location,
+      authorityGeneration: 40,
+      restoration: restoration,
+      paneIdsInTraversalOrder: const <PaneId>[PaneId(1)],
+      ensureQuickTerminalContext: false,
+      updatedAtUtcMicros: 300,
+      idGenerator: _contextGenerator(40),
+    );
+    final TerminalNoteContextId contextId = first.contextForPane(
+      const PaneId(1),
+    )!;
+    await _mutate(
+      first,
+      source: 61,
+      event: 1,
+      transition: _createNote(
+        contextId: contextId,
+        noteId: _noteId(62),
+        body: 'real-worker-reopen',
+        timestamp: 301,
+      ),
+    );
+    final TerminalNoteAuthorityShutdownResult firstShutdown = await first
+        .shutdownApplication(
+          capture: capture,
+          updatedAtUtcMicros: 302,
+          commitRestoration: (_) async => true,
+        );
+    _expect(
+      firstShutdown.isSuccess &&
+          TerminalNoteStoreWorkerClient.debugLiveClientCount == clientBaseline,
+      'real worker shutdown releases its isolate client and store lock',
+    );
+
+    reopened = await TerminalNoteAuthority.startWorker(
+      location: location,
+      authorityGeneration: 41,
+      restoration: restoration,
+      paneIdsInTraversalOrder: const <PaneId>[PaneId(1)],
+      ensureQuickTerminalContext: false,
+      updatedAtUtcMicros: 303,
+      idGenerator: _contextGenerator(41),
+    );
+    _expect(
+      reopened.capability == TerminalNoteAuthorityCapability.ready &&
+          reopened.contextForPane(const PaneId(1)) == contextId &&
+          reopened.document.snapshot.noteFor(_noteId(62))!.body.value ==
+              'real-worker-reopen',
+      'real worker reopen loads and reattaches the exact committed context',
+    );
+    final TerminalNoteAuthorityShutdownResult reopenedShutdown = await reopened
+        .shutdownApplication(
+          capture: capture,
+          updatedAtUtcMicros: 304,
+          commitRestoration: (_) async => true,
+        );
+    _expect(
+      reopenedShutdown.isSuccess &&
+          TerminalNoteStoreWorkerClient.debugLiveClientCount ==
+              clientBaseline &&
+          TerminalNoteAuthority.debugLiveAuthorityCount == authorityBaseline,
+      'full real close/reopen leaves authority and worker handles at zero',
+    );
+  } finally {
+    if (first != null &&
+        first.capability != TerminalNoteAuthorityCapability.stopped) {
+      await first.stop();
+    }
+    if (reopened != null &&
+        reopened.capability != TerminalNoteAuthorityCapability.stopped) {
+      await reopened.stop();
+    }
+    if (await temporary.exists()) {
+      await temporary.delete(recursive: true);
+    }
+  }
 }
 
 Future<void> _testCommitFailurePreservesPublishedDocument() async {
@@ -890,6 +1473,29 @@ Future<void> _createAndArmPromptNote(
   );
 }
 
+Future<TerminalNoteAuthorityMutationResult> _armOnReturn(
+  TerminalNoteAuthority authority, {
+  required NoteId noteId,
+  required int source,
+  required int event,
+  required bool isEligible,
+}) => _mutate(
+  authority,
+  source: source,
+  event: event,
+  transition: (TerminalNoteSnapshot snapshot) {
+    final NoteRecord note = snapshot.noteFor(noteId)!;
+    return TerminalNoteAuthorityMutationPlan(
+      mutation: snapshot.armOnReturn(
+        noteId: note.id,
+        isEligible: isEligible,
+        expectedStoreRevision: snapshot.storeRevision,
+        expectedNoteRevision: note.revision,
+      ),
+    );
+  },
+);
+
 TerminalNoteAuthorityTransition _createNote({
   required TerminalNoteContextId contextId,
   required NoteId noteId,
@@ -992,6 +1598,7 @@ final class _FakeAuthorityStore implements TerminalNoteAuthorityStorePort {
   final List<TerminalNoteStoreDocument> committed =
       <TerminalNoteStoreDocument>[];
   final List<Completer<void>> _gates = <Completer<void>>[];
+  final List<String> events = <String>[];
   TerminalNoteStoreFailure? failNextCommit;
   var commitCount = 0;
   var stopCount = 0;
@@ -1021,6 +1628,7 @@ final class _FakeAuthorityStore implements TerminalNoteAuthorityStorePort {
     Iterable<TerminalNoteDeletionTombstone> deletions =
         const <TerminalNoteDeletionTombstone>[],
   }) async {
+    events.add('commit');
     commitCount++;
     concurrentCommits++;
     if (concurrentCommits > maximumConcurrentCommits) {
@@ -1062,6 +1670,7 @@ final class _FakeAuthorityStore implements TerminalNoteAuthorityStorePort {
 
   @override
   Future<TerminalNoteStoreResult> stop() async {
+    events.add('stop');
     stopCount++;
     stopped = true;
     return TerminalNoteStoreResult(
@@ -1070,6 +1679,32 @@ final class _FakeAuthorityStore implements TerminalNoteAuthorityStorePort {
       storeRevision: BigInt.zero,
       metrics: TerminalNoteStoreMetrics.zero,
     );
+  }
+}
+
+final class _FakeNoteSurface implements TerminalNoteSurfacePort {
+  final List<TerminalNoteSurfaceProjection> applied =
+      <TerminalNoteSurfaceProjection>[];
+  var rejectNext = false;
+  var disposed = false;
+  var disposeCount = 0;
+
+  @override
+  bool applyProjection(TerminalNoteSurfaceProjection projection) {
+    if (disposed) return false;
+    if (rejectNext) {
+      rejectNext = false;
+      return false;
+    }
+    applied.add(projection);
+    return true;
+  }
+
+  @override
+  Future<void> dispose() async {
+    if (disposed) return;
+    disposed = true;
+    disposeCount++;
   }
 }
 

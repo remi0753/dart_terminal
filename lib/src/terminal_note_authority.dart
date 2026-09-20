@@ -3,6 +3,7 @@ import 'dart:collection';
 
 import 'terminal_note_context_restoration.dart';
 import 'terminal_note_model.dart';
+import 'terminal_note_projection.dart';
 import 'terminal_note_store_codec.dart';
 import 'terminal_note_store_isolate.dart';
 import 'terminal_note_store_worker.dart';
@@ -21,11 +22,60 @@ abstract final class TerminalNoteAuthorityLimits {
 enum TerminalNoteAuthorityCapability {
   starting,
   ready,
+  draining,
   recoveryRequired,
   upgradeRequired,
   unavailable,
   stopping,
   stopped,
+}
+
+enum TerminalNoteSurfaceDisposition {
+  applied,
+  rejected,
+  duplicate,
+  stale,
+  unavailable,
+}
+
+final class TerminalNoteSurfaceResult {
+  const TerminalNoteSurfaceResult({required this.disposition, this.projection});
+
+  final TerminalNoteSurfaceDisposition disposition;
+  final TerminalNoteSurfaceProjection? projection;
+
+  @override
+  String toString() => 'TerminalNoteSurfaceResult(${disposition.name})';
+}
+
+enum TerminalNoteAuthorityShutdownDisposition {
+  committed,
+  drainTimedOut,
+  preparationFailed,
+  persistenceFailed,
+  storeStopFailed,
+}
+
+final class TerminalNoteAuthorityShutdownResult {
+  const TerminalNoteAuthorityShutdownResult({
+    required this.disposition,
+    required this.persistence,
+    required this.storeDisposition,
+    required this.surfaceDisposeCount,
+  });
+
+  final TerminalNoteAuthorityShutdownDisposition disposition;
+  final TerminalNoteOrderedPersistenceResult? persistence;
+  final TerminalNoteStoreDisposition storeDisposition;
+  final int surfaceDisposeCount;
+
+  bool get isSuccess =>
+      disposition == TerminalNoteAuthorityShutdownDisposition.committed;
+
+  @override
+  String toString() =>
+      'TerminalNoteAuthorityShutdownResult(${disposition.name}, '
+      'surfaces=$surfaceDisposeCount)';
 }
 
 enum TerminalNoteAuthorityFailure {
@@ -238,7 +288,13 @@ final class TerminalNoteAuthority {
        _failure = failure,
        _storeFailure = storeFailure,
        _onPublished = onPublished,
-       _contextIdGenerator = contextIdGenerator;
+       _contextIdGenerator = contextIdGenerator {
+    _debugLiveAuthorityCount++;
+  }
+
+  static int _debugLiveAuthorityCount = 0;
+
+  static int get debugLiveAuthorityCount => _debugLiveAuthorityCount;
 
   static Future<TerminalNoteAuthority> startWorker({
     required TerminalNoteStoreLocation location,
@@ -405,10 +461,14 @@ final class TerminalNoteAuthority {
   Completer<void>? _idleCompleter;
   Future<TerminalNoteStoreResult>? _stopFuture;
   TerminalNoteStoreResult? _stopResult;
+  Future<TerminalNoteAuthorityShutdownResult>? _shutdownFuture;
   var _pendingUserIntentCount = 0;
   var _pendingBodyBytes = 0;
   var _nextAuthoritySequence = 1;
   var _lastIngressSequence = 0;
+  var _nextCardToken = 1;
+  var _debugRetired = false;
+  var _discardLateCommit = false;
 
   TerminalNoteAuthorityCapability get capability => _capability;
   TerminalNoteAuthorityFailure? get failure => _failure;
@@ -423,6 +483,9 @@ final class TerminalNoteAuthority {
   bool get hasInFlightMutation => _inFlight != null;
   int get livePaneCount => _livePanes.length;
   int get liveSessionCount => _liveSessions.length;
+  int get liveSurfaceCount => _livePanes.values
+      .where((_LiveNotePane pane) => pane.surface != null)
+      .length;
   int get pendingFocusEdgeCount => _livePanes.values.fold<int>(
     0,
     (int total, _LiveNotePane pane) => total + pane.focusEdges.length,
@@ -559,6 +622,7 @@ final class TerminalNoteAuthority {
       paneId: paneId,
       contextId: contextId,
       kind: kind,
+      initialSurfaceGeneration: authorityGeneration,
     );
     _livePanes[paneId] = pane;
     if (kind == TerminalNoteContextKind.quickTerminal) {
@@ -607,6 +671,11 @@ final class TerminalNoteAuthority {
     pane
       ..retired = true
       ..focusEdges.clear();
+    final _LiveNoteSurface? surface = pane.surface;
+    pane.surface = null;
+    final Future<void> surfaceDisposed = surface == null
+        ? Future<void>.value()
+        : _disposeSurface(surface);
     final _LivePromptSession? session = pane.promptSession;
     if (session != null) {
       session
@@ -616,31 +685,39 @@ final class TerminalNoteAuthority {
       pane.promptSession = null;
     }
     if (pane.kind == TerminalNoteContextKind.quickTerminal) {
-      return Future<TerminalNoteAuthorityMutationResult>.value(
-        _result(TerminalNoteAuthorityMutationDisposition.noChange),
+      return surfaceDisposed.then(
+        (_) => _result(TerminalNoteAuthorityMutationDisposition.noChange),
       );
     }
     _removeStandardBinding(paneId);
-    return _enqueueStructuralMutation(
-      transition: (TerminalNoteSnapshot snapshot) {
-        final NoteContextRecord? context = snapshot.contextFor(pane.contextId);
-        return TerminalNoteAuthorityMutationPlan(
-          mutation: context == null
-              ? snapshot.observeEligibleFocus(
-                  contextId: pane.contextId,
-                  isEligible: false,
-                  expectedStoreRevision: snapshot.storeRevision,
-                )
-              : snapshot.detachContext(
-                  contextId: pane.contextId,
-                  reason: TerminalNoteDetachReason.contextUnavailable,
-                  updatedAtUtcMicros: updatedAtUtcMicros,
-                  expectedStoreRevision: snapshot.storeRevision,
-                  expectedContextRevision: context.revision,
-                ),
+    final Future<TerminalNoteAuthorityMutationResult> detached =
+        _enqueueStructuralMutation(
+          transition: (TerminalNoteSnapshot snapshot) {
+            final NoteContextRecord? context = snapshot.contextFor(
+              pane.contextId,
+            );
+            return TerminalNoteAuthorityMutationPlan(
+              mutation: context == null
+                  ? snapshot.observeEligibleFocus(
+                      contextId: pane.contextId,
+                      isEligible: false,
+                      expectedStoreRevision: snapshot.storeRevision,
+                    )
+                  : snapshot.detachContext(
+                      contextId: pane.contextId,
+                      reason: TerminalNoteDetachReason.contextUnavailable,
+                      updatedAtUtcMicros: updatedAtUtcMicros,
+                      expectedStoreRevision: snapshot.storeRevision,
+                      expectedContextRevision: context.revision,
+                    ),
+            );
+          },
         );
-      },
-    );
+    return () async {
+      final TerminalNoteAuthorityMutationResult result = await detached;
+      await surfaceDisposed;
+      return result;
+    }();
   }
 
   Future<TerminalNoteAuthorityMutationResult> startPromptSession({
@@ -827,12 +904,300 @@ final class TerminalNoteAuthority {
     return _lifecycleResult(TerminalNoteLifecycleDisposition.accepted);
   }
 
+  TerminalNoteSurfaceResult attachSurface({
+    required TerminalNoteAuthoritySequence sequence,
+    required PaneId paneId,
+    required TerminalNoteSurfacePort port,
+  }) {
+    final TerminalNoteAuthorityMutationResult? ingressFailure =
+        _acceptStructuralSequence(sequence);
+    if (ingressFailure != null) return _surfaceFailure(ingressFailure);
+    final _LiveNotePane? pane = _livePanes[paneId];
+    if (pane == null || pane.retired) {
+      return const TerminalNoteSurfaceResult(
+        disposition: TerminalNoteSurfaceDisposition.stale,
+      );
+    }
+    if (pane.surface != null) {
+      return const TerminalNoteSurfaceResult(
+        disposition: TerminalNoteSurfaceDisposition.duplicate,
+      );
+    }
+    if (pane.nextSurfaceGeneration >
+        TerminalNoteProjectionLimits.maximumGeneration) {
+      return const TerminalNoteSurfaceResult(
+        disposition: TerminalNoteSurfaceDisposition.unavailable,
+      );
+    }
+    final _LiveNoteSurface surface = _LiveNoteSurface(
+      generation: pane.nextSurfaceGeneration++,
+      port: port,
+    );
+    pane.surface = surface;
+    return _applySurfaceProjection(pane, surface);
+  }
+
+  TerminalNoteSurfaceResult updateSurface({
+    required TerminalNoteAuthoritySequence sequence,
+    required PaneId paneId,
+    required int surfaceGeneration,
+    required TerminalNoteSurfaceVisibility visibility,
+    required bool foreground,
+    required bool occluded,
+  }) {
+    final TerminalNoteAuthorityMutationResult? ingressFailure =
+        _acceptStructuralSequence(sequence);
+    if (ingressFailure != null) return _surfaceFailure(ingressFailure);
+    final _LiveNotePane? pane = _livePanes[paneId];
+    final _LiveNoteSurface? surface = pane?.surface;
+    if (pane == null ||
+        pane.retired ||
+        surface == null ||
+        surface.retired ||
+        surface.generation != surfaceGeneration) {
+      return const TerminalNoteSurfaceResult(
+        disposition: TerminalNoteSurfaceDisposition.stale,
+      );
+    }
+    surface
+      ..visibility = visibility
+      ..foreground = foreground
+      ..occluded = occluded;
+    return _applySurfaceProjection(pane, surface);
+  }
+
+  Future<TerminalNoteSurfaceResult> detachSurface({
+    required TerminalNoteAuthoritySequence sequence,
+    required PaneId paneId,
+    required int surfaceGeneration,
+  }) async {
+    final TerminalNoteAuthorityMutationResult? ingressFailure =
+        _acceptStructuralSequence(sequence);
+    if (ingressFailure != null) return _surfaceFailure(ingressFailure);
+    final _LiveNotePane? pane = _livePanes[paneId];
+    final _LiveNoteSurface? surface = pane?.surface;
+    if (pane == null ||
+        surface == null ||
+        surface.retired ||
+        surface.generation != surfaceGeneration) {
+      return const TerminalNoteSurfaceResult(
+        disposition: TerminalNoteSurfaceDisposition.stale,
+      );
+    }
+    pane.surface = null;
+    await _disposeSurface(surface);
+    return const TerminalNoteSurfaceResult(
+      disposition: TerminalNoteSurfaceDisposition.applied,
+    );
+  }
+
+  Future<TerminalNoteAuthorityMutationResult> acknowledgePresentation({
+    required TerminalNoteAuthoritySequence sequence,
+    required PaneId paneId,
+    required int surfaceGeneration,
+    required int projectionGeneration,
+    required TerminalNoteCardToken cardToken,
+    required bool visiblyLaidOut,
+  }) {
+    final TerminalNoteAuthorityMutationResult? ingressFailure =
+        _acceptStructuralSequence(sequence);
+    if (ingressFailure != null) {
+      return Future<TerminalNoteAuthorityMutationResult>.value(ingressFailure);
+    }
+    final _LiveNotePane? pane = _livePanes[paneId];
+    final _LiveNoteSurface? surface = pane?.surface;
+    final TerminalNoteSurfaceProjection? projection = surface?.latest;
+    if (pane == null ||
+        pane.retired ||
+        surface == null ||
+        surface.retired ||
+        projection == null ||
+        surface.generation != surfaceGeneration ||
+        projection.projectionGeneration != projectionGeneration ||
+        !projection.presentationEligible ||
+        !visiblyLaidOut) {
+      return Future<TerminalNoteAuthorityMutationResult>.value(
+        _result(TerminalNoteAuthorityMutationDisposition.stale),
+      );
+    }
+    if (surface.acknowledgedTokens.contains(cardToken)) {
+      return Future<TerminalNoteAuthorityMutationResult>.value(
+        _result(TerminalNoteAuthorityMutationDisposition.duplicate),
+      );
+    }
+    final NoteId? noteId = surface.noteIdsByToken[cardToken];
+    final NoteDeliveryRecord? delivery = noteId == null
+        ? null
+        : _document.snapshot.deliveryFor(noteId);
+    if (noteId == null || delivery == null) {
+      return Future<TerminalNoteAuthorityMutationResult>.value(
+        _result(TerminalNoteAuthorityMutationDisposition.stale),
+      );
+    }
+    surface.acknowledgedTokens.add(cardToken);
+    return _enqueueStructuralMutation(
+      transition: (TerminalNoteSnapshot snapshot) =>
+          TerminalNoteAuthorityMutationPlan(
+            mutation: snapshot.acknowledgePresentation(
+              noteId: noteId,
+              triggerGeneration: delivery.triggerGeneration,
+              expectedStoreRevision: snapshot.storeRevision,
+            ),
+          ),
+    );
+  }
+
+  Future<TerminalNoteAuthorityShutdownResult> shutdownApplication({
+    required TerminalNoteRestorationCaptureArtifact capture,
+    required int updatedAtUtcMicros,
+    required TerminalNoteRestorationCommit commitRestoration,
+    Duration drainTimeout = const Duration(seconds: 3),
+  }) => _shutdownFuture ??= _runApplicationShutdown(
+    capture: capture,
+    updatedAtUtcMicros: updatedAtUtcMicros,
+    commitRestoration: commitRestoration,
+    drainTimeout: drainTimeout,
+  );
+
   Future<void> whenIdle() => _idleCompleter?.future ?? Future<void>.value();
 
   Future<TerminalNoteStoreResult> stop() => _stopFuture ??= _runStop();
 
   void releaseIntentSource(int sourceGeneration) {
     _sourceEventHighWatermarks.remove(sourceGeneration);
+  }
+
+  TerminalNoteSurfaceResult _surfaceFailure(
+    TerminalNoteAuthorityMutationResult failure,
+  ) => TerminalNoteSurfaceResult(
+    disposition: switch (failure.disposition) {
+      TerminalNoteAuthorityMutationDisposition.unavailable =>
+        TerminalNoteSurfaceDisposition.unavailable,
+      _ => TerminalNoteSurfaceDisposition.stale,
+    },
+  );
+
+  TerminalNoteSurfaceResult _applySurfaceProjection(
+    _LiveNotePane pane,
+    _LiveNoteSurface surface,
+  ) {
+    if (pane.retired || surface.retired) {
+      return const TerminalNoteSurfaceResult(
+        disposition: TerminalNoteSurfaceDisposition.stale,
+      );
+    }
+    if (surface.nextProjectionGeneration >
+        TerminalNoteProjectionLimits.maximumGeneration) {
+      return const TerminalNoteSurfaceResult(
+        disposition: TerminalNoteSurfaceDisposition.unavailable,
+      );
+    }
+    final TerminalNoteContextProjection contextProjection;
+    try {
+      contextProjection = _document.snapshot.projectionFor(pane.contextId);
+    } on Object {
+      return const TerminalNoteSurfaceResult(
+        disposition: TerminalNoteSurfaceDisposition.unavailable,
+      );
+    }
+    final Map<TerminalNoteCardToken, NoteId> noteIdsByToken =
+        <TerminalNoteCardToken, NoteId>{};
+    final List<TerminalNoteCardProjection> cards =
+        <TerminalNoteCardProjection>[];
+    if (surface.visibility == TerminalNoteSurfaceVisibility.expanded) {
+      var bodyBytes = 0;
+      for (final NoteRecord note in contextProjection.orderedNotes) {
+        if (cards.length >= TerminalNoteProjectionLimits.maximumExpandedCards) {
+          break;
+        }
+        if (bodyBytes + note.body.utf8Length >
+            TerminalNoteProjectionLimits.maximumExpandedBodyUtf8Bytes) {
+          break;
+        }
+        if (_nextCardToken > TerminalNoteProjectionLimits.maximumGeneration) {
+          return const TerminalNoteSurfaceResult(
+            disposition: TerminalNoteSurfaceDisposition.unavailable,
+          );
+        }
+        final TerminalNoteCardToken token = TerminalNoteCardToken(
+          _nextCardToken++,
+        );
+        final NoteTriggerRecord? trigger = _document.snapshot.triggerFor(
+          note.id,
+        );
+        final bool due = _document.snapshot.deliveryFor(note.id) != null;
+        cards.add(
+          TerminalNoteCardProjection(
+            token: token,
+            body: note.body.value,
+            color: note.color,
+            status: note.status,
+            order: note.order,
+            due: due,
+            triggerKind: trigger?.kind,
+            triggerPhase: trigger?.phase,
+          ),
+        );
+        noteIdsByToken[token] = note.id;
+        bodyBytes += note.body.utf8Length;
+      }
+    }
+    final TerminalNoteSurfaceProjection candidate =
+        TerminalNoteSurfaceProjection(
+          paneId: pane.paneId,
+          surfaceGeneration: surface.generation,
+          projectionGeneration: surface.nextProjectionGeneration++,
+          storeRevision: _document.snapshot.storeRevision,
+          visibility: surface.visibility,
+          presentationEligible:
+              surface.visibility == TerminalNoteSurfaceVisibility.expanded &&
+              surface.foreground &&
+              !surface.occluded,
+          activeCount: contextProjection.activeCount,
+          dueCount: contextProjection.dueCount,
+          cards: cards,
+        );
+    try {
+      if (!surface.port.applyProjection(candidate)) {
+        return TerminalNoteSurfaceResult(
+          disposition: TerminalNoteSurfaceDisposition.rejected,
+          projection: surface.latest,
+        );
+      }
+    } on Object {
+      return TerminalNoteSurfaceResult(
+        disposition: TerminalNoteSurfaceDisposition.rejected,
+        projection: surface.latest,
+      );
+    }
+    surface
+      ..latest = candidate
+      ..noteIdsByToken = noteIdsByToken
+      ..acknowledgedTokens.clear();
+    return TerminalNoteSurfaceResult(
+      disposition: TerminalNoteSurfaceDisposition.applied,
+      projection: candidate,
+    );
+  }
+
+  void _refreshAllSurfaces() {
+    for (final _LiveNotePane pane in _livePanes.values) {
+      final _LiveNoteSurface? surface = pane.surface;
+      if (surface != null) _applySurfaceProjection(pane, surface);
+    }
+  }
+
+  Future<void> _disposeSurface(_LiveNoteSurface surface) async {
+    if (surface.retired) return;
+    surface
+      ..retired = true
+      ..noteIdsByToken = <TerminalNoteCardToken, NoteId>{}
+      ..acknowledgedTokens.clear();
+    try {
+      await surface.port.dispose();
+    } on Object {
+      // Surface teardown failure cannot retain authority ownership.
+    }
   }
 
   void _initializeLiveBindings() {
@@ -843,6 +1208,7 @@ final class TerminalNoteAuthority {
         paneId: entry.key,
         contextId: entry.value,
         kind: TerminalNoteContextKind.standard,
+        initialSurfaceGeneration: authorityGeneration,
       );
     }
   }
@@ -892,7 +1258,8 @@ final class TerminalNoteAuthority {
       onFinished: () {
         pane.lifecycleQueued = false;
         if (pane.retired ||
-            _capability != TerminalNoteAuthorityCapability.ready) {
+            (_capability != TerminalNoteAuthorityCapability.ready &&
+                _capability != TerminalNoteAuthorityCapability.draining)) {
           return;
         }
         final bool? observed = pane.lastObservedEligibility;
@@ -1021,7 +1388,8 @@ final class TerminalNoteAuthority {
         _pendingBodyBytes -= pending.bodyUtf8Bytes;
         pending.finish();
         _inFlight = null;
-        if (_capability == TerminalNoteAuthorityCapability.ready) {
+        if (_capability == TerminalNoteAuthorityCapability.ready ||
+            _capability == TerminalNoteAuthorityCapability.draining) {
           _pump();
         } else {
           _failPending();
@@ -1103,6 +1471,12 @@ final class TerminalNoteAuthority {
     } on Object {
       committed = _storeFailureResult(TerminalNoteStoreFailure.unknown);
     }
+    if (_discardLateCommit) {
+      pending.complete(
+        _result(TerminalNoteAuthorityMutationDisposition.unavailable),
+      );
+      return;
+    }
     if (!_isMatchingCommit(committed, candidate)) {
       _markUnavailable(
         TerminalNoteAuthorityFailure.commitRejected,
@@ -1131,6 +1505,7 @@ final class TerminalNoteAuthority {
     _failPending();
     _completeIdleIfNeeded();
     await whenIdle();
+    await _disposeAllSurfaces();
     final TerminalNoteAuthorityStorePort? store = _store;
     late TerminalNoteStoreResult result;
     try {
@@ -1138,9 +1513,146 @@ final class TerminalNoteAuthority {
     } on Object {
       result = _storeFailureResult(TerminalNoteStoreFailure.unknown);
     }
+    _clearRuntimeOwnership();
     _capability = TerminalNoteAuthorityCapability.stopped;
     _stopResult = result;
+    _retireDebugHandle();
     return result;
+  }
+
+  Future<TerminalNoteAuthorityShutdownResult> _runApplicationShutdown({
+    required TerminalNoteRestorationCaptureArtifact capture,
+    required int updatedAtUtcMicros,
+    required TerminalNoteRestorationCommit commitRestoration,
+    required Duration drainTimeout,
+  }) async {
+    if (drainTimeout <= Duration.zero) {
+      throw ArgumentError.value(
+        drainTimeout,
+        'drainTimeout',
+        'must be positive',
+      );
+    }
+    if (_capability == TerminalNoteAuthorityCapability.stopped) {
+      return TerminalNoteAuthorityShutdownResult(
+        disposition: TerminalNoteAuthorityShutdownDisposition.storeStopFailed,
+        persistence: null,
+        storeDisposition:
+            _stopResult?.disposition ?? TerminalNoteStoreDisposition.stopped,
+        surfaceDisposeCount: 0,
+      );
+    }
+    _capability = TerminalNoteAuthorityCapability.draining;
+    var drained = true;
+    try {
+      await whenIdle().timeout(drainTimeout);
+    } on TimeoutException {
+      drained = false;
+      _discardLateCommit = true;
+      _capability = TerminalNoteAuthorityCapability.stopping;
+      _failPending();
+    }
+
+    TerminalNoteOrderedPersistenceResult? persistence;
+    var preparationFailed = false;
+    if (drained) {
+      try {
+        final TerminalNoteShutdownCandidate candidate =
+            const TerminalNoteShutdownCandidateBuilder().prepare(
+              stored: _document,
+              capture: capture,
+              bindings: _bindings,
+              updatedAtUtcMicros: updatedAtUtcMicros,
+            );
+        persistence = await TerminalNoteOrderedPersistenceCoordinator(
+          commitRestoration: commitRestoration,
+          commitNoteDocument: (TerminalNoteStoreDocument document) async {
+            final TerminalNoteAuthorityStorePort? store = _store;
+            if (store == null) return false;
+            try {
+              final TerminalNoteStoreResult result = await store
+                  .commitCandidate(document);
+              if (!_isMatchingCommit(result, document)) return false;
+              _document = document;
+              return true;
+            } on Object {
+              return false;
+            }
+          },
+        ).commit(candidate);
+      } on Object {
+        preparationFailed = true;
+      }
+    }
+
+    _capability = TerminalNoteAuthorityCapability.stopping;
+    final int surfaceDisposeCount = await _disposeAllSurfaces();
+    TerminalNoteStoreResult stopResult;
+    try {
+      stopResult = _store == null ? _stoppedStoreResult() : await _store.stop();
+    } on Object {
+      stopResult = _storeFailureResult(TerminalNoteStoreFailure.unknown);
+    }
+    _stopResult = stopResult;
+    _clearRuntimeOwnership();
+    _capability = TerminalNoteAuthorityCapability.stopped;
+    _retireDebugHandle();
+
+    final TerminalNoteAuthorityShutdownDisposition disposition;
+    if (!drained) {
+      disposition = TerminalNoteAuthorityShutdownDisposition.drainTimedOut;
+    } else if (preparationFailed) {
+      disposition = TerminalNoteAuthorityShutdownDisposition.preparationFailed;
+    } else if (persistence == null || !persistence.isSuccess) {
+      disposition = TerminalNoteAuthorityShutdownDisposition.persistenceFailed;
+    } else if (stopResult.disposition != TerminalNoteStoreDisposition.stopped) {
+      disposition = TerminalNoteAuthorityShutdownDisposition.storeStopFailed;
+    } else {
+      disposition = TerminalNoteAuthorityShutdownDisposition.committed;
+    }
+    return TerminalNoteAuthorityShutdownResult(
+      disposition: disposition,
+      persistence: persistence,
+      storeDisposition: stopResult.disposition,
+      surfaceDisposeCount: surfaceDisposeCount,
+    );
+  }
+
+  Future<int> _disposeAllSurfaces() async {
+    final List<_LiveNoteSurface> surfaces = <_LiveNoteSurface>[
+      for (final _LiveNotePane pane in _livePanes.values)
+        if (pane.surface != null) pane.surface!,
+    ];
+    for (final _LiveNotePane pane in _livePanes.values) {
+      pane.surface = null;
+    }
+    for (final _LiveNoteSurface surface in surfaces) {
+      await _disposeSurface(surface);
+    }
+    return surfaces.length;
+  }
+
+  void _clearRuntimeOwnership() {
+    for (final _LivePromptSession session in _liveSessions.values) {
+      session
+        ..retired = true
+        ..promptEvents.clear();
+    }
+    for (final _LiveNotePane pane in _livePanes.values) {
+      pane
+        ..retired = true
+        ..focusEdges.clear()
+        ..promptSession = null;
+    }
+    _liveSessions.clear();
+    _livePanes.clear();
+    _sourceEventHighWatermarks.clear();
+  }
+
+  void _retireDebugHandle() {
+    if (_debugRetired) return;
+    _debugRetired = true;
+    _debugLiveAuthorityCount--;
   }
 
   void _failPending() {
@@ -1186,26 +1698,28 @@ final class TerminalNoteAuthority {
 
   void _publish(TerminalNoteAuthorityPublicationKind kind) {
     final TerminalNoteAuthorityPublicationObserver? observer = _onPublished;
-    if (observer == null) return;
     final TerminalNoteSnapshot snapshot = _document.snapshot;
-    try {
-      observer(
-        TerminalNoteAuthorityPublication(
-          kind: kind,
-          storeRevision: snapshot.storeRevision,
-          noteCount: snapshot.notes.length,
-          activeCount: snapshot.notes.values
-              .where((NoteRecord note) => note.status == NoteStatus.active)
-              .length,
-          dueCount: snapshot.deliveries.length,
-          detachedCount: snapshot.notes.values
-              .where((NoteRecord note) => note.attachment.isDetached)
-              .length,
-        ),
-      );
-    } on Object {
-      // Publication observers cannot invalidate committed authority state.
+    if (observer != null) {
+      try {
+        observer(
+          TerminalNoteAuthorityPublication(
+            kind: kind,
+            storeRevision: snapshot.storeRevision,
+            noteCount: snapshot.notes.length,
+            activeCount: snapshot.notes.values
+                .where((NoteRecord note) => note.status == NoteStatus.active)
+                .length,
+            dueCount: snapshot.deliveries.length,
+            detachedCount: snapshot.notes.values
+                .where((NoteRecord note) => note.attachment.isDetached)
+                .length,
+          ),
+        );
+      } on Object {
+        // Publication observers cannot invalidate committed authority state.
+      }
     }
+    _refreshAllSurfaces();
   }
 
   static bool _isMatchingCommit(
@@ -1253,17 +1767,38 @@ final class _LiveNotePane {
     required this.paneId,
     required this.contextId,
     required this.kind,
-  });
+    required int initialSurfaceGeneration,
+  }) : nextSurfaceGeneration = initialSurfaceGeneration;
 
   final PaneId paneId;
   final TerminalNoteContextId contextId;
   final TerminalNoteContextKind kind;
   final List<bool> focusEdges = <bool>[];
   _LivePromptSession? promptSession;
+  _LiveNoteSurface? surface;
   bool? lastObservedEligibility;
   bool? lastDrainedEligibility;
+  int nextSurfaceGeneration;
   var lifecycleQueued = false;
   var retired = false;
+}
+
+final class _LiveNoteSurface {
+  _LiveNoteSurface({required this.generation, required this.port});
+
+  final int generation;
+  final TerminalNoteSurfacePort port;
+  TerminalNoteSurfaceVisibility visibility =
+      TerminalNoteSurfaceVisibility.collapsed;
+  var foreground = false;
+  var occluded = false;
+  var nextProjectionGeneration = 1;
+  var retired = false;
+  TerminalNoteSurfaceProjection? latest;
+  Map<TerminalNoteCardToken, NoteId> noteIdsByToken =
+      <TerminalNoteCardToken, NoteId>{};
+  final Set<TerminalNoteCardToken> acknowledgedTokens =
+      <TerminalNoteCardToken>{};
 }
 
 final class _LivePromptSession {

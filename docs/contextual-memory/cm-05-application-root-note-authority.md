@@ -209,3 +209,85 @@ Workerのdurable success後だけ新snapshotとUI-visible resultを公開し、f
   既存live pane/session registryとserial queueへ接続する。
 - `contextForPane`と`promptBindingForSession`はapplication-root integration用であり、persistent context IDやshell instance IDを
   native projectionへ渡してはならない。
+
+## 2026-09-21: projection acknowledgement、teardown、reopen acceptance着手
+
+### 目的と境界の再確認
+
+- ROADMAPの先頭未完了がCM-05第3サブタスクであることを確認した。CM-05を閉じるため、pure/fake surface contract、ack、
+  application shutdown、real worker reopen acceptanceを実装する。AppKit view/ABI decoder/editor/input owner/product actionはCM-07〜CM-10の範囲である。
+- Projection型とfake portは`dart_terminal` product packageに置く。Terminal固有card、trigger、pane、ack protocolを汎用
+  `dart_appkit`へ追加しない。CM-08のnative packageはこのcontractを実装する従属capabilityになる。
+
+### 採用する設計
+
+- Paneごとにsurface generationとlatest accepted projectionを一件だけ保持する。Projection version 1はruntime pane、surface/projection
+  generation、committed store revision、content-free badge count/stateを持つ。Collapsedはcard/body 0、expandedはCurrent contextの
+  ordered card最大64件、aggregate body最大256 KiBとする。
+- `CardToken`はauthority process内の単調opaque tokenで、current projectionからpersistent `NoteId`へだけ解決する。
+  `toString`、projection diagnostics、native-visible objectへNote/context IDを出さず、projection replace時にtoken mapを全交換する。
+- Surface portはcandidate projectionをatomic applyできたかだけを返す。Reject/exception時はlast accepted projection/token mapを保持し、
+  ack対象を進めない。Native implementationやAppKit objectをCM-05では作らない。
+- Ackはcurrent `(surfaceGeneration, projectionGeneration, cardToken)`、expanded、foreground、not occluded、visible layoutをすべて満たし、
+  current deliveryのtrigger generationと一致する場合だけserial durable mutationへ変換する。Pending duplicate、stale、occluded、late close ackはdropする。
+- Pane closeはsurface/session/event generationを同期的にinvalidateしてからdetach mutationをqueueへ置き、surface dispose完了もclose Futureへ含める。
+- Application shutdown APIは新規user/topology/focus/prompt/surface ingressをfreezeし、既存queueを最大3秒drainする。Drain成功後に
+  CM-04 candidate builderとordered coordinatorでrestoration exact bytesを先、Note bindingを後にcommitする。その後surfaceをdisposeし、
+  storeをstopする。Timeout/preparation/persistence/stop failureは固定結果に分類し、contentを含めない。
+- Reopenは新authority generationでworker loadとexact restoration reconciliationをやり直し、旧surface/session/token/ackを受理しない。
+
+### 完了条件と検証方針
+
+- Collapsed body 0、expanded 64/256 KiB、latest-one replacement、surface reject last-good、ephemeral token、visible ack一回、O-03をfake surfaceで検証する。
+- 64 surface attach/dispose、freeze/drain deadline、restoration-first順、persistence failure、full cleanupをfake storeで検証する。
+- 実temporary filesystemのCM-03 isolate workerでcreate→shutdown→stop/lock release→reopen/reconcile→cleanupを検証し、
+  `TerminalNoteStoreWorkerClient.debugLiveClientCount`がbaselineへ戻ることを確認する。
+- Format/analyze/focused/aggregate/AOT、compatibility freshness、`make test`、privacy/source/diff auditをpassしてからCM-05 parentを完了する。
+
+### 実装結果
+
+- `TerminalNoteSurfaceProjection`と`TerminalNoteSurfacePort`をproduct側のpure Dart contractとして追加した。Projectionはprotocol version、
+  runtime pane ID、surface/projection generation、committed store revision、表示状態、件数、bounded cardだけを持つ。Collapsed projectionは
+  card/bodyを含まず、expanded projectionは最大64 cardsかつaggregate body 256 KiBで打ち切る。
+- Cardはprocess-local opaque tokenで識別し、persistent Note/context IDをsurfaceへ公開しない。Accepted projectionを置換した時だけtoken mapを
+  全交換し、portがcandidateを拒否または例外にした場合はlast-good projectionとack対象を保持した。
+- Surface attach/update/detachをapplication-root authorityのserial ingressへ統合した。Foregroundかつunoccluded expanded surfaceで、current
+  surface/projection/tokenとvisible layoutを満たすackだけを一回のdurable presentation ackへ変換した。Pane closeはregistryとsurfaceを先に
+  invalidateするため、durable detach待ちのlate ackもstaleとなる。
+- Application shutdownはcapabilityを`draining`へ遷移して全ingressをfreezeし、admitted queueを最大3秒drainする。成功時はexact restorationを
+  Note bindingより先にcommitし、surface dispose、store stop、registry clearの順で解放する。Drain timeout時はlate worker resultを破棄し、
+  restoration failure時はNote commitを開始せず、どちらもstore stopまで実行する。
+- Reopenは新authority generationからfresh surface generationを割り当て、CM-03 workerを停止してlock/clientを解放後、同じdirectoryから
+  committed snapshotとexact context bindingを再構築する。Authority/client live countは終了後baselineへ戻る。
+- `dart_appkit`には変更を加えていない。Terminal固有のNote projection、pane lifecycle、trigger、ack、shutdown policyはすべて
+  `dart_terminal`側に留め、後続のnative実装はこのproduct-owned portを満たす形に限定した。
+
+### 失敗した試行と制約
+
+- `dart compile exe test/terminal_note_authority_test.dart`で作ったraw executableは、CM-03 workerが使用するdynamic libraryのNative Assetsを
+  同梱しないためreal-worker testで起動できなかった。これはsource/testの不具合ではなくbuild hookを迂回した生成方法の制約である。
+  正規の`dart build cli --target=...`で4 native assetsを含むbundleを生成し、そのAOT executableで同じtestを完走させた。
+- Projectionの256 KiB上限はcard body UTF-8 byte合計に対する契約である。CM-08のwire decoderは固定headerなどを含む自身のencoded input上限も
+  別途fail-closedで検証する必要がある。
+
+### 検証結果
+
+- `dart format`（projection、authority、authority test）: format済み。
+- `dart analyze`: repository全体 issue 0。
+- `dart test test/terminal_note_authority_test.dart`: pass。Collapsed body 0、expanded exact 64 cards/256 KiB、latest-one、reject時last-good、
+  opaque token、visible ack一回、O-03、64 surfaces、freeze/drain、ordered persistence、failure/timeout、fake reopenを検証した。
+- `dart test test/run_tests.dart`: pass。Note store acceptanceはcommit p95 130,046 us、primitive p95 14,149 us、
+  contention/recovery/privacyすべてpass。
+- `make phase7-appkit-acceptance release-candidate-daily-use-matrix`: pass、生成差分0。
+- `dart build cli --target=test/terminal_note_authority_test.dart --target-os=macos --target-arch=arm64`: pass、4 native assetsを同梱。
+  生成したAOT executableのauthority testもpassし、実filesystem create→shutdown→reopen→cleanupを完走した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: pass。363 filesのformat変更0、全analyze/test/privacy/security/
+  compatibility/release gate pass。Note store 20 runsはcommit p95 132,086 us、primitive p95 14,018 us、
+  contention/recovery/privacyすべてpass。
+- `git diff --check`: pass。隣接`dart_appkit`の差分は着手前から存在する3ファイルだけで、本タスクによる変更は0。
+
+### 後続タスクへの引き継ぎ
+
+- CM-06はauthority生成前のtyped configuration、disabled時のstore/surface/shell非生成、enable/disable/re-enableの完全teardownを実装する。
+- CM-08はこのpure Dart surface portに従う汎用native transport/view capabilityを構成するが、Terminal固有projection decoderやproduct actionは
+  `dart_appkit`へ入れず、product側からbounded bytes/callbackを注入する境界を維持する。

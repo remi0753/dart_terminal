@@ -227,6 +227,7 @@ export 'src/terminal_native_hierarchy.dart';
 export 'src/terminal_note_authority.dart';
 export 'src/terminal_note_context_restoration.dart';
 export 'src/terminal_note_model.dart';
+export 'src/terminal_note_projection.dart';
 export 'src/terminal_note_store_codec.dart';
 export 'src/terminal_note_store_isolate.dart';
 export 'src/terminal_note_store_worker.dart';
