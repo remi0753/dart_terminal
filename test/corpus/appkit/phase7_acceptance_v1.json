@@ -30,7 +30,7 @@
         {
           "path": "test/terminal_restoration_test.dart",
           "entrypoint": "runTerminalRestorationTests",
-          "sha256": "80d8e0ac79e29348cdbafa54089e08d2d354dbb4f4600102c9539cd08dddde72"
+          "sha256": "f465a2ac0d2a2b8a7462a8824b6d0ce06f52c3031442d8cca848498b30244dec"
         }
       ],
       "integration_tests": [

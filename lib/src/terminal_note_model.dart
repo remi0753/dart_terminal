@@ -681,6 +681,14 @@ final class TerminalNoteSnapshot {
     if (contexts.containsKey(id)) {
       return _reject(TerminalNoteMutationFailure.invalidState);
     }
+    if (kind == TerminalNoteContextKind.quickTerminal &&
+        (state != TerminalNoteContextState.active ||
+            contexts.values.any(
+              (NoteContextRecord context) =>
+                  context.kind == TerminalNoteContextKind.quickTerminal,
+            ))) {
+      return _reject(TerminalNoteMutationFailure.invalidState);
+    }
     if (contexts.length >= TerminalNoteLimits.maximumContexts) {
       return _reject(TerminalNoteMutationFailure.capacityExceeded);
     }
@@ -715,6 +723,10 @@ final class TerminalNoteSnapshot {
     }
     if (context.revision != expectedContextRevision) {
       return _reject(TerminalNoteMutationFailure.revisionConflict);
+    }
+    if (context.kind == TerminalNoteContextKind.quickTerminal &&
+        state != TerminalNoteContextState.active) {
+      return _reject(TerminalNoteMutationFailure.invalidState);
     }
     if (context.state == state) return _noChange;
     if (state == TerminalNoteContextState.detached ||
@@ -1082,6 +1094,9 @@ final class TerminalNoteSnapshot {
     }
     if (context.revision != expectedContextRevision) {
       return _reject(TerminalNoteMutationFailure.revisionConflict);
+    }
+    if (context.kind == TerminalNoteContextKind.quickTerminal) {
+      return _reject(TerminalNoteMutationFailure.invalidState);
     }
     if (context.state == TerminalNoteContextState.detached) return _noChange;
     final List<NoteRecord> attached =
@@ -1770,11 +1785,19 @@ final class TerminalNoteSnapshot {
       final Map<Object, List<NoteRecord>> collections =
           <Object, List<NoteRecord>>{};
       final Object detachedCollection = Object();
+      var quickTerminalContextCount = 0;
       for (final MapEntry<TerminalNoteContextId, NoteContextRecord> entry
           in contexts.entries) {
         if (entry.key != entry.value.id ||
             entry.value.revision > storeRevision &&
                 storeRevision != BigInt.zero) {
+          throw const TerminalNoteValidationException(
+            TerminalNoteValidationFailure.invariantViolation,
+          );
+        }
+        if (entry.value.kind == TerminalNoteContextKind.quickTerminal &&
+            (entry.value.state != TerminalNoteContextState.active ||
+                ++quickTerminalContextCount > 1)) {
           throw const TerminalNoteValidationException(
             TerminalNoteValidationFailure.invariantViolation,
           );

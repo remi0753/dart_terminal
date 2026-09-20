@@ -74,7 +74,7 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
   （[`cm-04-durable-context-restoration-binding.md`](docs/contextual-memory/cm-04-durable-context-restoration-binding.md)
   を参照して実施する）
   - [x] exact restoration artifactとsecure context identityを実装する
-  - [ ] startup reconciliationとQuick Terminal singleton bindingを実装する
+  - [x] startup reconciliationとQuick Terminal singleton bindingを実装する
   - [ ] ordered persistence、rollback、crash acceptanceを完了する
 - [ ] CM-05 application-root Note authorityを実装する
 - [ ] CM-06 typed configurationとdisabled lifecycleを実装する

@@ -10,6 +10,8 @@ Future<void> main() => runTerminalRestorationTests();
 Future<void> runTerminalRestorationTests() async {
   _testSecureContextIdentity();
   _testExactRestorationArtifact();
+  _testQuickTerminalContextInvariant();
+  _testContextRestorationReconciliation();
   _testWindowPlacementPolicy();
   _testStrictCodecRejection();
   await _testBoundedFileStore();
@@ -119,6 +121,507 @@ void _testExactRestorationArtifact() {
     'binding digest uses loaded exact UTF-8 rather than re-encoded JSON',
   );
 }
+
+void _testQuickTerminalContextInvariant() {
+  final TerminalNoteContextId quick = _contextId(900);
+  final TerminalNoteContextId duplicate = _contextId(901);
+  TerminalNoteSnapshot snapshot = TerminalNoteSnapshot.empty();
+  snapshot = _acceptedNoteSnapshot(
+    snapshot.createContext(
+      id: quick,
+      kind: TerminalNoteContextKind.quickTerminal,
+      expectedStoreRevision: snapshot.storeRevision,
+    ),
+  );
+  final NoteContextRecord context = snapshot.contextFor(quick)!;
+  _expect(
+    snapshot
+                .createContext(
+                  id: duplicate,
+                  kind: TerminalNoteContextKind.quickTerminal,
+                  expectedStoreRevision: snapshot.storeRevision,
+                )
+                .failure ==
+            TerminalNoteMutationFailure.invalidState &&
+        snapshot
+                .setContextState(
+                  contextId: quick,
+                  state: TerminalNoteContextState.restorable,
+                  expectedStoreRevision: snapshot.storeRevision,
+                  expectedContextRevision: context.revision,
+                )
+                .failure ==
+            TerminalNoteMutationFailure.invalidState &&
+        snapshot
+                .detachContext(
+                  contextId: quick,
+                  reason: TerminalNoteDetachReason.contextUnavailable,
+                  updatedAtUtcMicros: 0,
+                  expectedStoreRevision: snapshot.storeRevision,
+                  expectedContextRevision: context.revision,
+                )
+                .failure ==
+            TerminalNoteMutationFailure.invalidState,
+    'Quick Terminal context is one always-active non-detachable singleton',
+  );
+  _expectThrows<TerminalNoteValidationException>(
+    () => TerminalNoteSnapshot.fromRecords(
+      storeRevision: BigInt.one,
+      nextDeliverySequence: BigInt.one,
+      contexts: <TerminalNoteContextId, NoteContextRecord>{
+        quick: NoteContextRecord(
+          id: quick,
+          kind: TerminalNoteContextKind.quickTerminal,
+          state: TerminalNoteContextState.active,
+          revision: BigInt.one,
+        ),
+        duplicate: NoteContextRecord(
+          id: duplicate,
+          kind: TerminalNoteContextKind.quickTerminal,
+          state: TerminalNoteContextState.active,
+          revision: BigInt.one,
+        ),
+      },
+      notes: const <NoteId, NoteRecord>{},
+      triggers: const <NoteId, NoteTriggerRecord>{},
+      deliveries: const <NoteId, NoteDeliveryRecord>{},
+    ),
+    'decoded snapshots reject multiple Quick Terminal contexts',
+  );
+}
+
+void _testContextRestorationReconciliation() {
+  final TerminalNoteRestorationArtifact oldRestoration =
+      TerminalNoteRestorationArtifact.fromSnapshot(
+        _twoPaneRestoration('/private/tmp/old'),
+      );
+  final TerminalNoteRestorationArtifact newRestoration =
+      TerminalNoteRestorationArtifact.fromSnapshot(
+        _twoPaneRestoration('/private/tmp/new'),
+      );
+  final TerminalNoteRestorationArtifact changedLayout =
+      TerminalNoteRestorationArtifact.fromSnapshot(_minimalSnapshot());
+  final TerminalNoteContextId first = _contextId(100);
+  final TerminalNoteContextId second = _contextId(101);
+  final TerminalNoteContextId quick = _contextId(102);
+  final TerminalNoteStoreDocument stored = _restorableNoteDocument(
+    contextIds: <TerminalNoteContextId>[first, second],
+    quickTerminalContextId: quick,
+    bindingSha256: oldRestoration.restorationSha256,
+    bindingContextIds: <TerminalNoteContextId>[first, second],
+  );
+  final List<PaneId> panes = <PaneId>[const PaneId(70), const PaneId(80)];
+  final TerminalNoteContextReconciler reconciler =
+      TerminalNoteContextReconciler(_sequentialContextGenerator(0x80));
+
+  final TerminalNoteContextReconciliationResult current = reconciler.reconcile(
+    stored: stored,
+    restoration: oldRestoration,
+    paneIdsInTraversalOrder: panes,
+    ensureQuickTerminalContext: true,
+    updatedAtUtcMicros: 1000,
+  );
+  _expect(
+    current.disposition ==
+            TerminalNoteContextReconciliationDisposition.matched &&
+        current.freshReason == null &&
+        current.requiresCommit &&
+        current.bindings.contextForPane(panes[0]) == first &&
+        current.bindings.contextForPane(panes[1]) == second &&
+        current.bindings.quickTerminalContextId == quick &&
+        current.document.snapshot.contextFor(first)!.state ==
+            TerminalNoteContextState.active &&
+        current.document.snapshot.contextFor(second)!.state ==
+            TerminalNoteContextState.active &&
+        current.document.snapshot.noteFor(_noteId(100))!.attachment.contextId ==
+            first &&
+        current.document.restorationBinding!.paneContextIds.length == 2 &&
+        !current.document.restorationBinding!.paneContextIds.contains(quick),
+    'B-01 exact current restoration attaches only ordered standard contexts',
+  );
+  _expect(
+    !current.bindings.toString().contains(first.canonicalValue) &&
+        !current.bindings.toString().contains(quick.canonicalValue),
+    'runtime binding diagnostics do not expose durable context IDs',
+  );
+  _expectThrows<UnsupportedError>(
+    () => current.bindings.standardPaneContexts.clear(),
+    'runtime pane bindings are immutable',
+  );
+
+  final TerminalNoteContextReconciliationResult rollbackUnchanged = reconciler
+      .reconcile(
+        stored: current.document,
+        restoration: oldRestoration,
+        paneIdsInTraversalOrder: panes,
+        ensureQuickTerminalContext: true,
+        updatedAtUtcMicros: 1001,
+      );
+  _expect(
+    rollbackUnchanged.disposition ==
+            TerminalNoteContextReconciliationDisposition.matched &&
+        !rollbackUnchanged.requiresCommit &&
+        rollbackUnchanged.bindings.contextForPane(panes[0]) == first &&
+        rollbackUnchanged.bindings.quickTerminalContextId == quick,
+    'B-04 pre-Notes launch with unchanged v1 layout reattaches exact IDs',
+  );
+
+  final TerminalNoteContextReconciliationResult restorationOnlyNew = reconciler
+      .reconcile(
+        stored: stored,
+        restoration: newRestoration,
+        paneIdsInTraversalOrder: panes,
+        ensureQuickTerminalContext: true,
+        updatedAtUtcMicros: 1002,
+      );
+  _expectFreshDetached(
+    restorationOnlyNew,
+    TerminalNoteContextFreshReason.hashMismatch,
+    <TerminalNoteContextId>[first, second],
+    panes,
+    'B-02 restoration-only new',
+  );
+
+  final TerminalNoteStoreDocument bindingOnlyNew = TerminalNoteStoreDocument(
+    snapshot: stored.snapshot,
+    restorationBinding: TerminalNoteRestorationBinding(
+      restorationSha256: newRestoration.restorationSha256,
+      paneContextIds: <TerminalNoteContextId>[first, second],
+    ),
+  );
+  final TerminalNoteContextReconciliationResult bindingNew = reconciler
+      .reconcile(
+        stored: bindingOnlyNew,
+        restoration: oldRestoration,
+        paneIdsInTraversalOrder: panes,
+        ensureQuickTerminalContext: true,
+        updatedAtUtcMicros: 1003,
+      );
+  _expectFreshDetached(
+    bindingNew,
+    TerminalNoteContextFreshReason.hashMismatch,
+    <TerminalNoteContextId>[first, second],
+    panes,
+    'B-03 binding-only new',
+  );
+
+  final TerminalNoteContextReconciliationResult rollbackChanged = reconciler
+      .reconcile(
+        stored: stored,
+        restoration: changedLayout,
+        paneIdsInTraversalOrder: <PaneId>[const PaneId(90)],
+        ensureQuickTerminalContext: true,
+        updatedAtUtcMicros: 1004,
+      );
+  _expectFreshDetached(
+    rollbackChanged,
+    TerminalNoteContextFreshReason.hashMismatch,
+    <TerminalNoteContextId>[first, second],
+    <PaneId>[const PaneId(90)],
+    'B-05 rollback layout change',
+  );
+
+  final TerminalNoteStoreDocument legacy = TerminalNoteStoreDocument(
+    snapshot: stored.snapshot,
+  );
+  final TerminalNoteContextReconciliationResult legacyResult = reconciler
+      .reconcile(
+        stored: legacy,
+        restoration: oldRestoration,
+        paneIdsInTraversalOrder: panes,
+        ensureQuickTerminalContext: true,
+        updatedAtUtcMicros: 1005,
+      );
+  _expectFreshDetached(
+    legacyResult,
+    TerminalNoteContextFreshReason.bindingMissing,
+    <TerminalNoteContextId>[first, second],
+    panes,
+    'legacy missing binding',
+  );
+
+  final TerminalNoteStoreDocument countMismatch = TerminalNoteStoreDocument(
+    snapshot: stored.snapshot,
+    restorationBinding: TerminalNoteRestorationBinding(
+      restorationSha256: oldRestoration.restorationSha256,
+      paneContextIds: <TerminalNoteContextId>[first],
+    ),
+  );
+  final TerminalNoteContextReconciliationResult countResult = reconciler
+      .reconcile(
+        stored: countMismatch,
+        restoration: oldRestoration,
+        paneIdsInTraversalOrder: panes,
+        ensureQuickTerminalContext: true,
+        updatedAtUtcMicros: 1006,
+      );
+  _expectFreshDetached(
+    countResult,
+    TerminalNoteContextFreshReason.countMismatch,
+    <TerminalNoteContextId>[first, second],
+    panes,
+    'binding count mismatch',
+  );
+
+  final TerminalNoteStoreDocument detachedBinding = _detachedBoundDocument(
+    restorationSha256: changedLayout.restorationSha256,
+  );
+  final TerminalNoteContextReconciliationResult detachedResult = reconciler
+      .reconcile(
+        stored: detachedBinding,
+        restoration: changedLayout,
+        paneIdsInTraversalOrder: <PaneId>[const PaneId(91)],
+        ensureQuickTerminalContext: false,
+        updatedAtUtcMicros: 1007,
+      );
+  _expect(
+    detachedResult.freshReason ==
+            TerminalNoteContextFreshReason.bindingStateMismatch &&
+        detachedResult.bindings.contextForPane(const PaneId(91)) !=
+            _contextId(500),
+    'detached binding context invalidates the whole binding',
+  );
+
+  final TerminalNoteContextReconciliationResult noRestoration = reconciler
+      .reconcile(
+        stored: stored,
+        restoration: null,
+        paneIdsInTraversalOrder: <PaneId>[const PaneId(92)],
+        ensureQuickTerminalContext: true,
+        updatedAtUtcMicros: 1008,
+      );
+  _expect(
+    noRestoration.freshReason ==
+            TerminalNoteContextFreshReason.restorationMissing &&
+        noRestoration.document.restorationBinding == null &&
+        noRestoration.bindings.standardPaneContexts.length == 1,
+    'missing restoration creates fresh contexts without a guessed binding',
+  );
+
+  final TerminalNoteStoreDocument noQuick = _restorableNoteDocument(
+    contextIds: <TerminalNoteContextId>[first, second],
+    bindingSha256: oldRestoration.restorationSha256,
+    bindingContextIds: <TerminalNoteContextId>[first, second],
+  );
+  final TerminalNoteContextReconciliationResult quickCreated = reconciler
+      .reconcile(
+        stored: noQuick,
+        restoration: oldRestoration,
+        paneIdsInTraversalOrder: panes,
+        ensureQuickTerminalContext: true,
+        updatedAtUtcMicros: 1009,
+      );
+  final TerminalNoteContextReconciliationResult quickRestart = reconciler
+      .reconcile(
+        stored: quickCreated.document,
+        restoration: oldRestoration,
+        paneIdsInTraversalOrder: panes,
+        ensureQuickTerminalContext: true,
+        updatedAtUtcMicros: 1010,
+      );
+  _expect(
+    quickCreated.bindings.quickTerminalContextId != null &&
+        quickRestart.bindings.quickTerminalContextId ==
+            quickCreated.bindings.quickTerminalContextId &&
+        !quickRestart.document.restorationBinding!.paneContextIds.contains(
+          quickCreated.bindings.quickTerminalContextId,
+        ),
+    'Quick Terminal hide/show/restart reuses one context outside binding',
+  );
+
+  _expectThrows<TerminalNoteContextReconciliationException>(
+    () => reconciler.reconcile(
+      stored: stored,
+      restoration: oldRestoration,
+      paneIdsInTraversalOrder: <PaneId>[panes.first, panes.first],
+      ensureQuickTerminalContext: true,
+      updatedAtUtcMicros: 1011,
+    ),
+    'duplicate runtime pane IDs reject the reconciliation input',
+  );
+  _expectThrows<TerminalNoteCodecException>(
+    () => TerminalNoteRestorationBinding(
+      restorationSha256: oldRestoration.restorationSha256,
+      paneContextIds: <TerminalNoteContextId>[first, first],
+    ),
+    'duplicate durable context IDs reject the binding',
+  );
+}
+
+void _expectFreshDetached(
+  TerminalNoteContextReconciliationResult result,
+  TerminalNoteContextFreshReason reason,
+  List<TerminalNoteContextId> oldContextIds,
+  List<PaneId> panes,
+  String scenario,
+) {
+  _expect(
+    result.disposition == TerminalNoteContextReconciliationDisposition.fresh &&
+        result.freshReason == reason &&
+        result.requiresCommit &&
+        result.bindings.standardPaneContexts.length == panes.length &&
+        panes.every(
+          (PaneId paneId) =>
+              !oldContextIds.contains(result.bindings.contextForPane(paneId)),
+        ) &&
+        oldContextIds.every(
+          (TerminalNoteContextId contextId) =>
+              result.document.snapshot.contextFor(contextId)!.state ==
+              TerminalNoteContextState.detached,
+        ) &&
+        oldContextIds.every(
+          (TerminalNoteContextId contextId) => result
+              .document
+              .snapshot
+              .notes
+              .values
+              .where(
+                (NoteRecord note) =>
+                    note.attachment.previousContextId == contextId,
+              )
+              .every(
+                (NoteRecord note) =>
+                    note.attachment.detachReason ==
+                    TerminalNoteDetachReason.restorationMismatch,
+              ),
+        ),
+    '$scenario uses fresh contexts and detaches every old Note',
+  );
+}
+
+TerminalNoteStoreDocument _restorableNoteDocument({
+  required List<TerminalNoteContextId> contextIds,
+  TerminalNoteContextId? quickTerminalContextId,
+  required String bindingSha256,
+  required List<TerminalNoteContextId> bindingContextIds,
+}) {
+  TerminalNoteSnapshot snapshot = TerminalNoteSnapshot.empty();
+  for (var index = 0; index < contextIds.length; index++) {
+    final TerminalNoteContextId contextId = contextIds[index];
+    snapshot = _acceptedNoteSnapshot(
+      snapshot.createContext(
+        id: contextId,
+        kind: TerminalNoteContextKind.standard,
+        expectedStoreRevision: snapshot.storeRevision,
+      ),
+    );
+    snapshot = _acceptedNoteSnapshot(
+      snapshot.createNote(
+        id: _noteId(100 + index),
+        contextId: contextId,
+        body: 'private fixture ${index + 1}',
+        color: NoteColorKey.yellow,
+        utcMicros: 100 + index,
+        expectedStoreRevision: snapshot.storeRevision,
+      ),
+    );
+    final NoteContextRecord context = snapshot.contextFor(contextId)!;
+    snapshot = _acceptedNoteSnapshot(
+      snapshot.setContextState(
+        contextId: contextId,
+        state: TerminalNoteContextState.restorable,
+        expectedStoreRevision: snapshot.storeRevision,
+        expectedContextRevision: context.revision,
+      ),
+    );
+  }
+  if (quickTerminalContextId != null) {
+    snapshot = _acceptedNoteSnapshot(
+      snapshot.createContext(
+        id: quickTerminalContextId,
+        kind: TerminalNoteContextKind.quickTerminal,
+        expectedStoreRevision: snapshot.storeRevision,
+      ),
+    );
+  }
+  return TerminalNoteStoreDocument(
+    snapshot: snapshot,
+    restorationBinding: TerminalNoteRestorationBinding(
+      restorationSha256: bindingSha256,
+      paneContextIds: bindingContextIds,
+    ),
+  );
+}
+
+TerminalNoteStoreDocument _detachedBoundDocument({
+  required String restorationSha256,
+}) {
+  final TerminalNoteContextId contextId = _contextId(500);
+  TerminalNoteSnapshot snapshot = TerminalNoteSnapshot.empty();
+  snapshot = _acceptedNoteSnapshot(
+    snapshot.createContext(
+      id: contextId,
+      kind: TerminalNoteContextKind.standard,
+      expectedStoreRevision: snapshot.storeRevision,
+    ),
+  );
+  snapshot = _acceptedNoteSnapshot(
+    snapshot.detachContext(
+      contextId: contextId,
+      reason: TerminalNoteDetachReason.contextUnavailable,
+      updatedAtUtcMicros: 0,
+      expectedStoreRevision: snapshot.storeRevision,
+      expectedContextRevision: snapshot.contextFor(contextId)!.revision,
+    ),
+  );
+  return TerminalNoteStoreDocument(
+    snapshot: snapshot,
+    restorationBinding: TerminalNoteRestorationBinding(
+      restorationSha256: restorationSha256,
+      paneContextIds: <TerminalNoteContextId>[contextId],
+    ),
+  );
+}
+
+TerminalNoteSnapshot _acceptedNoteSnapshot(TerminalNoteMutationResult result) {
+  _expect(
+    result.disposition == TerminalNoteMutationDisposition.accepted,
+    'Note fixture mutation is accepted',
+  );
+  return result.snapshot;
+}
+
+TerminalNoteContextIdGenerator _sequentialContextGenerator(int start) {
+  var value = start;
+  return TerminalNoteContextIdGenerator.forTesting(
+    () => List<int>.filled(16, value++),
+  );
+}
+
+NoteId _noteId(int value) =>
+    NoteId.fromHex(value.toRadixString(16).padLeft(32, '0'));
+
+TerminalNoteContextId _contextId(int value) =>
+    TerminalNoteContextId.fromHex(value.toRadixString(16).padLeft(32, '0'));
+
+TerminalRestorationSnapshot _twoPaneRestoration(String workingDirectory) =>
+    TerminalRestorationSnapshot(
+      windows: <TerminalRestorableWindow>[
+        TerminalRestorableWindow(
+          placement: _minimalPlacement(),
+          tabs: <TerminalRestorableTab>[
+            TerminalRestorableTab(
+              splitTree: TerminalRestorableSplitBranch(
+                axis: TerminalSplitAxis.horizontal,
+                fraction: 0.5,
+                first: TerminalRestorableSplitLeaf(
+                  TerminalRestorablePane(workingDirectory: workingDirectory),
+                ),
+                second: TerminalRestorableSplitLeaf(
+                  TerminalRestorablePane(workingDirectory: workingDirectory),
+                ),
+              ),
+              focusedPaneIndex: 0,
+              zoomedPaneIndex: null,
+              customTitle: null,
+              color: null,
+            ),
+          ],
+          selectedTabIndex: 0,
+        ),
+      ],
+      activeWindowIndex: 0,
+    );
 
 Future<void> _testQuickTerminalRestorationExclusion() async {
   final List<_RestorationFakeSession> sessions = <_RestorationFakeSession>[];

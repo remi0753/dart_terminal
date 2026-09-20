@@ -118,3 +118,50 @@
 
 このサブタスクではstartup時のattach/detach判断、Quick Terminal context作成、cross-file commitを実装していない。次の
 startup reconciliationサブタスクへ残す。
+
+## 2026-09-21: startup reconciliation着手
+
+- ROADMAPと本メモを再読し、先頭未完了項目がCM-04の第2サブタスクであることを確認した。今回の範囲はpureな起動時照合、
+  runtime pane binding、Quick Terminal singleton invariantまでであり、store I/O、cross-file commit、application-root ownerは含めない。
+- Hash、pane count、binding contextのkind/stateがすべて一致する場合だけordered attachする。どれか一つでも不一致ならpartial attachを
+  行わず、既存standard contextをDetachedへ移し、全live paneへfresh IDを発行するfail-closed案を採用した。
+- Context IDとpane IDの対応はimmutable runtime mapとして返す。cwd、title、path、indexは照合材料にせず、diagnosticsは件数だけを返す。
+- Quick Terminalはstore内で最大一つ、常にactive、detach不可というdomain invariantに固定する。Standard restoration bindingには含めず、
+  既存singletonがあればhide/showとrestartで再利用し、必要時だけfresh singletonを作る。
+- Reconciliationはcandidate documentと`requiresCommit`を返すだけにし、durable commit成功前のUI publishを行わない。commit/publish ownershipは
+  CM-04第3サブタスクとCM-05へ分離する。
+
+## 2026-09-21: startup reconciliationとQuick Terminal singleton binding完了
+
+- `TerminalNoteContextReconciler`を追加した。Exact restoration hash、pane count、binding内の全contextがknown standardかつ
+  non-detachedである条件を順に検査し、完全一致時だけrestoration traversal順でattachする。一つでも不一致なら既存standard contextを
+  全件detachし、全live paneへfresh IDを発行するためwrong-pane partial attachは0となる。
+- Fresh理由はrestoration missing、binding missing、hash mismatch、count mismatch、binding state mismatchへ固定分類した。
+  Missing restoration時はfresh runtime contextを返すが新bindingを推測せず、restorationがあるfresh caseだけそのexact hashに対する次回用bindingを
+  candidateへ含める。
+- Matched binding外に残るactive/restorable standard contextも`contextUnavailable`でdetachする。Mismatch時のNoteは
+  `restorationMismatch`でDetachedへ移し、関連trigger/deliveryは既存domain transactionにより同時解除する。Timestampは要求値と既存Noteの
+  最新updated timeの大きい方を使い、順序正規化を含むmutationを有効範囲に保つ。
+- Runtime bindingはfresh `PaneId`からopaque context IDへのimmutable mapとし、文字列表現はstandard件数とQuick有無だけに制限した。
+  Cwd、title、path、context ID、restoration hash、Note本文は照合診断へ出さない。
+- Domain modelへQuick Terminal contextの「最大一つ・常にactive・detach不可」を追加した。Strict decodeでも同じinvariantを検査し、reconcilerは
+  既存singletonを再利用するか、要求された時だけ一つ作成する。Standard pane bindingへの混入は既存codec invariantで引き続き拒否する。
+- B-01〜B-05相当のcurrent/restoration-only/binding-only/rollback unchanged/layout-changeに加え、legacy missing binding、count mismatch、
+  detached binding、missing restoration、duplicate runtime pane/ID、Quick create/restart reuse、immutable/privacyをfocused testで確認した。
+- 最初のformatはtest一件を整形した後、sandbox外のDart telemetry metadata更新を拒否されexit 1となった。Repository fileの整形自体は完了しており、
+  host権限のfocused analyze/testと最終aggregateで再実行して解消した。Product code/test failureではない。
+
+### 検証
+
+- Focused analyze: `terminal_note_model.dart`、`terminal_note_context_restoration.dart`、`terminal_restoration_test.dart`でissue 0。
+- Focused tests: `terminal_restoration_test.dart`、`terminal_note_model_test.dart`、`terminal_note_store_codec_test.dart`はすべて成功。
+- `make phase7-appkit-acceptance release-candidate-daily-use-matrix`: 成功。正規生成差分は変更したrestoration testのSHA-256と、その
+  acceptance artifactを参照するrelease-candidate SHA-256だけである。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: 成功。361 files format変更0、root/package analyze issue 0、
+  `PHASE7_APPKIT_ACCEPTANCE_PASS`、release gate 31/release blocker 0、Note store p95 147,201/18,246 us、全native/security/
+  integration testを通過し、`dart_terminal tests passed`で終了した。
+- `git diff --check`: pass。Root packageのdomain/reconciliation/test/evidence/task memoだけを変更した。隣接`dart_appkit`には着手前からの
+  modified 3 filesが残るが、本サブタスクで編集・stageしたfileは0である。
+
+このサブタスクではrestoration-first shutdown commit、Note-second commit、transaction failure/crash recoveryの受け入れを実装していない。
+次のordered persistenceサブタスクへ残す。
