@@ -28,6 +28,11 @@ enum TerminalNotesIntentKind {
   reattach,
   export,
   copy,
+  open,
+  close,
+  selectCard,
+  beginCreate,
+  beginEdit,
 }
 
 enum TerminalNotesResultDisposition {

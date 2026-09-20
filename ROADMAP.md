@@ -117,7 +117,7 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
   - [ ] S1 mutation、Detached、export、localized actionを接続する
     - [ ] rail/editor navigationとdurable CRUD/reorder mutation bridgeを接続する
       - [x] authority-owned surface stateとsemantic mutation contractを実装する
-      - [ ] native navigation ABIとproduct intent pumpを実装する
+      - [x] native navigation ABIとproduct intent pumpを実装する
       - [ ] applicationのrail/editor interaction lifecycleへ接続する
     - [ ] Detached collection、reattach、explicit copy/exportを接続する
     - [ ] hidden create/open actionとlocalized menu/palette projectionを接続する

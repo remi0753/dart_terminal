@@ -267,11 +267,20 @@ final class TerminalNoteNativeSurfaceAdapter
       featureState: presentation.featureState,
       surfaceState: presentation.surfaceState,
       readyCue: presentation.readyCue,
-      section: TerminalNotesCollectionSection.current,
-      pageStart: 0,
-      totalCount: cards.length,
-      selectedToken: null,
-      editorMode: TerminalNotesEditorMode.inactive,
+      section: switch (projection.section) {
+        TerminalNoteCollectionSection.current =>
+          TerminalNotesCollectionSection.current,
+        TerminalNoteCollectionSection.detached =>
+          TerminalNotesCollectionSection.detached,
+      },
+      pageStart: projection.pageStart,
+      totalCount: projection.totalCount,
+      selectedToken: projection.selectedToken?.value,
+      editorMode: switch (projection.editorMode) {
+        TerminalNoteEditorMode.inactive => TerminalNotesEditorMode.inactive,
+        TerminalNoteEditorMode.creating => TerminalNotesEditorMode.creating,
+        TerminalNoteEditorMode.editing => TerminalNotesEditorMode.editing,
+      },
       messageKey: TerminalNotesMessageKey.none,
       darkAppearance: presentation.darkAppearance,
       increaseContrast: presentation.increaseContrast,
@@ -279,6 +288,7 @@ final class TerminalNoteNativeSurfaceAdapter
       reduceMotion: presentation.reduceMotion,
       systemBadgeVisible: presentation.systemBadgeVisible,
       locale: presentation.locale,
+      draftGeneration: projection.draftGeneration,
       bodyFontMilliPoints: presentation.bodyFontMilliPoints,
       cards: cards,
     );

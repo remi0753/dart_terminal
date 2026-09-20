@@ -918,8 +918,16 @@ int main(int argc, const char* argv[]) {
   accepted.new_store_revision = 13u;
   accepted.new_projection_generation = 16u;
   accepted.disposition = DTN_RESULT_ACCEPTED;
-  ok &= expect(dtn_surface_apply_result(surface, &accepted) == DTN_STATUS_OK,
-               "accepted mutation result advances revision and generation");
+  ok &= expect(dtn_surface_apply_result(surface, &accepted) ==
+                       DTN_STATUS_INVALID_ARGUMENT,
+               "accepted mutation cannot precede its authority projection");
+  std::vector<uint8_t> committed =
+      packet(16u, 13u, {maximum_intent}, 0x01u);
+  ok &= expect(
+      dtn_surface_apply_projection(surface, committed.data(),
+                                   committed.size()) == DTN_STATUS_OK &&
+          dtn_surface_apply_result(surface, &accepted) == DTN_STATUS_OK,
+      "accepted mutation requires matching committed projection first");
   snapshot = {};
   snapshot.struct_size = sizeof(snapshot);
   snapshot.version = DTN_SNAPSHOT_VERSION;
@@ -1239,9 +1247,14 @@ int main(int argc, const char* argv[]) {
   cancel_accepted.event_generation = 2u;
   cancel_accepted.draft_generation = 1u;
   cancel_accepted.new_store_revision = 4u;
-  cancel_accepted.new_projection_generation = 1u;
+  cancel_accepted.new_projection_generation = 2u;
   cancel_accepted.disposition = DTN_RESULT_ACCEPTED;
-  ok &= expect(dtn_surface_apply_result(editor_surface, &cancel_accepted) ==
+  std::vector<uint8_t> cancelled = packet(2u, 4u, {"baseline"}, 0x01u);
+  write_u16(cancelled, 86u, 1u);
+  ok &= expect(dtn_surface_apply_projection(editor_surface, cancelled.data(),
+                                            cancelled.size()) ==
+                       DTN_STATUS_OK &&
+                   dtn_surface_apply_result(editor_surface, &cancel_accepted) ==
                        DTN_STATUS_OK &&
                    editor_view.hidden &&
                    text_view.string.length == 0u &&
@@ -1250,7 +1263,7 @@ int main(int argc, const char* argv[]) {
                        DTN_STATUS_NOT_FOUND &&
                    dtn_surface_focus(editor_surface, DTN_FOCUS_RAIL) ==
                        DTN_STATUS_OK,
-               "accepted Cancel closes volatile editor locally");
+               "accepted Cancel follows the authority projection");
   snapshot = {};
   snapshot.struct_size = sizeof(snapshot);
   snapshot.version = DTN_SNAPSHOT_VERSION;
@@ -1296,11 +1309,11 @@ int main(int argc, const char* argv[]) {
   color_rejected.struct_size = sizeof(color_rejected);
   color_rejected.version = DTN_RESULT_VERSION;
   color_rejected.surface_generation = 7u;
-  color_rejected.projection_generation = 1u;
+  color_rejected.projection_generation = 2u;
   color_rejected.event_generation = 3u;
-  color_rejected.draft_generation = 1u;
+  color_rejected.draft_generation = 0u;
   color_rejected.new_store_revision = 4u;
-  color_rejected.new_projection_generation = 1u;
+  color_rejected.new_projection_generation = 2u;
   color_rejected.disposition = DTN_RESULT_REJECTED;
   ok &= expect(dtn_surface_apply_result(editor_surface, &color_rejected) ==
                        DTN_STATUS_OK &&
@@ -1325,11 +1338,11 @@ int main(int argc, const char* argv[]) {
   copy_accepted.struct_size = sizeof(copy_accepted);
   copy_accepted.version = DTN_RESULT_VERSION;
   copy_accepted.surface_generation = 7u;
-  copy_accepted.projection_generation = 1u;
+  copy_accepted.projection_generation = 2u;
   copy_accepted.event_generation = 4u;
-  copy_accepted.draft_generation = 1u;
+  copy_accepted.draft_generation = 0u;
   copy_accepted.new_store_revision = 4u;
-  copy_accepted.new_projection_generation = 1u;
+  copy_accepted.new_projection_generation = 2u;
   copy_accepted.disposition = DTN_RESULT_ACCEPTED;
   ok &= expect(dtn_surface_apply_result(editor_surface, &copy_accepted) ==
                        DTN_STATUS_OK,
@@ -1368,6 +1381,143 @@ int main(int argc, const char* argv[]) {
   dtn_surface_destroy(editor_surface);
   ok &= expect(dtn_debug_live_surfaces() == 1u,
                "isolated editor surface releases all native ownership");
+
+  DtnSurface* navigation_surface = dtn_surface_create();
+  NSView* navigation_view =
+      (__bridge NSView*)dtn_surface_native_view(navigation_surface);
+  std::vector<uint8_t> navigation_collapsed = packet(1u, 4u, {}, 0x01u);
+  navigation_collapsed[14u] = DTN_VISIBILITY_COLLAPSED;
+  write_u32(navigation_collapsed, 56u, 1u);
+  ok &= expect(
+      navigation_surface != nullptr &&
+          dtn_surface_apply_projection(navigation_surface,
+                                       navigation_collapsed.data(),
+                                       navigation_collapsed.size()) ==
+              DTN_STATUS_OK &&
+          dtn_surface_update_layout(navigation_surface, &normal_layout) ==
+              DTN_STATUS_OK &&
+          dtn_surface_attach_to_host(navigation_surface,
+                                     (__bridge void*)editor_host) ==
+              DTN_STATUS_OK,
+      "navigation surface starts from a collapsed authority projection");
+
+  auto take_navigation_intent = [&](uint32_t kind, uint64_t event,
+                                    uint64_t token) {
+    DtnSurfaceIntentV1 intent = {};
+    intent.struct_size = sizeof(intent);
+    intent.version = DTN_INTENT_VERSION;
+    uint8_t intent_payload[DTN_MAX_INTENT_PAYLOAD_BYTES] = {};
+    ok &= expect(dtn_surface_take_intent(navigation_surface, &intent,
+                                         intent_payload,
+                                         sizeof(intent_payload)) ==
+                         DTN_STATUS_OK &&
+                     intent.kind == kind &&
+                     intent.event_generation == event &&
+                     intent.card_token == token &&
+                     intent.payload_bytes == 0u,
+                 "actual navigation control emits one body-free intent");
+    return intent;
+  };
+  auto settle_navigation_intent = [&](const DtnSurfaceIntentV1& intent,
+                                      std::vector<uint8_t>& projection,
+                                      uint64_t new_projection_generation) {
+    DtnSurfaceResultV1 result = {};
+    result.struct_size = sizeof(result);
+    result.version = DTN_RESULT_VERSION;
+    result.surface_generation = intent.surface_generation;
+    result.projection_generation = intent.projection_generation;
+    result.event_generation = intent.event_generation;
+    result.draft_generation = intent.draft_generation;
+    result.new_store_revision = intent.expected_store_revision;
+    result.new_projection_generation = new_projection_generation;
+    result.disposition = DTN_RESULT_ACCEPTED;
+    ok &= expect(dtn_surface_apply_projection(navigation_surface,
+                                              projection.data(),
+                                              projection.size()) ==
+                             DTN_STATUS_OK &&
+                         dtn_surface_apply_result(navigation_surface,
+                                                  &result) == DTN_STATUS_OK,
+                 "navigation projection precedes its accepted result");
+  };
+
+  NSButton* navigation_badge =
+      (NSButton*)find_view_named(navigation_view, @"DtnNoteBadgeButton");
+  [navigation_badge performClick:nil];
+  DtnSurfaceIntentV1 open_intent =
+      take_navigation_intent(DTN_INTENT_OPEN, 1u, 0u);
+  std::vector<uint8_t> navigation_open =
+      packet(2u, 4u, {"select this card"}, 0x01u);
+  settle_navigation_intent(open_intent, navigation_open, 2u);
+
+  NSButton* new_button = find_button_with_title(navigation_view, @"New");
+  NSButton* close_button = find_button_with_title(navigation_view, @"Close");
+  NSSegmentedControl* navigation_sections =
+      [navigation_view valueForKey:@"sectionControl"];
+  ok &= expect(new_button != nil && close_button != nil &&
+                   navigation_sections.nextKeyView == new_button &&
+                   new_button.nextKeyView == close_button,
+               "New and Close participate in deterministic keyboard order");
+  [new_button performClick:nil];
+  DtnSurfaceIntentV1 create_intent =
+      take_navigation_intent(DTN_INTENT_BEGIN_CREATE, 2u, 0u);
+  std::vector<uint8_t> navigation_creating =
+      packet(3u, 4u, {"select this card"}, 0x01u);
+  write_u64(navigation_creating, 48u, 0u);
+  navigation_creating[83u] = DTN_EDITOR_CREATING;
+  write_u64(navigation_creating, 108u, 1u);
+  settle_navigation_intent(create_intent, navigation_creating, 3u);
+
+  NSButton* navigation_cancel =
+      find_button_with_title(navigation_view, @"Cancel");
+  [navigation_cancel performClick:nil];
+  DtnSurfaceIntentV1 create_cancel =
+      take_navigation_intent(DTN_INTENT_CANCEL, 3u, 0u);
+  std::vector<uint8_t> navigation_read =
+      packet(4u, 4u, {"select this card"}, 0x01u);
+  settle_navigation_intent(create_cancel, navigation_read, 4u);
+
+  NSView* navigation_card =
+      find_view_named(navigation_view, @"DtnNoteCardView");
+  ok &= expect([navigation_card accessibilityPerformPress],
+               "card selection is an accessibility press action");
+  DtnSurfaceIntentV1 select_intent =
+      take_navigation_intent(DTN_INTENT_SELECT_CARD, 4u, 1u);
+  std::vector<uint8_t> navigation_selected =
+      packet(5u, 4u, {"select this card"}, 0x01u);
+  settle_navigation_intent(select_intent, navigation_selected, 5u);
+
+  NSButton* edit_button = find_button_with_title(navigation_view, @"Edit");
+  [edit_button performClick:nil];
+  DtnSurfaceIntentV1 edit_intent =
+      take_navigation_intent(DTN_INTENT_BEGIN_EDIT, 5u, 1u);
+  std::vector<uint8_t> navigation_editing =
+      packet(6u, 4u, {"select this card"}, 0x01u);
+  navigation_editing[83u] = DTN_EDITOR_EDITING;
+  write_u64(navigation_editing, 108u, 2u);
+  settle_navigation_intent(edit_intent, navigation_editing, 6u);
+
+  navigation_cancel = find_button_with_title(navigation_view, @"Cancel");
+  [navigation_cancel performClick:nil];
+  DtnSurfaceIntentV1 edit_cancel =
+      take_navigation_intent(DTN_INTENT_CANCEL, 6u, 1u);
+  std::vector<uint8_t> navigation_before_close =
+      packet(7u, 4u, {"select this card"}, 0x01u);
+  settle_navigation_intent(edit_cancel, navigation_before_close, 7u);
+
+  close_button = find_button_with_title(navigation_view, @"Close");
+  [close_button performClick:nil];
+  DtnSurfaceIntentV1 close_intent =
+      take_navigation_intent(DTN_INTENT_CLOSE, 7u, 0u);
+  std::vector<uint8_t> navigation_closed = packet(8u, 4u, {}, 0x01u);
+  navigation_closed[14u] = DTN_VISIBILITY_COLLAPSED;
+  write_u32(navigation_closed, 56u, 1u);
+  settle_navigation_intent(close_intent, navigation_closed, 8u);
+  ok &= expect(dtn_surface_detach_from_host(navigation_surface) ==
+                       DTN_STATUS_OK,
+               "navigation surface detaches after UI intent acceptance");
+  dtn_surface_destroy(navigation_surface);
+  ok &= expect(dtn_debug_live_surfaces() == 1u,
+               "navigation surface releases native ownership");
 
   ok &= expect(std::memcmp(&terminal, &terminal_before, sizeof(terminal)) == 0,
                "G1-G3/T1 terminal geometry and input sentinel delta zero");

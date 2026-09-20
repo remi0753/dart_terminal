@@ -25,6 +25,7 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
       <_FakeProductNativeChannel>[];
   final Queue<TerminalNotesAttachDisposition> initialAttachments =
       Queue<TerminalNotesAttachDisposition>();
+  var clockMicros = 3000;
   _FakeProductNativeChannel createChannel() {
     final _FakeProductNativeChannel channel = _FakeProductNativeChannel(
       nextAttachment: initialAttachments.isEmpty
@@ -52,6 +53,7 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
           initialPaneIdsInTraversalOrder: const <PaneId>[PaneId(1), PaneId(2)],
           ensureQuickTerminalContext: true,
           updatedAtUtcMicros: 1000,
+          clock: () => clockMicros++,
           initializeNativeCapability: () {},
           surfaceFactory: createChannel,
         );
@@ -240,6 +242,269 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
       'a prepared live surface can attach to a replacement host',
     );
 
+    final TerminalNotesProjection beforeCreate = first.projections.last;
+    first.intents.add(
+      _nativeIntent(
+        beforeCreate,
+        eventGeneration: 1,
+        kind: TerminalNotesIntentKind.beginCreate,
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+    _expect(
+      first.takeIntentCount == 0 && first.results.isEmpty,
+      'surface intents have no idle polling owner',
+    );
+    final int beforeCreateOperations = first.operations.length;
+    final TerminalNoteProductTopologyResult beganCreate = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    final TerminalNotesProjection creating = first.projections.last;
+    final TerminalNotesNativeResult createResult = first.results.last;
+    _expect(
+      beganCreate.isAccepted &&
+          creating.editorMode == TerminalNotesEditorMode.creating &&
+          creating.draftGeneration > 0 &&
+          creating.storeRevision == beforeCreate.storeRevision &&
+          creating.projectionGeneration > beforeCreate.projectionGeneration &&
+          createResult.disposition == TerminalNotesResultDisposition.accepted &&
+          createResult.newProjectionGeneration ==
+              creating.projectionGeneration &&
+          first.operations.skip(beforeCreateOperations).take(3).join(',') ==
+              'take,projection,result',
+      'explicit pump applies authority create projection before accepted result',
+    );
+
+    first.intents.add(
+      _nativeIntent(
+        creating,
+        eventGeneration: 2,
+        kind: TerminalNotesIntentKind.save,
+        color: TerminalNotesColor.yellow,
+        body: 'remember the build command',
+      ),
+    );
+    final TerminalNoteProductTopologyResult saved = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    final TerminalNotesProjection savedProjection = first.projections.last;
+    _expect(
+      saved.isAccepted &&
+          savedProjection.editorMode == TerminalNotesEditorMode.inactive &&
+          savedProjection.draftGeneration == 0 &&
+          savedProjection.cards.length == 1 &&
+          savedProjection.cards.single.body == 'remember the build command' &&
+          savedProjection.selectedToken == savedProjection.cards.single.token &&
+          savedProjection.storeRevision > creating.storeRevision &&
+          first.results.last.newStoreRevision == savedProjection.storeRevision,
+      'Save commits durably before publishing the selected card and result',
+    );
+
+    final int selectedToken = savedProjection.selectedToken!;
+    first.intents.add(
+      _nativeIntent(
+        savedProjection,
+        eventGeneration: 3,
+        kind: TerminalNotesIntentKind.beginEdit,
+        cardToken: selectedToken,
+      ),
+    );
+    final TerminalNoteProductTopologyResult beganEdit = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    final TerminalNotesProjection editing = first.projections.last;
+    final int editingToken = editing.selectedToken!;
+    first.intents.add(
+      _nativeIntent(
+        editing,
+        eventGeneration: 4,
+        kind: TerminalNotesIntentKind.cancel,
+        cardToken: editingToken,
+      ),
+    );
+    final TerminalNoteProductTopologyResult cancelled = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    final TerminalNotesProjection afterCancel = first.projections.last;
+    _expect(beganEdit.isAccepted, 'Edit intent is accepted');
+    _expect(
+      editing.editorMode == TerminalNotesEditorMode.editing &&
+          editing.draftGeneration > 0,
+      'Edit projects one volatile draft generation',
+    );
+    _expect(cancelled.isAccepted, 'Cancel intent is accepted');
+    _expect(
+      afterCancel.editorMode == TerminalNotesEditorMode.inactive &&
+          afterCancel.draftGeneration == 0 &&
+          afterCancel.storeRevision == savedProjection.storeRevision,
+      'Cancel clears volatile editor state without a store commit',
+    );
+
+    first.intents.add(
+      _nativeIntent(
+        afterCancel,
+        eventGeneration: 5,
+        kind: TerminalNotesIntentKind.beginCreate,
+      ),
+    );
+    final TerminalNoteProductTopologyResult beganSecondCreate = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    final TerminalNotesProjection creatingSecond = first.projections.last;
+    first.intents.add(
+      _nativeIntent(
+        creatingSecond,
+        eventGeneration: 6,
+        kind: TerminalNotesIntentKind.save,
+        color: TerminalNotesColor.green,
+        body: 'check the release artifact',
+      ),
+    );
+    final TerminalNoteProductTopologyResult savedSecond = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    final TerminalNotesProjection twoNotes = first.projections.last;
+    _expect(
+      beganSecondCreate.isAccepted &&
+          savedSecond.isAccepted &&
+          twoNotes.cards.map((TerminalNotesCard card) => card.body).join('|') ==
+              'remember the build command|check the release artifact',
+      'a second New and Save produces two durable ordered cards',
+    );
+
+    first.intents.add(
+      _nativeIntent(
+        twoNotes,
+        eventGeneration: 7,
+        kind: TerminalNotesIntentKind.moveEarlier,
+        cardToken: twoNotes.selectedToken,
+      ),
+    );
+    final TerminalNoteProductTopologyResult movedEarlier = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    final TerminalNotesProjection earlierProjection = first.projections.last;
+    first.intents.add(
+      _nativeIntent(
+        earlierProjection,
+        eventGeneration: 8,
+        kind: TerminalNotesIntentKind.moveLater,
+        cardToken: earlierProjection.selectedToken,
+      ),
+    );
+    final TerminalNoteProductTopologyResult movedLater = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    final TerminalNotesProjection laterProjection = first.projections.last;
+    _expect(
+      movedEarlier.isAccepted &&
+          earlierProjection.cards.first.body == 'check the release artifact' &&
+          movedLater.isAccepted &&
+          laterProjection.cards.last.body == 'check the release artifact',
+      'Earlier and Later commit exact authority order before native results',
+    );
+
+    first.intents.add(
+      _nativeIntent(
+        laterProjection,
+        eventGeneration: 9,
+        kind: TerminalNotesIntentKind.changeColor,
+        cardToken: laterProjection.selectedToken,
+        color: TerminalNotesColor.blue,
+      ),
+    );
+    final TerminalNoteProductTopologyResult changedColor = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    final TerminalNotesProjection blueProjection = first.projections.last;
+    first.intents.add(
+      _nativeIntent(
+        blueProjection,
+        eventGeneration: 10,
+        kind: TerminalNotesIntentKind.resolve,
+        cardToken: blueProjection.selectedToken,
+      ),
+    );
+    final TerminalNoteProductTopologyResult resolved = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    final TerminalNotesProjection resolvedProjection = first.projections.last;
+    first.intents.add(
+      _nativeIntent(
+        resolvedProjection,
+        eventGeneration: 11,
+        kind: TerminalNotesIntentKind.reopen,
+        cardToken: resolvedProjection.selectedToken,
+      ),
+    );
+    final TerminalNoteProductTopologyResult reopened = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    final TerminalNotesProjection reopenedProjection = first.projections.last;
+    final TerminalNotesCard selectedReopened = reopenedProjection.cards
+        .singleWhere(
+          (TerminalNotesCard card) =>
+              card.token == reopenedProjection.selectedToken,
+        );
+    _expect(
+      changedColor.isAccepted &&
+          blueProjection.cards
+                  .singleWhere(
+                    (TerminalNotesCard card) =>
+                        card.token == blueProjection.selectedToken,
+                  )
+                  .color ==
+              TerminalNotesColor.blue &&
+          resolved.isAccepted &&
+          resolvedProjection.cards
+                  .singleWhere(
+                    (TerminalNotesCard card) =>
+                        card.token == resolvedProjection.selectedToken,
+                  )
+                  .status ==
+              TerminalNotesStatus.resolved &&
+          reopened.isAccepted &&
+          selectedReopened.status == TerminalNotesStatus.active,
+      'color, Resolve, and Reopen flow through durable authority mutations',
+    );
+
+    final int projectionsBeforeCopy = first.projections.length;
+    first.intents.add(
+      _nativeIntent(
+        reopenedProjection,
+        eventGeneration: 12,
+        kind: TerminalNotesIntentKind.copy,
+        cardToken: reopenedProjection.selectedToken,
+        body: selectedReopened.body,
+      ),
+    );
+    final TerminalNoteProductTopologyResult deferredCopy = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    _expect(
+      deferredCopy.disposition ==
+              TerminalNoteProductTopologyDisposition.rejected &&
+          first.projections.length == projectionsBeforeCopy &&
+          first.results.last.disposition ==
+              TerminalNotesResultDisposition.rejected &&
+          first.results.last.newProjectionGeneration ==
+              reopenedProjection.projectionGeneration,
+      'deferred copy/export work rejects without advancing authority state',
+    );
+
+    first.intents.add(
+      _nativeIntent(
+        reopenedProjection,
+        eventGeneration: 13,
+        kind: TerminalNotesIntentKind.delete,
+        cardToken: reopenedProjection.selectedToken,
+      ),
+    );
+    final TerminalNoteProductTopologyResult deleted = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    final TerminalNotesProjection afterDelete = first.projections.last;
+    _expect(
+      deleted.isAccepted &&
+          afterDelete.cards.length == 1 &&
+          afterDelete.cards.single.body == 'remember the build command' &&
+          afterDelete.selectedToken == null,
+      'Delete durably removes the selected card and clears selection',
+    );
+    final TerminalNoteProductTopologyResult emptyPump = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    _expect(
+      emptyPump.disposition == TerminalNoteProductTopologyDisposition.noChange,
+      'one explicit pump drains at most one delivered native intent',
+    );
+
     initialAttachments.add(TerminalNotesAttachDisposition.rendererUnavailable);
     final TerminalNoteProductTopologyResult failedSurface = await subsystem
         .attachSurface(
@@ -256,6 +521,16 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
       'failed first attach releases native ownership without touching authority topology',
     );
 
+    first.nextResultApply = TerminalNotesResultApplyDisposition.failed;
+    first.intents.add(
+      _nativeIntent(
+        afterDelete,
+        eventGeneration: 14,
+        kind: TerminalNotesIntentKind.export,
+      ),
+    );
+    final TerminalNoteProductTopologyResult faultedPump = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
     final TerminalNoteProductTopologyResult detached = await subsystem
         .detachSurface(const PaneId(1));
     final TerminalNoteProductTopologyResult invalidClose = await subsystem
@@ -265,7 +540,10 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
     final TerminalNoteProductTopologyResult closedQuick = await subsystem
         .closePane(paneId: const PaneId(90), updatedAtUtcMicros: 2001);
     _expect(
-      detached.isAccepted &&
+      faultedPump.disposition ==
+              TerminalNoteProductTopologyDisposition.nativeUnavailable &&
+          detached.disposition ==
+              TerminalNoteProductTopologyDisposition.stale &&
           invalidClose.disposition ==
               TerminalNoteProductTopologyDisposition.rejected &&
           subsystem.hasPane(const PaneId(4)) &&
@@ -275,7 +553,7 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
           first.disposeCount == 1 &&
           subsystem.liveSurfaceCount == 0 &&
           subsystem.livePaneCount == 3,
-      'detach precedes standard and Quick Terminal pane retirement',
+      'native result fault retires the surface before pane lifecycle continues',
     );
 
     final Future<void> firstShutdown = subsystem.shutdown();
@@ -383,11 +661,17 @@ final class _FakeProductNativeChannel
   final List<String> operations = <String>[];
   final List<(int, int)> attachments = <(int, int)>[];
   final List<TerminalNotesProjection> projections = <TerminalNotesProjection>[];
+  final Queue<TerminalNotesNativeIntent> intents =
+      Queue<TerminalNotesNativeIntent>();
+  final List<TerminalNotesNativeResult> results = <TerminalNotesNativeResult>[];
   TerminalNotesAttachDisposition nextAttachment;
+  TerminalNotesResultApplyDisposition nextResultApply =
+      TerminalNotesResultApplyDisposition.accepted;
   (double, double, double, double)? layout;
   int layoutCount = 0;
   int detachCount = 0;
   int disposeCount = 0;
+  int takeIntentCount = 0;
 
   @override
   TerminalNotesApplyDisposition apply(TerminalNotesProjection projection) {
@@ -427,12 +711,22 @@ final class _FakeProductNativeChannel
   }
 
   @override
-  TerminalNotesNativeIntent? takeIntent() => null;
+  TerminalNotesNativeIntent? takeIntent() {
+    operations.add('take');
+    takeIntentCount++;
+    return intents.isEmpty ? null : intents.removeFirst();
+  }
 
   @override
   TerminalNotesResultApplyDisposition applyResult(
     TerminalNotesNativeResult result,
-  ) => TerminalNotesResultApplyDisposition.accepted;
+  ) {
+    operations.add('result');
+    results.add(result);
+    final TerminalNotesResultApplyDisposition disposition = nextResultApply;
+    nextResultApply = TerminalNotesResultApplyDisposition.accepted;
+    return disposition;
+  }
 
   @override
   bool focus(TerminalNotesNativeFocusTarget target) => true;
@@ -443,6 +737,25 @@ final class _FakeProductNativeChannel
     disposeCount++;
   }
 }
+
+TerminalNotesNativeIntent _nativeIntent(
+  TerminalNotesProjection projection, {
+  required int eventGeneration,
+  required TerminalNotesIntentKind kind,
+  int? cardToken,
+  TerminalNotesColor? color,
+  String? body,
+}) => TerminalNotesNativeIntent(
+  surfaceGeneration: projection.surfaceGeneration,
+  projectionGeneration: projection.projectionGeneration,
+  eventGeneration: eventGeneration,
+  draftGeneration: projection.draftGeneration,
+  cardToken: cardToken,
+  expectedStoreRevision: projection.storeRevision,
+  kind: kind,
+  color: color,
+  body: body,
+);
 
 void _expect(bool condition, String message) {
   if (!condition) throw StateError(message);

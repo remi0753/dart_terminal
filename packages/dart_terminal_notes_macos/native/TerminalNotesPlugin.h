@@ -93,6 +93,11 @@ typedef enum DtnIntentKind {
   DTN_INTENT_REATTACH = 8,
   DTN_INTENT_EXPORT = 9,
   DTN_INTENT_COPY = 10,
+  DTN_INTENT_OPEN = 11,
+  DTN_INTENT_CLOSE = 12,
+  DTN_INTENT_SELECT_CARD = 13,
+  DTN_INTENT_BEGIN_CREATE = 14,
+  DTN_INTENT_BEGIN_EDIT = 15,
 } DtnIntentKind;
 
 typedef enum DtnResultDisposition {

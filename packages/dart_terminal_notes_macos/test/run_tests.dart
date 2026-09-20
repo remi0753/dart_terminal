@@ -307,6 +307,14 @@ void _testDeterministicFuzz() {
 }
 
 void _testSurfaceFacade() {
+  _expect(
+    TerminalNotesIntentKind.open.index == 11 &&
+        TerminalNotesIntentKind.close.index == 12 &&
+        TerminalNotesIntentKind.selectCard.index == 13 &&
+        TerminalNotesIntentKind.beginCreate.index == 14 &&
+        TerminalNotesIntentKind.beginEdit.index == 15,
+    'navigation intent ABI values are append-only and fixed',
+  );
   final _FakeBindings bindings = _FakeBindings();
   final TerminalNotesNativeSurface surface = TerminalNotesNativeSurface(
     bindings: bindings,

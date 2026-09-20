@@ -44,7 +44,8 @@ static bool dtn_valid_editor_string(NSString* value,
 static int32_t dtn_emit_view_intent(DtnSurface* surface, uint32_t kind,
                                     NSString* body, uint32_t color,
                                     uint64_t token);
-static bool dtn_intent_kind_mutates(uint32_t kind);
+static bool dtn_intent_kind_commits(uint32_t kind);
+static bool dtn_intent_kind_projects(uint32_t kind);
 static const da_native_extension_services_v1* g_dtn_services = NULL;
 
 typedef void* (*DtnRendererNativeViewV1)(uint64_t handle,
@@ -204,16 +205,21 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 @interface DtnNoteCardView : DtnFlippedView
 @property(nonatomic, strong) NSTextField* bodyLabel;
 @property(nonatomic, strong) NSTextField* chipLabel;
+@property(nonatomic, strong) NSButton* editButton;
 @property(nonatomic, strong) DtnCardModel* model;
+@property(nonatomic, copy) void (^onSelect)(uint64_t token);
+@property(nonatomic, copy) void (^onEdit)(uint64_t token);
 @property(nonatomic) uint32_t surfaceRgba;
 @property(nonatomic) uint32_t accentRgba;
 @property(nonatomic) uint32_t bodyRgba;
 @property(nonatomic) BOOL increaseContrast;
+@property(nonatomic) BOOL interactionEnabled;
 - (void)applyModel:(DtnCardModel*)model
               dark:(BOOL)dark
      bodyFontPoints:(CGFloat)bodyFontPoints
   increaseContrast:(BOOL)increaseContrast
-     japaneseLocale:(BOOL)japaneseLocale;
+     japaneseLocale:(BOOL)japaneseLocale
+            selected:(BOOL)selected;
 @end
 
 @implementation DtnNoteCardView
@@ -236,6 +242,13 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     [_chipLabel setAccessibilityElement:YES];
     [_chipLabel setAccessibilityRole:NSAccessibilityStaticTextRole];
     [self addSubview:_chipLabel];
+    _editButton = [NSButton buttonWithTitle:@"Edit"
+                                     target:self
+                                     action:@selector(onEditPressed:)];
+    [_editButton setAccessibilityElement:YES];
+    [_editButton setAccessibilityRole:NSAccessibilityButtonRole];
+    [self addSubview:_editButton];
+    _interactionEnabled = YES;
     [self setAccessibilityElement:YES];
     [self setAccessibilityRole:NSAccessibilityGroupRole];
   }
@@ -243,12 +256,59 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 }
 
 - (BOOL)isOpaque { return YES; }
+- (BOOL)acceptsFirstResponder { return YES; }
+
+- (NSView*)hitTest:(NSPoint)point {
+  NSView* hit = [super hitTest:point];
+  if (hit == self.editButton || [hit isDescendantOf:self.editButton]) {
+    return hit;
+  }
+  return NSPointInRect(point, self.bounds) ? self : nil;
+}
+
+- (void)mouseDown:(NSEvent*)event {
+  (void)event;
+  if (self.interactionEnabled && self.onSelect != nil && self.model != nil) {
+    self.onSelect(self.model.token);
+  }
+}
+
+- (void)keyDown:(NSEvent*)event {
+  NSString* characters = event.charactersIgnoringModifiers;
+  if (self.interactionEnabled && self.onSelect != nil && self.model != nil &&
+      ([characters isEqualToString:@" "] ||
+       [characters isEqualToString:@"\r"])) {
+    self.onSelect(self.model.token);
+    return;
+  }
+  [super keyDown:event];
+}
+
+- (BOOL)accessibilityPerformPress {
+  if (!self.interactionEnabled || self.onSelect == nil || self.model == nil) {
+    return NO;
+  }
+  self.onSelect(self.model.token);
+  return YES;
+}
+
+- (NSArray*)accessibilityChildren {
+  return @[ self.bodyLabel, self.chipLabel, self.editButton ];
+}
+
+- (void)onEditPressed:(id)sender {
+  (void)sender;
+  if (self.interactionEnabled && self.onEdit != nil && self.model != nil) {
+    self.onEdit(self.model.token);
+  }
+}
 
 - (void)applyModel:(DtnCardModel*)model
               dark:(BOOL)dark
      bodyFontPoints:(CGFloat)bodyFontPoints
   increaseContrast:(BOOL)increaseContrast
-     japaneseLocale:(BOOL)japaneseLocale {
+     japaneseLocale:(BOOL)japaneseLocale
+            selected:(BOOL)selected {
   self.model = model;
   self.surfaceRgba = DtnSurfaceRgba(model.color, dark);
   self.accentRgba = DtnAccentRgba(model.color, dark);
@@ -256,7 +316,7 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   self.increaseContrast = increaseContrast;
   self.layer.backgroundColor = DtnColor(self.surfaceRgba).CGColor;
   self.layer.borderColor = DtnColor(self.accentRgba).CGColor;
-  self.layer.borderWidth = increaseContrast ? 2 : 1;
+  self.layer.borderWidth = selected ? 3 : (increaseContrast ? 2 : 1);
   self.layer.shadowOpacity = increaseContrast ? 0 : 0.16;
   self.layer.shadowOffset = NSMakeSize(0, 2);
   self.layer.shadowRadius = increaseContrast ? 0 : 8;
@@ -277,6 +337,8 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   }
   self.chipLabel.stringValue = chip;
   self.chipLabel.textColor = DtnColor(self.accentRgba);
+  self.editButton.title = japaneseLocale ? @"編集" : @"Edit";
+  [self.editButton setAccessibilityLabel:self.editButton.title];
   [self setNeedsDisplay:YES];
 }
 
@@ -286,7 +348,10 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   const CGFloat chipHeight = 16;
   self.chipLabel.frame = NSMakeRect(
       padding, self.bounds.size.height - padding - chipHeight,
-      fmax(0, self.bounds.size.width - 2 * padding), chipHeight);
+      fmax(0, self.bounds.size.width - 2 * padding - 64), chipHeight);
+  self.editButton.frame = NSMakeRect(
+      fmax(padding, self.bounds.size.width - padding - 58),
+      self.bounds.size.height - padding - 24, 58, 24);
   self.bodyLabel.frame = NSMakeRect(
       padding, padding, fmax(0, self.bounds.size.width - 2 * padding),
       fmax(0, self.bounds.size.height - 3 * padding - chipHeight));
@@ -662,6 +727,8 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 @property(nonatomic, strong) DtnFlippedView* toolbar;
 @property(nonatomic, strong) NSTextField* titleLabel;
 @property(nonatomic, strong) NSSegmentedControl* sectionControl;
+@property(nonatomic, strong) NSButton* createButton;
+@property(nonatomic, strong) NSButton* closeButton;
 @property(nonatomic, strong) DtnFlippedView* actionBar;
 @property(nonatomic, copy) NSArray<NSButton*>* actionButtons;
 @property(nonatomic, strong) NSSegmentedControl* cardColorControl;
@@ -726,7 +793,25 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     [_sectionControl setLabel:@"Current" forSegment:0];
     [_sectionControl setLabel:@"Detached" forSegment:1];
     _sectionControl.selectedSegment = 0;
+    [_sectionControl setEnabled:NO forSegment:1];
     [_toolbar addSubview:_sectionControl];
+    _createButton = [NSButton buttonWithTitle:@"New"
+                                       target:self
+                                       action:@selector(onNew:)];
+    [_createButton setAccessibilityElement:YES];
+    [_createButton setAccessibilityRole:NSAccessibilityButtonRole];
+    [_toolbar addSubview:_createButton];
+    _closeButton = [NSButton buttonWithTitle:@"Close"
+                                      target:self
+                                      action:@selector(onClose:)];
+    [_closeButton setAccessibilityElement:YES];
+    [_closeButton setAccessibilityRole:NSAccessibilityButtonRole];
+    [_toolbar addSubview:_closeButton];
+    [_toolbar setAccessibilityChildren:@[
+      _titleLabel, _sectionControl, _createButton, _closeButton
+    ]];
+    _badge.target = self;
+    _badge.action = @selector(onOpen:);
     _actionBar = [[DtnFlippedView alloc] initWithFrame:NSZeroRect];
     [_actionBar setAccessibilityElement:YES];
     [_actionBar setAccessibilityRole:NSAccessibilityToolbarRole];
@@ -814,6 +899,38 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     if (model.token == self.projection.selected_token) return model;
   }
   return nil;
+}
+
+- (void)onOpen:(id)sender {
+  (void)sender;
+  [self emitIntent:DTN_INTENT_OPEN body:nil color:DTN_NO_COLOR token:0u];
+}
+
+- (void)onClose:(id)sender {
+  (void)sender;
+  [self emitIntent:DTN_INTENT_CLOSE body:nil color:DTN_NO_COLOR token:0u];
+}
+
+- (void)onNew:(id)sender {
+  (void)sender;
+  [self emitIntent:DTN_INTENT_BEGIN_CREATE
+               body:nil
+              color:DTN_NO_COLOR
+              token:0u];
+}
+
+- (void)onSelectCardToken:(uint64_t)token {
+  [self emitIntent:DTN_INTENT_SELECT_CARD
+               body:nil
+              color:DTN_NO_COLOR
+              token:token];
+}
+
+- (void)onEditCardToken:(uint64_t)token {
+  [self emitIntent:DTN_INTENT_BEGIN_EDIT
+               body:nil
+              color:DTN_NO_COLOR
+              token:token];
 }
 
 - (void)resetDeleteConfirmation {
@@ -950,6 +1067,15 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 }
 
 - (void)setSemanticControlsEnabled:(BOOL)enabled {
+  self.badge.enabled = enabled;
+  const BOOL navigation_enabled =
+      enabled && self.projection.editor_mode == DTN_EDITOR_INACTIVE;
+  self.createButton.enabled = navigation_enabled;
+  self.closeButton.enabled = navigation_enabled;
+  for (DtnNoteCardView* card in self.cardViews) {
+    card.interactionEnabled = enabled;
+    card.editButton.enabled = enabled;
+  }
   if (!enabled) {
     for (NSButton* button in self.actionButtons) button.enabled = NO;
     self.cardColorControl.enabled = NO;
@@ -976,19 +1102,8 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 
 - (void)applySemanticResult:(DtnSurfaceResultV1)result
                  intentKind:(uint32_t)intentKind {
-  const BOOL awaits_projection =
-      result.disposition == DTN_RESULT_ACCEPTED &&
-      dtn_intent_kind_mutates(intentKind);
-  [self setSemanticControlsEnabled:!awaits_projection];
-  if (result.disposition == DTN_RESULT_ACCEPTED &&
-      (intentKind == DTN_INTENT_SAVE || intentKind == DTN_INTENT_CANCEL)) {
-    self.locallyClosedEditor = YES;
-    self.editor.hidden = YES;
-    self.scrollView.hidden = NO;
-    [self.editor clearDraft];
-    [self layoutPresentation];
-    return;
-  }
+  (void)intentKind;
+  [self setSemanticControlsEnabled:YES];
   if (result.disposition != DTN_RESULT_ACCEPTED) {
     if (!self.editor.hidden) [self.editor showFixedError];
   }
@@ -1019,7 +1134,15 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
                 dark:dark
        bodyFontPoints:font_points
     increaseContrast:contrast
-       japaneseLocale:japanese];
+       japaneseLocale:japanese
+              selected:cards[index].token == projection.selected_token];
+    __weak DtnNoteSurfaceView* weak_self = self;
+    card.onSelect = ^(uint64_t token) {
+      [weak_self onSelectCardToken:token];
+    };
+    card.onEdit = ^(uint64_t token) {
+      [weak_self onEditCardToken:token];
+    };
     card.layer.contentsScale = self.backingScale;
     [card setAccessibilityLabel:japanese
               ? [NSString stringWithFormat:@"ノート %lu / %u",
@@ -1053,6 +1176,10 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   [self.sectionControl setLabel:japanese ? @"現在" : @"Current" forSegment:0];
   [self.sectionControl setLabel:japanese ? @"切り離し" : @"Detached"
                      forSegment:1];
+  self.createButton.title = japanese ? @"新規" : @"New";
+  self.closeButton.title = japanese ? @"閉じる" : @"Close";
+  [self.createButton setAccessibilityLabel:self.createButton.title];
+  [self.closeButton setAccessibilityLabel:self.closeButton.title];
   self.titleLabel.textColor =
       DtnColor(dark ? 0xf5f5f5ffu : 0x1f1f1fffu);
   self.sectionControl.selectedSegment = projection.section;
@@ -1235,9 +1362,12 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
                                rail_width, fmax(0, height - top - 12));
   self.rail.hidden = !rail_visible;
   self.toolbar.frame = NSMakeRect(12, 10, fmax(0, rail_width - 24), 44);
-  self.titleLabel.frame = NSMakeRect(0, 0, 72, 20);
-  self.sectionControl.frame =
-      NSMakeRect(fmax(76, rail_width - 24 - 160), 0, 160, 24);
+  const CGFloat toolbar_width = fmax(0, rail_width - 24);
+  self.titleLabel.frame = NSMakeRect(0, 0, 44, 20);
+  self.sectionControl.frame = NSMakeRect(46, 0, fmax(80, toolbar_width - 142), 24);
+  self.createButton.frame =
+      NSMakeRect(fmax(128, toolbar_width - 92), 0, 44, 24);
+  self.closeButton.frame = NSMakeRect(fmax(174, toolbar_width - 46), 0, 46, 24);
   const BOOL editor_visible = !self.editor.hidden;
   self.actionBar.hidden = editor_visible;
   self.actionBar.frame =
@@ -1275,7 +1405,9 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
         [NSMutableArray arrayWithObject:self.cardColorControl];
     [action_children addObjectsFromArray:self.actionButtons];
     [self.actionBar setAccessibilityChildren:action_children];
-    self.sectionControl.nextKeyView = self.cardColorControl;
+    self.sectionControl.nextKeyView = self.createButton;
+    self.createButton.nextKeyView = self.closeButton;
+    self.closeButton.nextKeyView = self.cardColorControl;
     self.cardColorControl.nextKeyView = self.actionButtons.firstObject;
     for (NSUInteger index = 0; index + 1 < self.actionButtons.count; ++index) {
       self.actionButtons[index].nextKeyView = self.actionButtons[index + 1];
@@ -1301,6 +1433,18 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     [card setNeedsLayout:YES];
     card_y += card_height + 12;
   }
+  if (!editor_visible) {
+    self.closeButton.nextKeyView =
+        self.cardViews.count == 0 ? self.cardColorControl
+                                  : self.cardViews.firstObject;
+    for (NSUInteger index = 0; index < self.cardViews.count; ++index) {
+      DtnNoteCardView* card = self.cardViews[index];
+      card.nextKeyView = card.editButton;
+      card.editButton.nextKeyView =
+          index + 1 < self.cardViews.count ? self.cardViews[index + 1]
+                                           : self.cardColorControl;
+    }
+  }
   self.cardList.frame = NSMakeRect(
       0, 0, card_width, fmax(self.scrollView.bounds.size.height, card_y));
   self.accessibilityBodyCount =
@@ -1309,7 +1453,7 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   self.accessibilityNodeCount =
       rail_visible ? (editor_visible
                           ? 10u
-                          : 14u + (uint32_t)self.cardViews.count * 3u)
+                          : 16u + (uint32_t)self.cardViews.count * 4u)
                    : (badge_visible ? 1u : 0u);
   [self reconcileReadyAnnouncement];
   [self.badge setNeedsDisplay:YES];
@@ -1724,14 +1868,6 @@ int32_t dtn_surface_apply_projection(DtnSurface* surface, const uint8_t* bytes,
     return DTN_STATUS_INTERNAL;
   }
   memcpy(owned_packet, bytes, length);
-  if (surface->has_pending_intent) {
-    surface->last_event_generation =
-        surface->pending_intent.event_generation;
-    memset(&surface->pending_intent, 0, sizeof(surface->pending_intent));
-    memset(surface->pending_payload, 0, sizeof(surface->pending_payload));
-    surface->has_pending_intent = false;
-    surface->pending_intent_delivered = false;
-  }
   uint8_t* previous_packet = surface->packet;
   surface->packet = owned_packet;
   surface->packet_length = length;
@@ -1739,6 +1875,9 @@ int32_t dtn_surface_apply_projection(DtnSurface* surface, const uint8_t* bytes,
   surface->initialized = true;
   ++surface->accepted_projection_count;
   [surface->view applyProjection:parsed cards:card_models];
+  if (surface->has_pending_intent) {
+    [surface->view setSemanticControlsEnabled:NO];
+  }
   [surface->lock unlock];
   free(previous_packet);
   return DTN_STATUS_OK;
@@ -1939,12 +2078,19 @@ static bool dtn_result_reserved_zero(const DtnSurfaceResultV1* result) {
   return true;
 }
 
-static bool dtn_intent_kind_mutates(uint32_t kind) {
+static bool dtn_intent_kind_commits(uint32_t kind) {
   return kind == DTN_INTENT_SAVE || kind == DTN_INTENT_CHANGE_COLOR ||
          kind == DTN_INTENT_MOVE_EARLIER ||
          kind == DTN_INTENT_MOVE_LATER || kind == DTN_INTENT_RESOLVE ||
          kind == DTN_INTENT_REOPEN || kind == DTN_INTENT_DELETE ||
          kind == DTN_INTENT_REATTACH;
+}
+
+static bool dtn_intent_kind_projects(uint32_t kind) {
+  return dtn_intent_kind_commits(kind) || kind == DTN_INTENT_CANCEL ||
+         kind == DTN_INTENT_OPEN || kind == DTN_INTENT_CLOSE ||
+         kind == DTN_INTENT_SELECT_CARD || kind == DTN_INTENT_BEGIN_CREATE ||
+         kind == DTN_INTENT_BEGIN_EDIT;
 }
 
 int32_t dtn_surface_request_intent(DtnSurface* surface,
@@ -1959,7 +2105,7 @@ int32_t dtn_surface_request_intent(DtnSurface* surface,
   }
   if (![NSThread isMainThread]) return DTN_STATUS_WRONG_THREAD;
   if (!surface->initialized || !dtn_intent_reserved_zero(intent) ||
-      intent->kind > DTN_INTENT_COPY ||
+      intent->kind > DTN_INTENT_BEGIN_EDIT ||
       intent->event_generation == 0u || intent->event_generation > INT64_MAX ||
       intent->payload_bytes > DTN_MAX_INTENT_PAYLOAD_BYTES ||
       (intent->payload_bytes == 0u) != (payload == NULL) ||
@@ -1995,6 +2141,31 @@ int32_t dtn_surface_request_intent(DtnSurface* surface,
     if (editor_mode == DTN_EDITOR_INACTIVE ||
         intent->draft_generation == 0u ||
         intent->card_token != selected) {
+      return DTN_STATUS_INVALID_ARGUMENT;
+    }
+  } else if (intent->kind == DTN_INTENT_OPEN) {
+    if (surface->projection.visibility != DTN_VISIBILITY_COLLAPSED ||
+        editor_mode != DTN_EDITOR_INACTIVE || intent->draft_generation != 0u ||
+        intent->card_token != 0u) {
+      return DTN_STATUS_INVALID_ARGUMENT;
+    }
+  } else if (intent->kind == DTN_INTENT_CLOSE) {
+    if (surface->projection.visibility != DTN_VISIBILITY_EXPANDED ||
+        editor_mode != DTN_EDITOR_INACTIVE || intent->draft_generation != 0u ||
+        intent->card_token != 0u) {
+      return DTN_STATUS_INVALID_ARGUMENT;
+    }
+  } else if (intent->kind == DTN_INTENT_BEGIN_CREATE) {
+    if (surface->projection.visibility != DTN_VISIBILITY_EXPANDED ||
+        editor_mode != DTN_EDITOR_INACTIVE || intent->draft_generation != 0u ||
+        intent->card_token != 0u) {
+      return DTN_STATUS_INVALID_ARGUMENT;
+    }
+  } else if (intent->kind == DTN_INTENT_SELECT_CARD ||
+             intent->kind == DTN_INTENT_BEGIN_EDIT) {
+    if (surface->projection.visibility != DTN_VISIBILITY_EXPANDED ||
+        editor_mode != DTN_EDITOR_INACTIVE || intent->draft_generation != 0u ||
+        !dtn_surface_has_card_token(surface, intent->card_token)) {
       return DTN_STATUS_INVALID_ARGUMENT;
     }
   } else if (intent->kind == DTN_INTENT_EXPORT) {
@@ -2095,11 +2266,25 @@ int32_t dtn_surface_apply_result(DtnSurface* surface,
       result->draft_generation != pending.draft_generation) {
     return DTN_STATUS_STALE;
   }
-  const bool mutates = dtn_intent_kind_mutates(pending.kind);
+  const bool commits = dtn_intent_kind_commits(pending.kind);
+  const bool projects = dtn_intent_kind_projects(pending.kind);
   if (result->disposition == DTN_RESULT_ACCEPTED) {
-    if (mutates) {
+    if (commits) {
       if (result->new_store_revision <= pending.expected_store_revision ||
-          result->new_projection_generation <= pending.projection_generation) {
+          result->new_projection_generation <= pending.projection_generation ||
+          surface->projection.store_revision_low !=
+              result->new_store_revision ||
+          surface->projection.projection_generation !=
+              result->new_projection_generation) {
+        return DTN_STATUS_INVALID_ARGUMENT;
+      }
+    } else if (projects) {
+      if (result->new_store_revision != pending.expected_store_revision ||
+          result->new_projection_generation <= pending.projection_generation ||
+          surface->projection.store_revision_low !=
+              result->new_store_revision ||
+          surface->projection.projection_generation !=
+              result->new_projection_generation) {
         return DTN_STATUS_INVALID_ARGUMENT;
       }
     } else if (result->new_store_revision !=

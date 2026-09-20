@@ -19,6 +19,7 @@ typedef TerminalNoteNativeSurfaceChannelFactory =
 typedef TerminalNoteStoreLocationResolver = TerminalNoteStoreLocation Function(
   Map<String, String> environment,
 );
+typedef TerminalNoteUtcMicrosClock = int Function();
 
 enum TerminalNoteProductTopologyDisposition {
   applied,
@@ -140,6 +141,12 @@ abstract interface class TerminalNoteProductTopologyPort
 
   Future<TerminalNoteProductTopologyResult> detachSurface(PaneId paneId);
 
+  /// Drains at most the one native intent allowed for this surface.
+  ///
+  /// The application invokes this after a routed native Note interaction;
+  /// there is deliberately no idle polling timer.
+  Future<TerminalNoteProductTopologyResult> pumpSurfaceIntent(PaneId paneId);
+
   bool prepareSurfaceForHostTeardown(PaneId paneId);
 
   void updatePresentation(TerminalNoteNativePresentationState presentation);
@@ -158,11 +165,13 @@ final class TerminalNoteProductSubsystem
     required TerminalNoteAuthority authority,
     required TerminalNoteFeatureConfiguration configuration,
     required TerminalNoteNativeSurfaceChannelFactory surfaceFactory,
+    required TerminalNoteUtcMicrosClock clock,
     required Iterable<PaneId> initialPaneIds,
     required TerminalNoteNativePresentationState presentation,
   }) : _authority = authority,
        _configuration = configuration,
        _surfaceFactory = surfaceFactory,
+       _clock = clock,
        _presentation = _presentationWithFont(presentation, configuration) {
     for (final PaneId paneId in initialPaneIds) {
       _paneKinds[paneId] = TerminalNoteContextKind.standard;
@@ -181,6 +190,7 @@ final class TerminalNoteProductSubsystem
     TerminalNoteNativeCapabilityInitializer? initializeNativeCapability,
     TerminalNoteNativeSurfaceChannelFactory? surfaceFactory,
     TerminalNoteStoreLocationResolver? locationResolver,
+    TerminalNoteUtcMicrosClock? clock,
     TerminalNoteNativePresentationState presentation =
         const TerminalNoteNativePresentationState(),
   }) async {
@@ -261,6 +271,7 @@ final class TerminalNoteProductSubsystem
         authority: authority,
         configuration: configuration,
         surfaceFactory: surfaceFactory ?? _openNativeSurface,
+        clock: clock ?? () => DateTime.now().toUtc().microsecondsSinceEpoch,
         initialPaneIds: paneIds,
         presentation: presentation,
       ),
@@ -274,6 +285,7 @@ final class TerminalNoteProductSubsystem
 
   final TerminalNoteAuthority _authority;
   final TerminalNoteNativeSurfaceChannelFactory _surfaceFactory;
+  final TerminalNoteUtcMicrosClock _clock;
   final Map<PaneId, TerminalNoteContextKind> _paneKinds =
       <PaneId, TerminalNoteContextKind>{};
   final Map<PaneId, _TerminalNoteProductSurface> _surfaces =
@@ -385,6 +397,10 @@ final class TerminalNoteProductSubsystem
 
   Future<TerminalNoteProductTopologyResult> detachSurface(PaneId paneId) =>
       _serialize(() => _detachSurface(paneId));
+
+  @override
+  Future<TerminalNoteProductTopologyResult> pumpSurfaceIntent(PaneId paneId) =>
+      _serialize(() => _pumpSurfaceIntent(paneId));
 
   @override
   bool prepareSurfaceForHostTeardown(PaneId paneId) {
@@ -634,6 +650,201 @@ final class TerminalNoteProductSubsystem
     return _fromAuthoritySurface(result);
   }
 
+  Future<TerminalNoteProductTopologyResult> _pumpSurfaceIntent(
+    PaneId paneId,
+  ) async {
+    if (!_isRunning) return _unavailable();
+    final _TerminalNoteProductSurface? surface = _surfaces[paneId];
+    if (surface == null || !surface.hostAttached) {
+      return const TerminalNoteProductTopologyResult(
+        TerminalNoteProductTopologyDisposition.stale,
+      );
+    }
+    final TerminalNotesNativeIntent? intent;
+    try {
+      intent = surface.adapter.takeIntent();
+    } on Object {
+      await _retireFaultedSurface(paneId);
+      return const TerminalNoteProductTopologyResult(
+        TerminalNoteProductTopologyDisposition.nativeUnavailable,
+      );
+    }
+    if (intent == null) {
+      return TerminalNoteProductTopologyResult(
+        TerminalNoteProductTopologyDisposition.noChange,
+        surfaceGeneration: surface.surfaceGeneration,
+      );
+    }
+
+    final TerminalNoteSurfaceIntentKind? authorityKind = switch (intent.kind) {
+      TerminalNotesIntentKind.open => TerminalNoteSurfaceIntentKind.open,
+      TerminalNotesIntentKind.close => TerminalNoteSurfaceIntentKind.close,
+      TerminalNotesIntentKind.selectCard =>
+        TerminalNoteSurfaceIntentKind.selectCard,
+      TerminalNotesIntentKind.beginCreate =>
+        TerminalNoteSurfaceIntentKind.beginCreate,
+      TerminalNotesIntentKind.beginEdit =>
+        TerminalNoteSurfaceIntentKind.beginEdit,
+      TerminalNotesIntentKind.cancel =>
+        TerminalNoteSurfaceIntentKind.cancelEditor,
+      TerminalNotesIntentKind.save => TerminalNoteSurfaceIntentKind.save,
+      TerminalNotesIntentKind.changeColor =>
+        TerminalNoteSurfaceIntentKind.changeColor,
+      TerminalNotesIntentKind.moveEarlier =>
+        TerminalNoteSurfaceIntentKind.moveEarlier,
+      TerminalNotesIntentKind.moveLater =>
+        TerminalNoteSurfaceIntentKind.moveLater,
+      TerminalNotesIntentKind.resolve => TerminalNoteSurfaceIntentKind.resolve,
+      TerminalNotesIntentKind.reopen => TerminalNoteSurfaceIntentKind.reopen,
+      TerminalNotesIntentKind.delete => TerminalNoteSurfaceIntentKind.delete,
+      TerminalNotesIntentKind.reattach ||
+      TerminalNotesIntentKind.export ||
+      TerminalNotesIntentKind.copy => null,
+    };
+    if (authorityKind == null) {
+      return _completeNativeIntent(
+        paneId: paneId,
+        surface: surface,
+        intent: intent,
+        disposition: TerminalNotesResultDisposition.rejected,
+        storeRevision: intent.expectedStoreRevision,
+        projectionGeneration: intent.projectionGeneration,
+        topologyDisposition: TerminalNoteProductTopologyDisposition.rejected,
+      );
+    }
+
+    final bool durable = switch (authorityKind) {
+      TerminalNoteSurfaceIntentKind.save ||
+      TerminalNoteSurfaceIntentKind.changeColor ||
+      TerminalNoteSurfaceIntentKind.moveEarlier ||
+      TerminalNoteSurfaceIntentKind.moveLater ||
+      TerminalNoteSurfaceIntentKind.resolve ||
+      TerminalNoteSurfaceIntentKind.reopen ||
+      TerminalNoteSurfaceIntentKind.delete => true,
+      _ => false,
+    };
+    final int? timestamp = durable ? _clock() : null;
+    if (timestamp != null &&
+        (timestamp < 0 ||
+            timestamp > TerminalNoteAuthorityLimits.maximumSequence)) {
+      return _completeNativeIntent(
+        paneId: paneId,
+        surface: surface,
+        intent: intent,
+        disposition: TerminalNotesResultDisposition.unavailable,
+        storeRevision: intent.expectedStoreRevision,
+        projectionGeneration: intent.projectionGeneration,
+        topologyDisposition: TerminalNoteProductTopologyDisposition.unavailable,
+      );
+    }
+
+    final TerminalNoteSurfaceIntentResult authorityResult;
+    try {
+      authorityResult = await _authority.submitSurfaceIntent(
+        sequence: _authority.nextSequence(),
+        paneId: paneId,
+        surfaceGeneration: intent.surfaceGeneration,
+        projectionGeneration: intent.projectionGeneration,
+        eventGeneration: intent.eventGeneration,
+        draftGeneration: intent.draftGeneration,
+        cardToken: intent.cardToken == null
+            ? null
+            : TerminalNoteCardToken(intent.cardToken!),
+        expectedStoreRevision: intent.expectedStoreRevision,
+        kind: authorityKind,
+        updatedAtUtcMicros: timestamp,
+        body: intent.body,
+        color: _authorityColor(intent.color),
+      );
+    } on Object {
+      return _completeNativeIntent(
+        paneId: paneId,
+        surface: surface,
+        intent: intent,
+        disposition: TerminalNotesResultDisposition.unavailable,
+        storeRevision: intent.expectedStoreRevision,
+        projectionGeneration: intent.projectionGeneration,
+        topologyDisposition: TerminalNoteProductTopologyDisposition.unavailable,
+      );
+    }
+    final bool accepted =
+        authorityResult.isAccepted && authorityResult.projection != null;
+    final TerminalNotesResultDisposition nativeDisposition = accepted
+        ? TerminalNotesResultDisposition.accepted
+        : switch (authorityResult.disposition) {
+            TerminalNoteAuthorityMutationDisposition.busy =>
+              TerminalNotesResultDisposition.busy,
+            TerminalNoteAuthorityMutationDisposition.unavailable ||
+            TerminalNoteAuthorityMutationDisposition.failed =>
+              TerminalNotesResultDisposition.unavailable,
+            TerminalNoteAuthorityMutationDisposition.rejected
+                when authorityKind == TerminalNoteSurfaceIntentKind.save &&
+                    authorityResult.mutationFailure ==
+                        TerminalNoteMutationFailure.revisionConflict =>
+              TerminalNotesResultDisposition.conflict,
+            _ => TerminalNotesResultDisposition.rejected,
+          };
+    final TerminalNoteSurfaceProjection? projection = accepted
+        ? authorityResult.projection
+        : null;
+    return _completeNativeIntent(
+      paneId: paneId,
+      surface: surface,
+      intent: intent,
+      disposition: nativeDisposition,
+      storeRevision: projection?.storeRevision ?? intent.expectedStoreRevision,
+      projectionGeneration:
+          projection?.projectionGeneration ?? intent.projectionGeneration,
+      topologyDisposition: _fromSurfaceIntent(authorityResult),
+    );
+  }
+
+  Future<TerminalNoteProductTopologyResult> _completeNativeIntent({
+    required PaneId paneId,
+    required _TerminalNoteProductSurface surface,
+    required TerminalNotesNativeIntent intent,
+    required TerminalNotesResultDisposition disposition,
+    required BigInt storeRevision,
+    required int projectionGeneration,
+    required TerminalNoteProductTopologyDisposition topologyDisposition,
+  }) async {
+    try {
+      final TerminalNotesResultApplyDisposition applied = surface.adapter
+          .applyResult(
+            TerminalNotesNativeResult(
+              intent: intent,
+              disposition: disposition,
+              newStoreRevision: storeRevision,
+              newProjectionGeneration: projectionGeneration,
+            ),
+          );
+      if (applied != TerminalNotesResultApplyDisposition.accepted) {
+        await _retireFaultedSurface(paneId);
+        return const TerminalNoteProductTopologyResult(
+          TerminalNoteProductTopologyDisposition.nativeUnavailable,
+        );
+      }
+    } on Object {
+      await _retireFaultedSurface(paneId);
+      return const TerminalNoteProductTopologyResult(
+        TerminalNoteProductTopologyDisposition.nativeUnavailable,
+      );
+    }
+    return TerminalNoteProductTopologyResult(
+      topologyDisposition,
+      surfaceGeneration: surface.surfaceGeneration,
+    );
+  }
+
+  Future<void> _retireFaultedSurface(PaneId paneId) async {
+    try {
+      await _detachSurface(paneId);
+    } on Object {
+      final _TerminalNoteProductSurface? surface = _surfaces.remove(paneId);
+      await surface?.adapter.dispose();
+    }
+  }
+
   Future<TerminalNoteProductTopologyResult?> _hideOrRetireDetachedSurface(
     PaneId paneId,
     _TerminalNoteProductSurface surface,
@@ -776,6 +987,38 @@ final class TerminalNoteProductSubsystem
     TerminalNoteSurfaceDisposition.unavailable =>
       TerminalNoteProductTopologyDisposition.unavailable,
   }, surfaceGeneration: result.projection?.surfaceGeneration);
+
+  static TerminalNoteProductTopologyDisposition _fromSurfaceIntent(
+    TerminalNoteSurfaceIntentResult result,
+  ) => switch (result.disposition) {
+    TerminalNoteAuthorityMutationDisposition.committed ||
+    TerminalNoteAuthorityMutationDisposition.runtimeApplied =>
+      TerminalNoteProductTopologyDisposition.applied,
+    TerminalNoteAuthorityMutationDisposition.noChange =>
+      TerminalNoteProductTopologyDisposition.noChange,
+    TerminalNoteAuthorityMutationDisposition.duplicate =>
+      TerminalNoteProductTopologyDisposition.duplicate,
+    TerminalNoteAuthorityMutationDisposition.stale =>
+      TerminalNoteProductTopologyDisposition.stale,
+    TerminalNoteAuthorityMutationDisposition.busy =>
+      TerminalNoteProductTopologyDisposition.busy,
+    TerminalNoteAuthorityMutationDisposition.rejected =>
+      TerminalNoteProductTopologyDisposition.rejected,
+    TerminalNoteAuthorityMutationDisposition.unavailable ||
+    TerminalNoteAuthorityMutationDisposition.failed =>
+      TerminalNoteProductTopologyDisposition.unavailable,
+  };
+
+  static NoteColorKey? _authorityColor(TerminalNotesColor? color) =>
+      switch (color) {
+        null => null,
+        TerminalNotesColor.neutral => NoteColorKey.neutral,
+        TerminalNotesColor.yellow => NoteColorKey.yellow,
+        TerminalNotesColor.blue => NoteColorKey.blue,
+        TerminalNotesColor.green => NoteColorKey.green,
+        TerminalNotesColor.pink => NoteColorKey.pink,
+        TerminalNotesColor.purple => NoteColorKey.purple,
+      };
 
   static TerminalNoteProductTopologyResult _fromNativeAttachment(
     TerminalNotesAttachDisposition disposition,

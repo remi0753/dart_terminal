@@ -356,6 +356,14 @@ final class _FakeNoteTopologyRuntime
   }
 
   @override
+  Future<TerminalNoteProductTopologyResult> pumpSurfaceIntent(
+    PaneId paneId,
+  ) async => TerminalNoteProductTopologyResult(
+    TerminalNoteProductTopologyDisposition.noChange,
+    surfaceGeneration: surfaces[paneId],
+  );
+
+  @override
   bool prepareSurfaceForHostTeardown(PaneId paneId) {
     prepared.add(paneId);
     return true;

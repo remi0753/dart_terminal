@@ -27,6 +27,11 @@ Future<void> _testStrictProjectionConversionAndLastGood() async {
   final TerminalNoteSurfaceProjection expanded = _projection(
     generation: 2,
     visibility: TerminalNoteSurfaceVisibility.expanded,
+    selectedToken: TerminalNoteCardToken(31),
+    editorMode: TerminalNoteEditorMode.editing,
+    draftGeneration: 8,
+    pageStart: 1,
+    totalCount: 3,
   );
   _expect(adapter.applyProjection(expanded), 'expanded projection accepted');
   final TerminalNotesProjection native = channel.projections.single;
@@ -53,8 +58,12 @@ Future<void> _testStrictProjectionConversionAndLastGood() async {
         native.systemBadgeVisible &&
         native.locale == TerminalNotesLocale.japanese &&
         native.bodyFontMilliPoints == 24000 &&
-        native.selectedToken == null &&
-        native.editorMode == TerminalNotesEditorMode.inactive,
+        native.section == TerminalNotesCollectionSection.current &&
+        native.pageStart == 1 &&
+        native.totalCount == 3 &&
+        native.selectedToken == 31 &&
+        native.editorMode == TerminalNotesEditorMode.editing &&
+        native.draftGeneration == 8,
     'adapter maps the bounded authority projection without persistent IDs',
   );
 
@@ -130,6 +139,11 @@ Future<void> _testNativeIntentResultAndTeardown() async {
 TerminalNoteSurfaceProjection _projection({
   required int generation,
   required TerminalNoteSurfaceVisibility visibility,
+  TerminalNoteCardToken? selectedToken,
+  TerminalNoteEditorMode editorMode = TerminalNoteEditorMode.inactive,
+  int draftGeneration = 0,
+  int pageStart = 0,
+  int? totalCount,
 }) => TerminalNoteSurfaceProjection(
   paneId: const PaneId(7),
   surfaceGeneration: 11,
@@ -139,6 +153,11 @@ TerminalNoteSurfaceProjection _projection({
   presentationEligible: visibility == TerminalNoteSurfaceVisibility.expanded,
   activeCount: 1,
   dueCount: 1,
+  pageStart: pageStart,
+  totalCount: totalCount,
+  selectedToken: selectedToken,
+  editorMode: editorMode,
+  draftGeneration: draftGeneration,
   cards: visibility == TerminalNoteSurfaceVisibility.collapsed
       ? const <TerminalNoteCardProjection>[]
       : <TerminalNoteCardProjection>[

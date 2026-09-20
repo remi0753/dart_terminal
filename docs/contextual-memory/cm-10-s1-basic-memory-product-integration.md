@@ -451,3 +451,71 @@ explicit exportをdurable authorityに接続する。Default-offではentry/surf
 - Native intent enumにはnavigation intentがまだなく、product adapterも新しいsection/selection/editor/draft projectionをまだ転送しない。
   次のROADMAP項目「native navigation ABIとproduct intent pump」で接続する。
 - Detached collection/reattach、copy/exportは後続の専用subtaskまでauthority intentへ追加しない。
+
+## 2026-09-21: native navigation ABIとproduct intent pump着手
+
+- ROADMAPを再確認し、先頭未完了が「native navigation ABIとproduct intent pumpを実装する」であることを確認した。
+- 目的はbadge/rail/card/New/Edit操作をgeneration-bound semantic intentとしてnativeから取り出し、product subsystemのlazy pumpで
+  high-level authorityへ一度だけ渡し、projection/resultを正しい順序で同じnative surfaceへ返すことである。
+- 範囲はproduct-owned Notes native ABI/facade、projection adapter、surfaceごとのbounded pump、clock injection、fault/teardownである。
+  Applicationのwindow interaction owner transferとfocus policyは次のsubtask、Detached/export/action catalogは後続taskまで対象外とする。
+- 完了条件はnavigationを含むone-outstanding、accepted durable intentのcommit→projection→result順、runtime intentのprojection/result整合、
+  conflict/busy/faultでdraft/selection保持、polling ownerのlazy start/確実なstop、persistent ID/content-free diagnostics、
+  native/product focused gateと`dart_appkit`変更0である。
+- CM-09時点のnative-local navigation方針は、authority-owned selection/draft generationとの二重ownerになるためCM-10では採用しない。
+  Native controlはfixed navigation intentだけを発行し、accepted authority projectionを唯一の状態更新にする。
+
+## 2026-09-21: native navigation ABIとproduct intent pump完了
+
+### 実装と判断
+
+- ABI v1の既存値を変更せず、末尾へ`Open`、`Close`、`Select card`、`Begin create`、`Begin edit`を固定値11〜15で追加した。
+  Intent/result struct、version、最大payloadは変更していない。Open/Close/Newはtoken 0、Select/Editは現在projectionに存在するephemeral
+  card tokenだけを受理し、inactive editor・visibility・draft generationをnative入口でstrict検証する。
+- Native railへNew/Close、各付箋cardへ選択領域とEditを追加した。選択中cardはaccent 3 px borderで示し、既存の色面、shadow、status chipを
+  維持する。Card selectionはpointerだけでなくReturn/Space、VoiceOver pressに対応し、New/Close/card/Editを決定的なkeyboard/accessibility
+  順へ含めた。Detached segmentとReattachは後続taskまで無効のままである。
+- Nativeはnavigation、Cancel、durable mutationのaccepted resultを、先に適用済みのauthority projectionと完全一致する場合だけ受理する。
+  Durable intentはstore revisionとprojection generationの双方が前進し、runtime navigationはstore revision同一でprojection generationだけが
+  前進する。Copy/exportは非projection actionとして旧generationのまま完了できる。Projection適用中もone outstanding intentを保持し、
+  resultまでsemantic controlを再有効化しない。
+- Product adapterはauthority projectionのsection/page/total/selected token/editor/draft generationをnativeへ転送する。以前のCurrent/先頭page/
+  selectionなし/inactive固定値は廃止したが、persistent Note/Context IDは追加していない。
+- `TerminalNoteProductSubsystem.pumpSurfaceIntent`を追加した。Surface topologyと同じserial tailで一回につき最大1 intentだけ取り出し、fixed
+  semantic kindを`submitSurfaceIntent`へ渡す。Clockはdurable mutationだけにinjectし、Open/Close/Select/Create/Edit/Cancelは時刻を持たない。
+  Authorityがnative adapterへ新projectionを同期適用した後だけresultを返すため、commit→projection→result順が崩れない。
+- Idle timer、periodic poll、continuous frame hookは作らなかった。Native interaction routing後にapplicationが明示的にpumpするevent-driven境界とし、
+  disabled/collapsed idleのpolling ownerを0にした。Application event接続は次のROADMAP項目で実装する。
+- Reattach/copy/exportは後続taskの責務なので、このpumpでは固定`rejected` resultを返し、projection/store revisionを進めない。Native result適用が
+  reject/throwした場合はauthority surfaceをdetachしadapterをdisposeして、片側だけのownerや再送不可能なpending intentを残さない。
+- `dart_appkit`は変更していない。Dart Terminal固有のNote ABI、GUI、pump、clock、fault処理はroot productと
+  `dart_terminal_notes_macos`だけに置いた。
+
+### 判明事項と失敗した試行
+
+- 最初のnative回帰は旧testがaccepted resultをprojectionより先に適用していたため、先頭のSaveがpendingのまま残り後続actionが連鎖失敗した。
+  Testをprojection-firstへ直し、result先行が`INVALID_ARGUMENT`になること自体も固定した。
+- ProductのEdit後Cancel testで、Save時のcard tokenを再利用するとauthorityが拒否した。Ephemeral tokenはprojectionごとに再発行される設計どおりで、
+  各操作は直前projectionのselected tokenを使うようにした。これによりpersistent identityをproductへ持ち出さずgeneration bindingを維持できる。
+- Sandbox内の直接`dart analyze`は解析自体がissue 0でもuser telemetry session fileのmtime更新を拒否され終了code 1になった。権限付きの同一commandと
+  `make test`内の正規analyzeでissue 0を確認した。製品codeの失敗ではない。
+
+### 検証
+
+- `make terminal-notes-dart-test terminal-notes-native-test terminal-notes-capability-audit`: pass。ABI値11〜15、実AppKit badge/New/card/Edit/
+  Cancel/Close、pointer/keyboard/accessibility、one-outstanding、projection-first result、rejected action recovery、owner 0を確認した。
+  Capability auditは`exports=17 dart_appkit=generic`。
+- Focused product testはreal worker/filesystem上で、idle polling 0、Create/Save/Edit/Cancel、2 cardのEarlier/Later、色変更、Resolve/Reopen、Delete、
+  未接続Copyのstate不変reject、native result fault時のsurface retirement、shutdown owner baselineを確認した。各accepted mutationは
+  `take,projection,result`順である。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: pass。376 filesのformat変更0、root/package analyze issue 0、native host/capability、
+  Note store実filesystem、security stress、privacy/distribution/update/symbolを含む全回帰が`dart_terminal tests passed`で完了した。
+- `make RUNTIME_ARCH=arm64 developer-jit-audit release-aot-audit`: 両runtimeともpass。`capabilities=3`、5 build assets、Notes dylibを含む
+  exact bundleを受理した。
+- `git diff --check`: pass。隣接`dart_appkit`は着手前から存在する3 fileだけで、本subtaskによる追加変更は0。
+
+### 次への境界
+
+- 次の先頭未完了は「applicationのrail/editor interaction lifecycleへ接続する」。Native Note操作がwindow interaction authorityを経由した直後に
+  対象paneのpumpを一度だけ呼び、rail/editor focusとterminal input suppression、dirty close admissionをapplication ownerへ接続する。
+- Detached collection/reattach、copy/export、hidden create/open actionとmenu/palette localizationは順番どおり後続taskで行う。
