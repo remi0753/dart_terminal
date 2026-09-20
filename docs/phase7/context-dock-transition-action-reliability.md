@@ -138,3 +138,48 @@ native presentation policyが別々にretained stateを管理している。複�
 - 最初のリファクタリング後は、非投影中にidle pane stateをcancelする際にもDirectory invalidation callbackを送ったため、
   tab fixtureの診断countが1増えた。idle stateにはforeground retention authorityがなく、Directory controller自身が現在projectionを
   安全にcancelするため、destructive callbackはsession／PGID不一致とwindow teardownだけへ戻した。
+
+### 2026-09-20 — refreshと設定keybindの原因
+
+- `TerminalContextDockKeyController`はNavigatorがfirst responderの時、設定engineを解決していたが、application actionを
+  dispatchするのはContext Dock境界移動の2 actionだけだった。それ以外の明示設定actionは最後の`consumed`へ落ちるため、
+  `view.refresh-directory-navigator` keybindはterminal入力中だけ動き、Navigator入力中は無反応になっていた。
+- 全application actionを無条件にdispatchすると、built-inのCommand+矢印がpane focusへ変わり、Navigatorのtree開閉を壊す。
+  resolver結果へ`defaults`／`overrides`のoriginを追加し、Navigatorでは明示overrideを全てshared dispatcherへ渡しつつ、
+  Context Dock専用の既定境界移動だけを従来どおり許可する。built-in Command+Left／Rightはtree intentを維持する。
+- terminal pane側の`TerminalKeyEventRouter`はapplication actionのkey-downで一度dispatchする一方、key-upを消費するのが
+  Context Dock境界移動だけだった。Kitty release reportingが有効なら、refreshを含む別application actionのrelease byteが
+  foreground PTYへ流れる可能性があった。application action bindingは種類にかかわらずreleaseを消費するよう統一した。
+- manual refreshのcontroller自体はwindow／pane IDを受け取り、Directory projectionと同一paneであることを検証していた。
+  不安定さの主因はpath identityではなく、上記key routingと複合遷移後のretention喪失だった。
+
+### 2026-09-20 — pane-bound refresh検証
+
+- 複合matrixを、同じ`/root`を持つforeground pane A／Bのmanual refreshまで拡張した。filesystemへ新しいfileを追加し、
+  Aをshared actionからrefreshするとAだけが新fileを表示し、非投影のBは古い独立snapshotを保つ。
+- Bへ戻してDirectory Navigatorを明示表示した時点では新fileがないことを確認し、設定相当のControl+R →
+  `view.refresh-directory-navigator`をNavigator first responderからdispatchする。root listは一回だけ増え、Bだけが新fileを
+  表示し、Navigator ownershipは変化しない。
+- Process Inspectorへ戻るとrefresh actionは即時disabledになり、明示Directory overrideがないbackground filesystem観測を
+  開始しない。unavailableなconfigured keybindもNavigatorで消費され、PTY writeへfall throughしない。
+- keybinding engineのoriginは、通常のterminal router動作を変更しないread-only metadataである。ordered config override、
+  unbind、passthrough、native shortcut優先の既存contractは維持する。
+
+### 2026-09-20 — 第二subtask検証
+
+- `dart format`（変更した6 Dart source／test）: 成功。
+- `CI=true DART_SUPPRESS_ANALYTICS=true dart run test/terminal_key_binding_test.dart`: 成功。
+  default／override originとapplication action identityを確認した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true dart run test/terminal_context_dock_test.dart`: 成功。
+  Navigator-owned configured refresh、unavailable消費、同一cwd A／Bの独立snapshotとexactly-once refreshを確認した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true dart run test/terminal_config_test.dart`: 成功。全stable application action IDを含む
+  keybind parser target matrixで`view.refresh-directory-navigator`を受理した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true dart run test/terminal_product_configuration_test.dart`: 成功。
+- `CI=true DART_SUPPRESS_ANALYTICS=true dart run test/run_tests.dart`: 最終再実行は成功し、`dart_terminal tests passed`。
+  Kitty event-type modeでapplication actionのdownを一回dispatchし、releaseをignored、PTY write 0とする回帰を含む。
+- `CI=true DART_SUPPRESS_ANALYTICS=true dart analyze`: 成功、`No issues found!`。
+- `make phase7-appkit-acceptance terminal-compatibility-regression-coverage ghostty-p0-p1-gap-inventory
+  release-candidate-daily-use-matrix`: 成功し、第一・第二subtaskのsource hashへ生成証跡を更新した。
+- 初回`test/run_tests.dart`はsource変更後のgap inventory staleを意図どおり検出した。正規generatorで全関連証跡を更新後、
+  同じsuiteを再実行して成功した。
+- `git diff --check`: 成功。

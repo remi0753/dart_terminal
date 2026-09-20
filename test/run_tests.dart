@@ -607,6 +607,11 @@ Future<void> _testModeAwareAppKitKeyRoute() async {
     ),
     onApplicationAction: applicationActions.add,
   );
+  session.keyboardModes = const TerminalKeyboardModes(
+    kittyKeyboardFlags:
+        TerminalKeyboardModes.kittyReportEventTypes |
+        TerminalKeyboardModes.kittyReportAllKeys,
+  );
   final int writesBeforeApplicationAction = session.inputWrites.length;
   final TerminalKeyRouteResult applicationActionResult = applicationActionRouter
       .handleKeyDown(
@@ -618,6 +623,17 @@ Future<void> _testModeAwareAppKitKeyRoute() async {
         ),
         pane,
       );
+  final TerminalKeyRouteResult applicationActionRelease =
+      applicationActionRouter.handleKeyEvent(
+        _appKitKeyEvent(
+          keyCode: 40,
+          characters: '',
+          unmodifiedCharacters: 'k',
+          modifierBits: ModifierKeys.shiftBit | ModifierKeys.controlBit,
+          kind: AppKitKeyEventKind.up,
+        ),
+        pane,
+      );
   _expect(
     applicationActionResult.disposition == TerminalKeyRouteDisposition.action &&
         applicationActionResult.action == null &&
@@ -625,8 +641,13 @@ Future<void> _testModeAwareAppKitKeyRoute() async {
             TerminalActionId.focusNextPane &&
         applicationActions.length == 1 &&
         applicationActions.single == TerminalActionId.focusNextPane &&
+        applicationActionRelease.disposition ==
+            TerminalKeyRouteDisposition.ignored &&
         session.inputWrites.length == writesBeforeApplicationAction,
-    'configured application action routes once without a PTY write',
+    'configured application action consumes down/release once without Kitty PTY bytes',
+  );
+  session.keyboardModes = const TerminalKeyboardModes(
+    applicationCursorKeys: true,
   );
 
   final TerminalConfigSnapshot liveInitialSnapshot = TerminalConfigLoader()

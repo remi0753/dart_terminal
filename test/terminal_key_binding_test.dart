@@ -46,7 +46,15 @@ void _testOrderedConfigurationOverrides() {
         engine
                 .resolve(_event(TerminalPhysicalKey.keyK, control: true))
                 .action ==
-            TerminalKeyBindingAction.sendSuspendSignal,
+            TerminalKeyBindingAction.sendSuspendSignal &&
+        engine
+                .resolve(_event(TerminalPhysicalKey.keyK, control: true))
+                .origin ==
+            TerminalKeyBindingResolutionOrigin.overrides &&
+        engine
+                .resolve(_event(TerminalPhysicalKey.arrowLeft, command: true))
+                .origin ==
+            TerminalKeyBindingResolutionOrigin.defaults,
     'ordered config declarations replace earlier chords over the default',
   );
 }
@@ -336,7 +344,9 @@ void _testOverrideUnbindAndPassthrough() {
     applicationResolution.kind == TerminalKeyBindingResolutionKind.action &&
         applicationResolution.action == null &&
         applicationResolution.applicationAction ==
-            TerminalActionId.focusNextPane,
+            TerminalActionId.focusNextPane &&
+        applicationResolution.origin ==
+            TerminalKeyBindingResolutionOrigin.overrides,
     'application action targets retain the shared catalog identity',
   );
 }

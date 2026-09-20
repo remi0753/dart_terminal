@@ -1410,10 +1410,10 @@ Future<void> _testCompositePresentationTransitionMatrix() async {
   final Set<TerminalWindowId> presentedWindows = <TerminalWindowId>{
     firstWindow.id,
   };
+  final _ContextDockDirectoryFileSystem files =
+      _ContextDockDirectoryFileSystem();
   final TerminalDirectorySnapshotService snapshots =
-      TerminalDirectorySnapshotService(
-        fileSystem: _ContextDockDirectoryFileSystem(),
-      );
+      TerminalDirectorySnapshotService(fileSystem: files);
   const TerminalWorkingDirectoryResolver workingDirectoryResolver =
       TerminalWorkingDirectoryResolver();
   late final TerminalContextDockDirectoryController directory;
@@ -1478,6 +1478,35 @@ Future<void> _testCompositePresentationTransitionMatrix() async {
       .singleWhere(
         (TerminalActionRegistration registration) =>
             registration.id == TerminalActionId.toggleContextDockContent,
+      );
+  final TerminalContextDockActionCoordinator actions =
+      TerminalContextDockActionCoordinator(
+        applicationState: harness.state,
+        dockState: dock,
+        focusNavigator: (_) {},
+        focusTerminal: (_) {},
+        canRefreshDirectory: directory.canRefreshWindow,
+        refreshDirectory: directory.refreshWindow,
+      );
+  final TerminalActionDispatcher dispatcher = TerminalActionDispatcher(
+    catalog: TerminalActionCatalog.standard(),
+    registrations: actions.registrations(),
+  );
+  final TerminalContextDockKeyController keys =
+      TerminalContextDockKeyController(
+        state: dock,
+        dispatcher: dispatcher,
+        keyBindings: () => TerminalKeyBindingEngine.standard(
+          overrides: const <TerminalKeyBindingDefinition>[
+            TerminalKeyBindingDefinition.applicationAction(
+              chord: TerminalKeyBindingChord(
+                physicalKey: TerminalPhysicalKey.keyR,
+                control: true,
+              ),
+              applicationAction: TerminalActionId.refreshDirectoryNavigator,
+            ),
+          ],
+        ),
       );
 
   Future<void> reconcile({bool activateForeground = false}) async {
@@ -1604,6 +1633,67 @@ Future<void> _testCompositePresentationTransitionMatrix() async {
     'second same-directory process pane round trip',
   );
 
+  harness.state.focusPane(firstTab, firstPane);
+  await reconcile(activateForeground: true);
+  contentToggle.handler();
+  directory.synchronize();
+  await _waitUntil(() => directory.activeOperationCount == 0);
+  files.includeCreatedRootFile = true;
+  final int firstPaneRefreshBaseline = files.listCount('/root');
+  await _expectExecuted(dispatcher, TerminalActionId.refreshDirectoryNavigator);
+  await _waitUntil(() => directory.activeOperationCount == 0);
+  _expect(
+    files.listCount('/root') == firstPaneRefreshBaseline + 1 &&
+        directory
+            .snapshotForWindow(firstWindow.id)!
+            .rows
+            .any((row) => row.entry.path == '/root/created.txt') &&
+        dock.snapshotForWindow(firstWindow.id)!.navigatorOwnsInput,
+    'manual action refreshes exactly the displayed first pane without changing input ownership',
+  );
+  contentToggle.handler();
+  _expect(
+    !dispatcher.snapshot(TerminalActionId.refreshDirectoryNavigator).isEnabled,
+    'Process Inspector keeps refresh unavailable until Directory is explicitly shown',
+  );
+
+  harness.state.focusPane(firstTab, secondPane.id);
+  await reconcile(activateForeground: true);
+  contentToggle.handler();
+  directory.synchronize();
+  await _waitUntil(() => directory.activeOperationCount == 0);
+  _expect(
+    !directory
+        .snapshotForWindow(firstWindow.id)!
+        .rows
+        .any((row) => row.entry.path == '/root/created.txt'),
+    'same-directory second pane keeps its independent pre-refresh snapshot',
+  );
+  final int secondPaneRefreshBaseline = files.listCount('/root');
+  final TerminalContextDockKeyResult keyRefresh = await keys.handle(
+    firstWindow.id,
+    _key(keyCode: 15, modifiers: const ModifierKeys(ModifierKeys.controlBit)),
+  );
+  await _waitUntil(() => directory.activeOperationCount == 0);
+  _expect(
+    keyRefresh.disposition ==
+            TerminalContextDockKeyDisposition.applicationActionDispatched &&
+        keyRefresh.dispatchResult?.disposition ==
+            TerminalActionDispatchDisposition.executed &&
+        files.listCount('/root') == secondPaneRefreshBaseline + 1 &&
+        directory
+            .snapshotForWindow(firstWindow.id)!
+            .rows
+            .any((row) => row.entry.path == '/root/created.txt') &&
+        dock.snapshotForWindow(firstWindow.id)!.navigatorOwnsInput,
+    'configured keybind refreshes exactly the displayed second pane with zero focus change',
+  );
+  contentToggle.handler();
+  _expect(
+    !dispatcher.snapshot(TerminalActionId.refreshDirectoryNavigator).isEnabled,
+    'returning to Process Inspector stops manual filesystem refresh authority',
+  );
+
   dock.toggleVisibility(firstWindow.id, secondPane.id);
   await reconcile();
   _expect(
@@ -1638,6 +1728,7 @@ Future<void> _testCompositePresentationTransitionMatrix() async {
 
   process.dispose();
   directory.dispose();
+  actions.dispose();
   dock.dispose();
   await harness.state.shutdown();
 }
@@ -3157,12 +3248,19 @@ Future<void> _testNavigatorKeyRoutingNeverFallsThrough() async {
   final TerminalContextDockState dock = TerminalContextDockState();
   final List<TerminalContextDockFocusRequest> terminalFocus =
       <TerminalContextDockFocusRequest>[];
+  var refreshAvailable = true;
+  var refreshCount = 0;
   final TerminalContextDockActionCoordinator coordinator =
       TerminalContextDockActionCoordinator(
         applicationState: harness.state,
         dockState: dock,
         focusNavigator: (_) {},
         focusTerminal: terminalFocus.add,
+        canRefreshDirectory: (_, _) => refreshAvailable,
+        refreshDirectory: (_, _) {
+          refreshCount++;
+          return true;
+        },
       );
   final Completer<void> busyGate = Completer<void>();
   var holdCopy = false;
@@ -3186,6 +3284,17 @@ Future<void> _testNavigatorKeyRoutingNeverFallsThrough() async {
       TerminalContextDockKeyController(
         state: dock,
         dispatcher: dispatcher,
+        keyBindings: () => TerminalKeyBindingEngine.standard(
+          overrides: const <TerminalKeyBindingDefinition>[
+            TerminalKeyBindingDefinition.applicationAction(
+              chord: TerminalKeyBindingChord(
+                physicalKey: TerminalPhysicalKey.keyR,
+                control: true,
+              ),
+              applicationAction: TerminalActionId.refreshDirectoryNavigator,
+            ),
+          ],
+        ),
         onChanged: () => changed++,
       );
   var terminalWriteCount = 0;
@@ -3205,6 +3314,31 @@ Future<void> _testNavigatorKeyRoutingNeverFallsThrough() async {
         dock.snapshotForWindow(window.id)!.pane.query == 'ab',
     'printable input updates only the navigator query',
   );
+  final TerminalContextDockKeyResult configuredRefresh = await route(
+    _key(keyCode: 15, modifiers: const ModifierKeys(ModifierKeys.controlBit)),
+  );
+  _expect(
+    configuredRefresh.disposition ==
+            TerminalContextDockKeyDisposition.applicationActionDispatched &&
+        configuredRefresh.dispatchResult?.disposition ==
+            TerminalActionDispatchDisposition.executed &&
+        refreshCount == 1 &&
+        terminalWriteCount == 0 &&
+        dock.snapshotForWindow(window.id)!.navigatorOwnsInput,
+    'configured refresh keybind dispatches once while Navigator owns input',
+  );
+  refreshAvailable = false;
+  final TerminalContextDockKeyResult unavailableRefresh = await route(
+    _key(keyCode: 15, modifiers: const ModifierKeys(ModifierKeys.controlBit)),
+  );
+  _expect(
+    unavailableRefresh.dispatchResult?.disposition ==
+            TerminalActionDispatchDisposition.unavailable &&
+        refreshCount == 1 &&
+        terminalWriteCount == 0,
+    'unavailable configured refresh remains consumed without terminal bytes',
+  );
+  refreshAvailable = true;
   await route(_key(keyCode: 51));
   _expect(
     dock.snapshotForWindow(window.id)!.pane.query == 'a',

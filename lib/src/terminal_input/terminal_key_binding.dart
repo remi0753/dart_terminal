@@ -266,11 +266,18 @@ final class TerminalKeyBindingLimitException implements Exception {
 
 enum TerminalKeyBindingResolutionKind { noMatch, action, passthrough }
 
+/// Identifies whether a match came from built-in defaults or user overrides.
+///
+/// Context-owned editors use this to preserve their standard navigation keys
+/// while still honoring every explicitly configured application action.
+enum TerminalKeyBindingResolutionOrigin { none, defaults, overrides }
+
 final class TerminalKeyBindingResolution {
   const TerminalKeyBindingResolution._(
     this.kind,
     this.action,
     this.applicationAction,
+    this.origin,
   );
 
   static const TerminalKeyBindingResolution noMatch =
@@ -278,12 +285,14 @@ final class TerminalKeyBindingResolution {
         TerminalKeyBindingResolutionKind.noMatch,
         null,
         null,
+        TerminalKeyBindingResolutionOrigin.none,
       );
   static const TerminalKeyBindingResolution passthrough =
       TerminalKeyBindingResolution._(
         TerminalKeyBindingResolutionKind.passthrough,
         null,
         null,
+        TerminalKeyBindingResolutionOrigin.none,
       );
 
   factory TerminalKeyBindingResolution.action(
@@ -292,6 +301,7 @@ final class TerminalKeyBindingResolution {
     TerminalKeyBindingResolutionKind.action,
     action,
     null,
+    TerminalKeyBindingResolutionOrigin.none,
   );
 
   factory TerminalKeyBindingResolution.applicationAction(
@@ -300,11 +310,13 @@ final class TerminalKeyBindingResolution {
     TerminalKeyBindingResolutionKind.action,
     null,
     action,
+    TerminalKeyBindingResolutionOrigin.none,
   );
 
   final TerminalKeyBindingResolutionKind kind;
   final TerminalKeyBindingAction? action;
   final TerminalActionId? applicationAction;
+  final TerminalKeyBindingResolutionOrigin origin;
 }
 
 /// Bounded immutable two-layer keybinding resolver.
@@ -332,10 +344,14 @@ final class TerminalKeyBindingEngine {
     final Map<TerminalKeyBindingChord, TerminalKeyBindingResolution> bindings =
         <TerminalKeyBindingChord, TerminalKeyBindingResolution>{};
     for (final TerminalKeyBindingDefinition definition in defaultList) {
-      _apply(bindings, definition);
+      _apply(bindings, definition, TerminalKeyBindingResolutionOrigin.defaults);
     }
     for (final TerminalKeyBindingDefinition definition in overrideList) {
-      _apply(bindings, definition);
+      _apply(
+        bindings,
+        definition,
+        TerminalKeyBindingResolutionOrigin.overrides,
+      );
     }
     return TerminalKeyBindingEngine._(
       Map<TerminalKeyBindingChord, TerminalKeyBindingResolution>.unmodifiable(
@@ -368,10 +384,14 @@ final class TerminalKeyBindingEngine {
     final Map<TerminalKeyBindingChord, TerminalKeyBindingResolution> bindings =
         <TerminalKeyBindingChord, TerminalKeyBindingResolution>{};
     for (final TerminalKeyBindingDefinition definition in standardDefinitions) {
-      _apply(bindings, definition);
+      _apply(bindings, definition, TerminalKeyBindingResolutionOrigin.defaults);
     }
     for (final TerminalKeyBindingDefinition definition in collected) {
-      _apply(bindings, definition);
+      _apply(
+        bindings,
+        definition,
+        TerminalKeyBindingResolutionOrigin.overrides,
+      );
     }
     return TerminalKeyBindingEngine._(
       Map<TerminalKeyBindingChord, TerminalKeyBindingResolution>.unmodifiable(
@@ -552,19 +572,33 @@ final class TerminalKeyBindingEngine {
   static void _apply(
     Map<TerminalKeyBindingChord, TerminalKeyBindingResolution> bindings,
     TerminalKeyBindingDefinition definition,
+    TerminalKeyBindingResolutionOrigin origin,
   ) {
     switch (definition.directive) {
       case TerminalKeyBindingDirective.action:
         final TerminalKeyBindingAction? paneAction = definition.action;
         bindings[definition.chord] = paneAction != null
-            ? TerminalKeyBindingResolution.action(paneAction)
-            : TerminalKeyBindingResolution.applicationAction(
+            ? TerminalKeyBindingResolution._(
+                TerminalKeyBindingResolutionKind.action,
+                paneAction,
+                null,
+                origin,
+              )
+            : TerminalKeyBindingResolution._(
+                TerminalKeyBindingResolutionKind.action,
+                null,
                 definition.applicationAction!,
+                origin,
               );
       case TerminalKeyBindingDirective.unbind:
         bindings.remove(definition.chord);
       case TerminalKeyBindingDirective.passthrough:
-        bindings[definition.chord] = TerminalKeyBindingResolution.passthrough;
+        bindings[definition.chord] = TerminalKeyBindingResolution._(
+          TerminalKeyBindingResolutionKind.passthrough,
+          null,
+          null,
+          origin,
+        );
     }
   }
 }

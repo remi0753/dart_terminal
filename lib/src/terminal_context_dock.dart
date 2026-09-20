@@ -990,6 +990,7 @@ enum TerminalContextDockKeyDisposition {
   pathCopyDispatched,
   pathInsertionRequested,
   terminalFocusDispatched,
+  applicationActionDispatched,
   boundaryMoveDispatched,
   overflow,
 }
@@ -1051,16 +1052,21 @@ final class TerminalContextDockKeyController {
       );
     }
     final TerminalKeyEvent key = TerminalAppKitKeyAdapter.adapt(event);
-    final TerminalActionId? boundAction = _keyBindings()
-        .resolve(key)
-        .applicationAction;
-    if (boundAction == TerminalActionId.moveContextDockBoundaryLeft ||
-        boundAction == TerminalActionId.moveContextDockBoundaryRight) {
+    final TerminalKeyBindingResolution binding = _keyBindings().resolve(key);
+    final TerminalActionId? boundAction = binding.applicationAction;
+    final bool contextDefault =
+        boundAction == TerminalActionId.moveContextDockBoundaryLeft ||
+        boundAction == TerminalActionId.moveContextDockBoundaryRight;
+    if (boundAction != null &&
+        (contextDefault ||
+            binding.origin == TerminalKeyBindingResolutionOrigin.overrides)) {
       final TerminalActionDispatchResult result = await dispatcher.dispatch(
-        boundAction!,
+        boundAction,
       );
       return TerminalContextDockKeyResult(
-        disposition: TerminalContextDockKeyDisposition.boundaryMoveDispatched,
+        disposition: contextDefault
+            ? TerminalContextDockKeyDisposition.boundaryMoveDispatched
+            : TerminalContextDockKeyDisposition.applicationActionDispatched,
         dispatchResult: result,
       );
     }

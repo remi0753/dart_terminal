@@ -24075,10 +24075,7 @@ final class TerminalKeyEventRouter {
           event,
         );
     if (event.eventType == TerminalKeyEventType.release) {
-      if (resolution.applicationAction ==
-              TerminalActionId.moveContextDockBoundaryLeft ||
-          resolution.applicationAction ==
-              TerminalActionId.moveContextDockBoundaryRight) {
+      if (resolution.applicationAction != null) {
         return TerminalKeyRouteResult.ignored;
       }
       return _encode(event, pane);
