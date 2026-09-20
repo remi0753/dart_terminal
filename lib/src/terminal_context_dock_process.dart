@@ -323,12 +323,6 @@ typedef TerminalContextDockDirectoryPrivacyPolicy = bool Function(
 typedef TerminalContextDockDirectoryDisplayPolicy = bool Function(
   PaneId paneId,
 );
-typedef TerminalContextDockUnpresentedDirectoryRetentionPolicy = bool Function(
-  TerminalWindowId windowId,
-);
-typedef TerminalContextDockUnpresentedRetargetRetentionPolicy = bool Function(
-  TerminalWindowId windowId,
-);
 typedef TerminalContextDockDirectoryRetentionInvalidation = void Function(
   PaneId paneId,
 );
@@ -342,9 +336,10 @@ typedef TerminalContextDockProcessNavigatorFocus = bool Function(
 /// Selects one Context Dock document from focused-pane process authority.
 ///
 /// Rich path/argv observation is delayed until a foreground group remains
-/// stable and refreshed at most once per second. A same-window pane or tab
-/// focus round trip retains only a content-free session/PGID authority;
-/// window, session, PGID, visibility, or privacy identity changes discard it.
+/// stable and refreshed at most once per second. Presentation changes park one
+/// content-free session/PGID authority per live pane. Returning to a pane must
+/// revalidate its session and foreground PGID before Directory content can be
+/// shown again; pane, session, or job replacement discards the authority.
 final class TerminalContextDockProcessController {
   TerminalContextDockProcessController({
     required this.applicationState,
@@ -355,10 +350,6 @@ final class TerminalContextDockProcessController {
     TerminalContextDockProcessPrivacyPolicy? canObserveProcess,
     TerminalContextDockDirectoryPrivacyPolicy? canObserveDirectory,
     TerminalContextDockDirectoryDisplayPolicy? canDisplayDirectory,
-    TerminalContextDockUnpresentedDirectoryRetentionPolicy?
-    canRetainDirectoryWhileUnpresented,
-    TerminalContextDockUnpresentedRetargetRetentionPolicy?
-    canRetainDirectoryDuringUnpresentedRetarget,
     TerminalContextDockDirectoryRetentionInvalidation?
     invalidateRetainedDirectory,
     TerminalContextDockProcessNavigatorFocus? focusNavigator,
@@ -375,11 +366,6 @@ final class TerminalContextDockProcessController {
            canDisplayDirectory ??
            canObserveDirectory ??
            _alwaysObserveDirectory,
-       _canRetainDirectoryWhileUnpresented =
-           canRetainDirectoryWhileUnpresented ?? _neverRetainUnpresented,
-       _canRetainDirectoryDuringUnpresentedRetarget =
-           canRetainDirectoryDuringUnpresentedRetarget ??
-           _neverRetainUnpresentedRetarget,
        _invalidateRetainedDirectory =
            invalidateRetainedDirectory ?? _ignoreDirectoryInvalidation,
        _focusNavigator = focusNavigator ?? _acceptNavigatorFocus,
@@ -400,10 +386,6 @@ final class TerminalContextDockProcessController {
   final TerminalContextDockProcessPrivacyPolicy _canObserveProcess;
   final TerminalContextDockDirectoryPrivacyPolicy _canObserveDirectory;
   final TerminalContextDockDirectoryDisplayPolicy _canDisplayDirectory;
-  final TerminalContextDockUnpresentedDirectoryRetentionPolicy
-  _canRetainDirectoryWhileUnpresented;
-  final TerminalContextDockUnpresentedRetargetRetentionPolicy
-  _canRetainDirectoryDuringUnpresentedRetarget;
   final TerminalContextDockDirectoryRetentionInvalidation
   _invalidateRetainedDirectory;
   final TerminalContextDockProcessNavigatorFocus _focusNavigator;
@@ -415,8 +397,6 @@ final class TerminalContextDockProcessController {
       <TerminalWindowId, _TerminalContextDockProcessWindowState>{};
   final Map<PaneId, _TerminalContextDockProcessWindowState>
   _paneFocusSuspended = <PaneId, _TerminalContextDockProcessWindowState>{};
-  final Map<TerminalWindowId, PaneId> _unpresentedRetargets =
-      <TerminalWindowId, PaneId>{};
   final Set<_TerminalContextDockRichRequest> _requests =
       <_TerminalContextDockRichRequest>{};
   TerminalContextDockScheduledTask? _pollTask;
@@ -612,72 +592,22 @@ final class TerminalContextDockProcessController {
         _discardPaneFocusSuspended(stale, invalidateDirectory: true);
         changed = true;
       }
-      final Set<TerminalWindowId> liveWindowIds = applicationState.windows
-          .map((TerminalWindowState window) => window.id)
-          .toSet();
-      for (final TerminalWindowId stale
-          in _unpresentedRetargets.keys
-              .where(
-                (TerminalWindowId windowId) =>
-                    !liveWindowIds.contains(windowId),
-              )
-              .toList(growable: false)) {
-        _unpresentedRetargets.remove(stale);
-        changed = true;
-      }
       final Set<TerminalWindowId> eligible = <TerminalWindowId>{};
       for (final TerminalWindowState logicalWindow
           in applicationState.windows.where(
             (window) => window.role == TerminalWindowRole.standard,
           )) {
+        eligible.add(logicalWindow.id);
         final TerminalContextDockWindowSnapshot? dock = dockState
             .snapshotForWindow(logicalWindow.id);
-        if (dock == null || !dock.isVisible) {
-          changed = _removeWindow(logicalWindow.id) || changed;
+        if (dock == null) {
+          changed = _discardWindowAuthority(logicalWindow.id) || changed;
           continue;
         }
-        if (!_safeCanPresentWindow(logicalWindow.id)) {
-          final _TerminalContextDockProcessWindowState? retained =
-              _windows[logicalWindow.id];
-          final bool targetChanged =
-              (retained != null && retained.paneId != dock.targetPaneId) ||
-              _unpresentedRetargets.containsKey(logicalWindow.id);
-          if (targetChanged &&
-              _safeCanRetainDirectoryDuringUnpresentedRetarget(
-                logicalWindow.id,
-              )) {
-            if (retained != null) {
-              _windows.remove(logicalWindow.id);
-              if (_suspendUnpresented(retained)) {
-                _parkPaneFocusSuspended(retained);
-              } else {
-                _cancelState(retained);
-              }
-            }
-            _unpresentedRetargets[logicalWindow.id] = dock.targetPaneId;
-            eligible.add(logicalWindow.id);
-            changed = true;
-            continue;
-          }
-          final bool wasSuspended = retained?.presentationSuspended ?? false;
-          if (_safeCanRetainDirectoryWhileUnpresented(logicalWindow.id) &&
-              retained != null &&
-              retained.paneId == dock.targetPaneId &&
-              (wasSuspended || _suspendUnpresented(retained))) {
-            eligible.add(logicalWindow.id);
-            changed = !wasSuspended || changed;
-            continue;
-          }
-          _unpresentedRetargets.remove(logicalWindow.id);
-          changed =
-              _discardPaneFocusSuspendedForWindow(logicalWindow.id) || changed;
-          changed = _removeWindow(logicalWindow.id) || changed;
+        if (!dock.isVisible || !_safeCanPresentWindow(logicalWindow.id)) {
+          changed = _suspendWindowProjection(logicalWindow.id) || changed;
           continue;
         }
-        if (_unpresentedRetargets.remove(logicalWindow.id) != null) {
-          changed = true;
-        }
-        eligible.add(logicalWindow.id);
         final TerminalPaneProcessSnapshot process = _safeProcessSnapshot(
           dock.targetPaneId,
         );
@@ -693,7 +623,7 @@ final class TerminalContextDockProcessController {
             final bool sameWindow = priorLocation?.windowId == logicalWindow.id;
             if (state.paneId != dock.targetPaneId &&
                 sameWindow &&
-                (state.presentationSuspended || _suspendUnpresented(state))) {
+                (state.presentationSuspended || _suspendProjection(state))) {
               _parkPaneFocusSuspended(state);
             } else {
               if (state.presentationSuspended ||
@@ -729,7 +659,7 @@ final class TerminalContextDockProcessController {
           in _windows.keys
               .where((windowId) => !eligible.contains(windowId))
               .toList(growable: false)) {
-        changed = _removeWindow(stale) || changed;
+        changed = _discardWindowAuthority(stale) || changed;
       }
     } finally {
       _synchronizing = false;
@@ -798,15 +728,14 @@ final class TerminalContextDockProcessController {
     }
   }
 
-  bool _suspendUnpresented(_TerminalContextDockProcessWindowState state) {
-    final TerminalContextDockForegroundJobIdentity? identity = state.identity;
+  bool _suspendProjection(_TerminalContextDockProcessWindowState state) {
+    final int? foregroundProcessGroup =
+        state.identity?.foregroundProcessGroup ?? state.candidateProcessGroup;
     if (state.presentationSuspended ||
-        state.mode != TerminalContextDockContentMode.foregroundJob ||
-        identity == null ||
+        foregroundProcessGroup == null ||
         !state.directoryRetentionEligible) {
       return false;
     }
-    final int foregroundProcessGroup = identity.foregroundProcessGroup;
     _cancelTransientState(state);
     state
       ..presentationSuspended = true
@@ -1236,24 +1165,6 @@ final class TerminalContextDockProcessController {
     }
   }
 
-  bool _safeCanRetainDirectoryWhileUnpresented(TerminalWindowId windowId) {
-    try {
-      return _canRetainDirectoryWhileUnpresented(windowId);
-    } on Object {
-      return false;
-    }
-  }
-
-  bool _safeCanRetainDirectoryDuringUnpresentedRetarget(
-    TerminalWindowId windowId,
-  ) {
-    try {
-      return _canRetainDirectoryDuringUnpresentedRetarget(windowId);
-    } on Object {
-      return false;
-    }
-  }
-
   void _safeInvalidateRetainedDirectory(PaneId paneId) {
     try {
       _invalidateRetainedDirectory(paneId);
@@ -1303,8 +1214,28 @@ final class TerminalContextDockProcessController {
     _pollTask = scheduled;
   }
 
-  bool _removeWindow(TerminalWindowId windowId) {
-    _unpresentedRetargets.remove(windowId);
+  /// Removes the projected document without removing live-pane retention.
+  ///
+  /// Every presentation-only transition (pane, tab, window, application
+  /// focus, native visibility, or Dock visibility) uses this one path. Rich
+  /// process content and timers are discarded before the content-free job
+  /// identity is parked by pane ID.
+  bool _suspendWindowProjection(TerminalWindowId windowId) {
+    final _TerminalContextDockProcessWindowState? state = _windows.remove(
+      windowId,
+    );
+    if (state == null) return false;
+    if (_suspendProjection(state)) {
+      _parkPaneFocusSuspended(state);
+      return true;
+    }
+    _cancelState(state);
+    return true;
+  }
+
+  /// Discards every authority owned by a logical window after that window no
+  /// longer exists. Presentation changes must use [_suspendWindowProjection].
+  bool _discardWindowAuthority(TerminalWindowId windowId) {
     final _TerminalContextDockProcessWindowState? state = _windows.remove(
       windowId,
     );
@@ -1318,9 +1249,7 @@ final class TerminalContextDockProcessController {
   }
 
   bool _clearWindows() {
-    if (_windows.isEmpty &&
-        _paneFocusSuspended.isEmpty &&
-        _unpresentedRetargets.isEmpty) {
+    if (_windows.isEmpty && _paneFocusSuspended.isEmpty) {
       return false;
     }
     for (final _TerminalContextDockProcessWindowState state
@@ -1337,7 +1266,6 @@ final class TerminalContextDockProcessController {
       _cancelState(state);
     }
     _paneFocusSuspended.clear();
-    _unpresentedRetargets.clear();
     return true;
   }
 
@@ -1427,8 +1355,6 @@ final class TerminalContextDockProcessController {
   static bool _alwaysObserveProcess(PaneId _, TerminalPaneProcessSnapshot __) =>
       true;
   static bool _alwaysObserveDirectory(PaneId _) => true;
-  static bool _neverRetainUnpresented(TerminalWindowId _) => false;
-  static bool _neverRetainUnpresentedRetarget(TerminalWindowId _) => false;
   static void _ignoreDirectoryInvalidation(PaneId _) {}
   static bool _acceptNavigatorFocus(TerminalContextDockFocusRequest _) => true;
   static bool _acceptTerminalFocus(TerminalContextDockFocusRequest _) => true;

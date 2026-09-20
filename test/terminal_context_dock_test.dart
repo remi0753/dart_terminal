@@ -22,6 +22,7 @@ Future<void> runTerminalContextDockTests() async {
   await _testProcessFocusReactivationRetainsDirectoryToggle();
   await _testProcessPaneFocusRoundTripRetainsDirectoryToggle();
   await _testProcessTabFocusRoundTripRetainsDirectoryToggle();
+  await _testCompositePresentationTransitionMatrix();
   await _testProcessArgumentVisibility();
   _testPrivacyPolicyDistinguishesIdleLineEditing();
   await _testPathHandoffPolicyAndExactPayload();
@@ -987,7 +988,6 @@ Future<void> _testProcessFocusReactivationRetainsDirectoryToggle() async {
   final _ProcessScheduler scheduler = _ProcessScheduler();
   var foregroundGroup = paneId.value;
   var canPresent = true;
-  var retainUnpresented = true;
   var retainedDirectoryAvailable = true;
   var invalidationCount = 0;
   final List<Completer<PtyForegroundJobSnapshot?>> requests =
@@ -1012,7 +1012,6 @@ Future<void> _testProcessFocusReactivationRetainsDirectoryToggle() async {
         canPresentWindow: (_) => canPresent,
         canObserveDirectory: (_) => foregroundGroup == paneId.value,
         canDisplayDirectory: (_) => retainedDirectoryAvailable,
-        canRetainDirectoryWhileUnpresented: (_) => retainUnpresented,
         invalidateRetainedDirectory: (_) {
           invalidationCount++;
           retainedDirectoryAvailable = false;
@@ -1051,11 +1050,8 @@ Future<void> _testProcessFocusReactivationRetainsDirectoryToggle() async {
 
   canPresent = false;
   controller.synchronize();
-  final TerminalContextDockContentSnapshot suspended = controller
-      .snapshotForWindow(window.id)!;
   _expect(
-    suspended.mode == TerminalContextDockContentMode.unavailable &&
-        suspended.process == null &&
+    controller.snapshotForWindow(window.id) == null &&
         controller.canRetainDirectoryPane(paneId) &&
         controller.activeOperationCount == 0 &&
         controller.activeTimerCount == 0 &&
@@ -1107,7 +1103,6 @@ Future<void> _testProcessFocusReactivationRetainsDirectoryToggle() async {
     'PGID replacement during focus loss invalidates the old Directory snapshot before the action can return',
   );
 
-  retainUnpresented = false;
   controller.dispose();
   dock.dispose();
   await harness.state.shutdown();
@@ -1282,7 +1277,6 @@ Future<void> _testProcessTabFocusRoundTripRetainsDirectoryToggle() async {
         canObserveDirectory: (PaneId paneId) =>
             foregroundGroups[paneId] == paneId.value,
         canDisplayDirectory: retainedDirectories.contains,
-        canRetainDirectoryDuringUnpresentedRetarget: (_) => true,
         invalidateRetainedDirectory: (PaneId paneId) {
           invalidationCount++;
           retainedDirectories.remove(paneId);
@@ -1397,6 +1391,253 @@ Future<void> _testProcessTabFocusRoundTripRetainsDirectoryToggle() async {
   );
 
   controller.dispose();
+  dock.dispose();
+  await harness.state.shutdown();
+}
+
+Future<void> _testCompositePresentationTransitionMatrix() async {
+  final _Harness harness = _Harness();
+  final TerminalWindowState firstWindow = await harness.createWindow();
+  final TerminalTabId firstTab = firstWindow.selectedTab.id;
+  final PaneId firstPane = firstWindow.selectedTab.focusedPaneId;
+  final TerminalContextDockState dock = TerminalContextDockState(
+    initiallyVisible: true,
+  )..synchronize(harness.state);
+  final _ProcessScheduler scheduler = _ProcessScheduler();
+  final Map<PaneId, int> foregroundGroups = <PaneId, int>{
+    firstPane: firstPane.value,
+  };
+  final Set<TerminalWindowId> presentedWindows = <TerminalWindowId>{
+    firstWindow.id,
+  };
+  final TerminalDirectorySnapshotService snapshots =
+      TerminalDirectorySnapshotService(
+        fileSystem: _ContextDockDirectoryFileSystem(),
+      );
+  const TerminalWorkingDirectoryResolver workingDirectoryResolver =
+      TerminalWorkingDirectoryResolver();
+  late final TerminalContextDockDirectoryController directory;
+  final TerminalContextDockProcessController process =
+      TerminalContextDockProcessController(
+        applicationState: harness.state,
+        dockState: dock,
+        resolveProcessSnapshot: (PaneId paneId) {
+          final TerminalPane pane = harness.state.paneForId(paneId)!;
+          return TerminalPaneProcessSnapshot.available(
+            sessionId: pane.sessionId,
+            childProcessId: paneId.value,
+            owningProcessGroup: paneId.value,
+            foregroundProcessGroup: foregroundGroups[paneId] ?? paneId.value,
+            terminalEchoEnabled: false,
+          );
+        },
+        resolveForegroundJob: (PaneId paneId, TerminalSessionId sessionId) =>
+            _foregroundJobFixture(
+              sessionId: sessionId,
+              foregroundProcessGroup: foregroundGroups[paneId]!,
+              memberCount: 1,
+              elapsedMicroseconds: scheduler.nowMicros,
+            ),
+        canPresentWindow: presentedWindows.contains,
+        canObserveDirectory: (PaneId paneId) =>
+            (foregroundGroups[paneId] ?? paneId.value) == paneId.value,
+        canDisplayDirectory: (PaneId paneId) =>
+            directory.hasRetainedSnapshot(paneId),
+        invalidateRetainedDirectory: (PaneId paneId) {
+          directory.invalidateRetainedSnapshot(paneId);
+        },
+        scheduleTask: scheduler.schedule,
+        monotonicMicros: () => scheduler.nowMicros,
+      );
+  directory = TerminalContextDockDirectoryController(
+    applicationState: harness.state,
+    dockState: dock,
+    snapshotService: snapshots,
+    searchService: TerminalFileSearchService(
+      directorySnapshots: snapshots,
+      systemIndex: const _ContextDockSystemIndex(),
+    ),
+    resolveWorkingDirectory: (PaneId paneId, int generation) {
+      final TerminalPaneProcessSnapshot paneProcess = harness.state
+          .paneForId(paneId)!
+          .processSnapshot();
+      return workingDirectoryResolver.resolve(
+        sessionId: paneProcess.sessionId,
+        generation: generation,
+        processSnapshot: paneProcess,
+        reportedWorkingDirectory: null,
+        processWorkingDirectory: null,
+        launchWorkingDirectory: '/root',
+      );
+    },
+    canObservePane: process.canObserveDirectoryPane,
+    canRetainPane: process.canRetainDirectoryPane,
+  );
+  final TerminalActionRegistration contentToggle = process
+      .registrations()
+      .singleWhere(
+        (TerminalActionRegistration registration) =>
+            registration.id == TerminalActionId.toggleContextDockContent,
+      );
+
+  Future<void> reconcile({bool activateForeground = false}) async {
+    dock.synchronize(harness.state);
+    process.synchronize();
+    directory.synchronize();
+    if (activateForeground) {
+      scheduler.elapse(
+        TerminalContextDockProcessLimits.foregroundActivationDelay,
+      );
+      await Future<void>.delayed(Duration.zero);
+      directory.synchronize();
+    }
+    await _waitUntil(() => directory.activeOperationCount == 0);
+  }
+
+  Future<void> expectForegroundDirectoryAvailable(
+    TerminalWindowState window,
+    PaneId paneId,
+    String transition,
+  ) async {
+    await reconcile(activateForeground: true);
+    _expect(
+      process.snapshotForWindow(window.id)?.paneId == paneId &&
+          process.snapshotForWindow(window.id)?.mode ==
+              TerminalContextDockContentMode.foregroundJob &&
+          process.canRetainDirectoryPane(paneId) &&
+          directory.hasRetainedSnapshot(paneId) &&
+          contentToggle.isAvailable(),
+      '$transition restores one matching foreground job and Directory toggle',
+    );
+    contentToggle.handler();
+    directory.synchronize();
+    await _waitUntil(() => directory.activeOperationCount == 0);
+    _expect(
+      process.snapshotForWindow(window.id)?.mode ==
+              TerminalContextDockContentMode.directoryNavigator &&
+          directory.snapshotForWindow(window.id)?.paneId == paneId &&
+          directory.snapshotForWindow(window.id)?.workingDirectory == '/root' &&
+          dock.snapshotForWindow(window.id)?.navigatorOwnsInput == true,
+      '$transition can project and operate the retained Directory Navigator',
+    );
+    contentToggle.handler();
+  }
+
+  await reconcile();
+  final TerminalPane secondPane = await harness.state.splitPane(
+    firstPane,
+    harness.configuration(),
+    axis: TerminalSplitAxis.horizontal,
+  );
+  await secondPane.start();
+  foregroundGroups[secondPane.id] = secondPane.id.value;
+  await reconcile();
+  harness.state.focusPane(firstTab, firstPane);
+  await reconcile();
+  foregroundGroups[firstPane] = firstPane.value + 100;
+  await reconcile(activateForeground: true);
+
+  harness.state.focusPane(firstTab, secondPane.id);
+  await reconcile();
+  foregroundGroups[secondPane.id] = secondPane.id.value + 100;
+  await reconcile(activateForeground: true);
+  _expect(
+    process.canRetainDirectoryPane(firstPane) &&
+        process.canRetainDirectoryPane(secondPane.id) &&
+        directory.hasRetainedSnapshot(firstPane) &&
+        directory.hasRetainedSnapshot(secondPane.id),
+    'two same-directory process panes retain independent pane-bound authorities',
+  );
+
+  final TerminalTabState otherTab = await harness.state.createTab(
+    firstWindow.id,
+    harness.configuration(),
+  );
+  await harness.state.paneForId(otherTab.focusedPaneId)!.start();
+  foregroundGroups[otherTab.focusedPaneId] = otherTab.focusedPaneId.value;
+  await reconcile();
+  final TerminalWindowState otherWindow = await harness.createWindow();
+  foregroundGroups[otherWindow.selectedTab.focusedPaneId] =
+      otherWindow.selectedTab.focusedPaneId.value;
+  presentedWindows
+    ..clear()
+    ..add(otherWindow.id);
+  await reconcile();
+
+  // Reproduce the failing compound transition: native presentation is absent
+  // while logical window, tab, and pane targets change more than once.
+  presentedWindows.clear();
+  harness.state
+    ..activateWindow(firstWindow.id)
+    ..selectTab(firstWindow.id, firstTab)
+    ..focusPane(firstTab, firstPane);
+  await reconcile();
+  harness.state.focusPane(firstTab, secondPane.id);
+  await reconcile();
+  harness.state.selectTab(firstWindow.id, otherTab.id);
+  await reconcile();
+  harness.state
+    ..selectTab(firstWindow.id, firstTab)
+    ..focusPane(firstTab, firstPane);
+  await reconcile();
+  _expect(
+    process.snapshotForWindow(firstWindow.id) == null &&
+        process.canRetainDirectoryPane(firstPane) &&
+        process.canRetainDirectoryPane(secondPane.id) &&
+        directory.hasRetainedSnapshot(firstPane) &&
+        directory.hasRetainedSnapshot(secondPane.id) &&
+        process.activeOperationCount == 0 &&
+        directory.activeOperationCount == 0,
+    'compound unpresented retarget keeps only operation-free pane authorities',
+  );
+
+  presentedWindows.add(firstWindow.id);
+  await expectForegroundDirectoryAvailable(
+    firstWindow,
+    firstPane,
+    'app/window/tab/split compound round trip',
+  );
+  harness.state.focusPane(firstTab, secondPane.id);
+  await expectForegroundDirectoryAvailable(
+    firstWindow,
+    secondPane.id,
+    'second same-directory process pane round trip',
+  );
+
+  dock.toggleVisibility(firstWindow.id, secondPane.id);
+  await reconcile();
+  _expect(
+    process.snapshotForWindow(firstWindow.id) == null &&
+        process.canRetainDirectoryPane(secondPane.id) &&
+        directory.hasRetainedSnapshot(secondPane.id) &&
+        process.activeOperationCount == 0 &&
+        directory.activeOperationCount == 0,
+    'hidden Dock freezes the live process pane without filesystem or rich observation',
+  );
+  dock.toggleVisibility(firstWindow.id, secondPane.id);
+  await expectForegroundDirectoryAvailable(
+    firstWindow,
+    secondPane.id,
+    'Dock hide/show round trip',
+  );
+
+  presentedWindows
+    ..clear()
+    ..add(otherWindow.id);
+  harness.state.activateWindow(otherWindow.id);
+  await reconcile();
+  presentedWindows
+    ..clear()
+    ..add(firstWindow.id);
+  harness.state.activateWindow(firstWindow.id);
+  await expectForegroundDirectoryAvailable(
+    firstWindow,
+    secondPane.id,
+    'logical window focus round trip',
+  );
+
+  process.dispose();
+  directory.dispose();
   dock.dispose();
   await harness.state.shutdown();
 }

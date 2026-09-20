@@ -485,15 +485,30 @@ final class TerminalContextDockDirectoryController {
       for (final TerminalWindowState logicalWindow in standardWindows) {
         final TerminalContextDockWindowSnapshot? dock = dockState
             .snapshotForWindow(logicalWindow.id);
-        if (dock == null || !dock.isVisible) {
-          if (dock != null) {
-            _commandRefreshPaneIds.remove(dock.targetPaneId);
-            _processSuspendedRefreshPaneIds.remove(dock.targetPaneId);
-            _pendingRefreshPaneIds.remove(dock.targetPaneId);
-            _deferredRefreshPaneIds.remove(dock.targetPaneId);
-          }
+        if (dock == null) {
           _windows.remove(logicalWindow.id)?.cancel();
           _discardPaneFocusRetainedForWindow(logicalWindow.id);
+          continue;
+        }
+        if (!dock.isVisible) {
+          _commandRefreshPaneIds.remove(dock.targetPaneId);
+          _processSuspendedRefreshPaneIds.remove(dock.targetPaneId);
+          _pendingRefreshPaneIds.remove(dock.targetPaneId);
+          _deferredRefreshPaneIds.remove(dock.targetPaneId);
+          final _TerminalContextDockDirectoryWindowState? current =
+              _windows[logicalWindow.id];
+          if (current != null) {
+            if (_readCanRetainPane(current.paneId) &&
+                !current.privacyRestricted &&
+                current.resolution?.isAvailable == true &&
+                current.rootSnapshot != null) {
+              current
+                ..freeze()
+                ..isFrozen = true;
+            } else {
+              _windows.remove(logicalWindow.id)!.cancel();
+            }
+          }
           continue;
         }
         final bool retargeted = _retargetWindow(dock);

@@ -3494,66 +3494,6 @@ final class TerminalApplication {
             (contextDockDirectoryController?.hasRetainedSnapshot(paneId) ??
                 false));
 
-    bool contextDockCanRetainDirectoryWhileUnpresented(
-      TerminalWindowId windowId,
-    ) {
-      final TerminalWindowState? logicalWindow = state.windowForId(windowId);
-      final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
-      if (logicalWindow == null ||
-          logicalWindow.role != TerminalWindowRole.standard ||
-          state.activeWindow?.id != windowId ||
-          nativeHierarchy == null ||
-          nativeHierarchy.isDisposed) {
-        return false;
-      }
-      final Window? nativeWindow = nativeHierarchy.windowForTab(
-        logicalWindow.selectedTabId,
-      );
-      if (nativeWindow == null ||
-          nativeWindow.isDisposed ||
-          nativeWindow.isClosed ||
-          !nativeWindow.isVisible) {
-        return false;
-      }
-      if (!application.isActive) return true;
-      return !state.windows.any((TerminalWindowState candidate) {
-        final Window? candidateWindow = nativeHierarchy.windowForTab(
-          candidate.selectedTabId,
-        );
-        return candidateWindow != null &&
-            !candidateWindow.isDisposed &&
-            !candidateWindow.isClosed &&
-            candidateWindow.isVisible &&
-            candidateWindow.isFocused;
-      });
-    }
-
-    bool contextDockCanRetainDirectoryDuringUnpresentedRetarget(
-      TerminalWindowId windowId,
-    ) {
-      final TerminalWindowState? logicalWindow = state.windowForId(windowId);
-      final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
-      if (logicalWindow == null ||
-          logicalWindow.role != TerminalWindowRole.standard ||
-          state.activeWindow?.id != windowId ||
-          nativeHierarchy == null ||
-          nativeHierarchy.isDisposed ||
-          !application.isActive) {
-        return false;
-      }
-      return !state.windows.any((TerminalWindowState candidate) {
-        if (candidate.id == windowId) return false;
-        final Window? candidateWindow = nativeHierarchy.windowForTab(
-          candidate.selectedTabId,
-        );
-        return candidateWindow != null &&
-            !candidateWindow.isDisposed &&
-            !candidateWindow.isClosed &&
-            candidateWindow.isVisible &&
-            candidateWindow.isFocused;
-      });
-    }
-
     TerminalContextDockPathTarget? contextDockPathTarget(
       TerminalWindowId windowId,
       PaneId paneId,
@@ -4695,10 +4635,6 @@ final class TerminalApplication {
         canObserveProcess: contextDockCanObserveProcess,
         canObserveDirectory: contextDockCanObservePane,
         canDisplayDirectory: contextDockCanDisplayDirectoryPane,
-        canRetainDirectoryWhileUnpresented:
-            contextDockCanRetainDirectoryWhileUnpresented,
-        canRetainDirectoryDuringUnpresentedRetarget:
-            contextDockCanRetainDirectoryDuringUnpresentedRetarget,
         invalidateRetainedDirectory: (PaneId paneId) {
           contextDockDirectoryController?.invalidateRetainedSnapshot(paneId);
         },
