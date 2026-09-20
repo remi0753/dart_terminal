@@ -93,6 +93,7 @@ import 'terminal_native_content_test.dart';
 import 'terminal_native_hierarchy_test.dart';
 import 'terminal_note_model_test.dart';
 import 'terminal_note_store_codec_test.dart';
+import 'terminal_note_store_worker_test.dart';
 import 'terminal_osc52_policy_test.dart';
 import 'terminal_osc52_projection_test.dart';
 import 'terminal_overlay_contract_test.dart';
@@ -211,6 +212,7 @@ Future<void> main() async {
   await runTerminalNativeContentTests();
   runTerminalNoteModelTests();
   runTerminalNoteStoreCodecTests();
+  runTerminalNoteStoreWorkerTests();
   runTerminalInputMatrixTests();
   runTerminalAppKitKeyAdapterTests();
   runTerminalAppKitPolicyTests();

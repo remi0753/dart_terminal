@@ -5,7 +5,7 @@ import 'package:dart_durable_file_macos/dart_durable_file_macos.dart';
 
 Future<void> main() async {
   _expect(
-    MacosDurableDirectorySession.abiVersion == 1,
+    MacosDurableDirectorySession.abiVersion == 2,
     'native ABI version is exact',
   );
   _testSourceBoundary();
@@ -18,6 +18,7 @@ Future<void> main() async {
   );
   try {
     await _testLifecycleAndPermissions(resolvedParent);
+    await _testCallerOwnedDirectoryPermissions(resolvedParent);
     await _testUnsafeEntries(resolvedParent);
     await _testLockContention(resolvedParent);
     await _testInputAndSizeBounds(resolvedParent);
@@ -31,6 +32,21 @@ Future<void> main() async {
   stdout.writeln(
     'DART_DURABLE_FILE_MACOS_PASS '
     'permissions=true links=true lock=true fsync=true',
+  );
+}
+
+Future<void> _testCallerOwnedDirectoryPermissions(Directory parent) async {
+  final Directory selected = Directory('${parent.path}/selected')..createSync();
+  await Process.run('/bin/chmod', <String>['0755', selected.path]);
+  final MacosDurableDirectorySession session =
+      MacosDurableDirectorySession.open(
+        selected.path,
+        narrowDirectoryPermissions: false,
+      );
+  session.close();
+  _expect(
+    FileStat.statSync(selected.path).mode & 0x1ff == 0x1ed,
+    'caller-owned directory mode is unchanged when narrowing is disabled',
   );
 }
 
@@ -218,6 +234,10 @@ Future<void> _testInputAndSizeBounds(Directory parent) async {
     );
     session.writeExclusive('empty', Uint8List(0));
     _expect(session.read('empty').isEmpty, 'zero-byte generic file is exact');
+    session.writeExclusive('メモ.data', Uint8List.fromList(<int>[7]));
+    _expectBytes(session.read('メモ.data'), const <int>[
+      7,
+    ], 'safe UTF-8 leaf name is preserved');
     _expectFailure(
       () => session.read('missing'),
       MacosDurableFileFailure.notFound,

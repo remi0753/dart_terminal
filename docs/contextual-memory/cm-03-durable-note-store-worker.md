@@ -102,7 +102,7 @@ advisory lock、directory fsyncをrace-freeに保持できない。
 
 ### 2026-09-20: 汎用macOS durable-file capability完了
 
-- `packages/dart_durable_file_macos`を追加した。Callerがabsolute directory、simple ASCII leaf、bounded bytesを
+- `packages/dart_durable_file_macos`を追加した。Callerがabsolute directory、bounded safe UTF-8 leaf、bounded bytesを
   注入し、packageはアプリ名、保存location、Note schema、recovery policyを持たない。`dart_appkit`は変更していない。
 - Native C17 shimはabsolute pathをrootからcomponentごとに`openat(O_DIRECTORY|O_NOFOLLOW)`し、create指定時だけ
   `mkdirat(0700)`とparent fsyncを行う。Final directoryはsame ownerを要求して0700へ狭める。
@@ -130,3 +130,61 @@ advisory lock、directory fsyncをrace-freeに保持できない。
 
 このサブタスクではNote transaction、recovery、isolate protocolを実装していない。次のサブタスクでこの汎用APIを
 adapterへ注入する。
+
+### 2026-09-20: transaction engine着手時のleaf contract補正
+
+- Explicit exportのuser-selected filenameは日本語等のsafe UTF-8を取り得るため、汎用packageのASCII-only leafは
+  store固定leafには十分でもexport contractを満たさないと判明した。Packageを255 UTF-8 bytes以下、`/`、NUL、
+  ASCII control、`.`/`..`を拒否するpath-agnostic leafへ一般化し、UTF-8実file round-tripを追加する。
+- Directory boundary、O_NOFOLLOW、owner/type/link、permission、sizeの条件は変更しない。製品path/schemaをpackageへ
+  追加せず、export destinationのparent/leafは`dart_terminal`側のapproved-path valueから注入する。
+- Storeの0700既定をuser-selected export parentへ適用するとDesktop等のmodeを変えるため、directory create modeと
+  existing directory permission narrowingの有無もcaller注入に一般化する。Storeは0700+narrow、export parentは
+  createなし+narrowなしとし、後者のmode不変を実directoryで検証する。Fileはどちらも0600を維持する。Native関数の
+  signature変更を明示するため、汎用capabilityのABI versionは1から2へ更新する。
+
+### 2026-09-20: Note transaction/recovery engine完了
+
+- `TerminalNoteStoreTransactionEngine`を同期worker-side engineとして追加した。専用isolateとadmissionは次のサブタスクに
+  残し、この層は一件ずつのload/commit/recovery/export/stop、固定leaf、transaction順序だけを所有する。
+- Safe locationはabsoluteかつ`.`/`..`/control/NULなしに限定し、safeな`XDG_STATE_HOME`を優先、利用できない場合だけ
+  `HOME/Library/Application Support/Dart Terminal/Notes`へfallbackする。Valueの文字列表現、結果、例外はpath、本文、
+  ID、timestamp、color、trigger detailを出さない。
+- Loadはowned pending 4種をbest effort cleanupした後、journal/current/backupをstrict codecで読む。Valid currentを優先し、
+  currentがない／invalidでbackupがvalidの場合はread-only recovery previewだけを返す。両copyがない場合だけfresh emptyとし、
+  invalid、journal-only、newer versionをemptyや旧backupへ自動fallbackしない。
+- 通常commitはexclusive pending write+file fsync、current→backup+directory fsync、pending→current+directory fsyncとした。
+  Injectable fakeでwrite、file fsync、inspect、rename、directory fsyncの成功trace 8地点すべてに一回ずつfaultを入れ、再起動後は
+  old/newいずれかのcanonical complete documentだけがloadまたはrecovery previewになることを確認した。
+- Deleteはpreviousから消えたNote ID集合とcaller tombstone集合の完全一致を先に要求し、journalを最初にdurable化する。
+  Candidate current、deletion-safe backupを順にcommitし、両copyのrevisionと対象ID不在を再読検証してからだけjournalをcompactする。
+  Success trace 24地点すべてのfault後に再起動し、journalのdirectory syncが一度でも開始されたcaseでresurrection 0を確認した。
+- Recoveryはbackup previewに対する明示retryだけがcurrent/backupを書き直す。Journalが残る場合は両copyを再検証してからcompactする。
+  Corrupt current+valid backupのload中write 0、両copy corruptのempty reset 0、newer currentから旧backup fallback 0を確認した。
+- Portable export v1はsave-panel承認済みabsolute parent/UTF-8 leafを注入し、cancel時I/O 0とする。出力は
+  `body/color/status/order/trigger intent`だけで、identity、context、timestamp、revision、restoration/runtime/deliveryを含めない。
+  User-owned parentはcreate/chmodせず、same-directory pendingからrenameし、失敗時はdestinationを保持してpendingをcleanupする。
+- `dart_appkit`は変更していない。Generic packageのlib/native source auditはDart Terminal、Note、AppKit、PTY依存0であり、
+  製品path、fixed leaf、codec、transaction policyはroot側のadapterへだけ置いた。
+
+#### 検証
+
+- `dart test/terminal_note_store_worker_test.dart`: 成功。Location/lock、empty/ordinary/recovery/upgrade、全step fault、
+  deletion crash matrix、explicit export cancel/success/rename failure、privacy/source boundaryを通過した。
+- `make durable-file-dart-test`: 成功。4 files format変更0、package analyze issue 0、native build成功、
+  safe UTF-8 leaf、caller-owned directory mode不変を含め
+  `DART_DURABLE_FILE_MACOS_PASS permissions=true links=true lock=true fsync=true`。
+- Native function ABIを2へ更新した直後の初回実filesystem testは、file-info struct versionまで同じ定数で2へ変わり、Dartが送る
+  struct version 1を`invalidArgument`にした。Function ABIと既存`ddf_file_info_v1` schema versionを別定数へ分け、後者を1に固定して
+  再実行した。Signature changeはABI 2、file-info wire layoutはversion 1として独立に検証する。
+- `make release-candidate-daily-use-matrix`: 成功。Root runner変更後のhashを正規再生成した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true dart analyze`: 成功、root issue 0。`CI=true`なしではsandbox外の
+  `~/.dart-tool/dart-flutter-telemetry-session.json` timestamp更新だけがpermission errorになったため、解析結果と分離して再実行した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: 成功。357 files format変更0、全package/root analyze issue 0、
+  native/security/compatibility/integrationを含むaggregateが`dart_terminal tests passed`で終了した。
+- 最終format確認の一回でDart sourceとMarkdownを同じ`dart format`引数へ誤って渡し、Markdown parse errorで終了した。
+  Dart 2 filesは変更0で、Markdownは変更されていない。対象をDart sourceへ限定してfocused test、root analyze、aggregateを
+  再実行し、上記の最終結果を得た。
+
+このサブタスクではisolate、queue、timeout、cross-isolate protocolを実装していない。次のサブタスクで本engineを専用isolateへ
+閉じ込め、application側へbounded clientだけを公開する。

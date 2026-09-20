@@ -78,9 +78,9 @@ final class MacosDurableFileInfo {
 
 /// Descriptor-relative durable file session rooted at one caller-selected path.
 ///
-/// The native boundary creates missing path components with mode 0700 when
-/// requested, rejects symlink traversal, and narrows the final directory to
-/// 0700 before returning. No path is retained in public result or error types.
+/// The native boundary creates missing path components with the selected mode,
+/// rejects symlink traversal, and optionally narrows the final directory before
+/// returning. No path is retained in public result or error types.
 final class MacosDurableDirectorySession {
   MacosDurableDirectorySession._(this._handle) {
     _finalizer.attach(this, _handle, detach: this);
@@ -97,9 +97,13 @@ final class MacosDurableDirectorySession {
   static MacosDurableDirectorySession open(
     String absolutePath, {
     bool create = false,
+    int directoryPermissionBits = 0x1c0,
+    bool narrowDirectoryPermissions = true,
   }) {
     if (!Platform.isMacOS ||
         !_validAbsolutePath(absolutePath) ||
+        directoryPermissionBits < 0 ||
+        directoryPermissionBits > 0x1ff ||
         utf8Length(absolutePath) >
             MacosDurableFileLimits.maximumPathUtf8Bytes) {
       throw const MacosDurableFileException(
@@ -109,7 +113,13 @@ final class MacosDurableDirectorySession {
     final Pointer<Utf8> path = absolutePath.toNativeUtf8();
     final Pointer<Int32> failure = calloc<Int32>();
     try {
-      final int handle = _sessionOpen(path, create ? 1 : 0, failure);
+      final int handle = _sessionOpen(
+        path,
+        create ? 1 : 0,
+        directoryPermissionBits,
+        narrowDirectoryPermissions ? 1 : 0,
+        failure,
+      );
       if (handle == 0) _throwFailure(failure.value);
       return MacosDurableDirectorySession._(handle);
     } finally {
@@ -288,10 +298,7 @@ final class MacosDurableDirectorySession {
       return false;
     }
     for (final int unit in value.codeUnits) {
-      final bool alpha =
-          unit >= 0x41 && unit <= 0x5a || unit >= 0x61 && unit <= 0x7a;
-      final bool digit = unit >= 0x30 && unit <= 0x39;
-      if (!alpha && !digit && unit != 0x2e && unit != 0x5f && unit != 0x2d) {
+      if (unit == 0x2f || unit < 0x20 || unit == 0x7f) {
         return false;
       }
     }
@@ -348,13 +355,15 @@ external int _abiVersion();
 )
 external int _debugOpenSessionCount();
 
-@Native<IntPtr Function(Pointer<Utf8>, Uint32, Pointer<Int32>)>(
+@Native<IntPtr Function(Pointer<Utf8>, Uint32, Uint32, Uint32, Pointer<Int32>)>(
   symbol: 'ddf_session_open',
   assetId: _assetId,
 )
 external int _sessionOpen(
   Pointer<Utf8> path,
   int create,
+  int directoryPermissionBits,
+  int narrowDirectoryPermissions,
   Pointer<Int32> failure,
 );
 

@@ -67,7 +67,7 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
 - [x] CM-02 Note store version 1 codecを実装する
 - [ ] CM-03 durable Note store workerを実装する
   - [x] 汎用macOS durable-file capabilityを実装する
-  - [ ] Note transaction/recovery engineを実装する
+  - [x] Note transaction/recovery engineを実装する
   - [ ] 専用isolate clientとbounded admissionを実装する
   - [ ] 実filesystem受け入れと性能gateを完了する
 - [ ] CM-04 durable context identityとrestoration bindingを実装する

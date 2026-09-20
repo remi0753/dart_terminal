@@ -12,8 +12,8 @@
 #include <unistd.h>
 
 #define DDF_EXPORT __attribute__((visibility("default")))
-#define DDF_ABI_VERSION 1u
-#define DDF_DIRECTORY_MODE 0700
+#define DDF_ABI_VERSION 2u
+#define DDF_FILE_INFO_VERSION 1u
 #define DDF_FILE_MODE 0600
 #define DDF_MAX_PATH_BYTES 4096u
 #define DDF_MAX_LEAF_BYTES 255u
@@ -97,12 +97,7 @@ static int ddf_valid_leaf(const char *leaf) {
   }
   for (size_t index = 0; index < length; index++) {
     const unsigned char value = (unsigned char)leaf[index];
-    const int alpha = (value >= 'A' && value <= 'Z') ||
-                      (value >= 'a' && value <= 'z');
-    const int digit = value >= '0' && value <= '9';
-    if (!alpha && !digit && value != '.' && value != '_' && value != '-') {
-      return 0;
-    }
+    if (value == '/' || value < 0x20u || value == 0x7fu) return 0;
   }
   return 1;
 }
@@ -143,6 +138,8 @@ static int ddf_open_regular(ddf_session *session, const char *leaf,
 }
 
 static int ddf_open_directory_path(const char *path, uint32_t create,
+                                   uint32_t directory_mode,
+                                   uint32_t narrow_permissions,
                                    int32_t *failure) {
   if (path == NULL || path[0] != '/' || path[1] == '\0') {
     *failure = DDF_INVALID_ARGUMENT;
@@ -150,6 +147,10 @@ static int ddf_open_directory_path(const char *path, uint32_t create,
   }
   const size_t length = strnlen(path, DDF_MAX_PATH_BYTES + 1u);
   if (length == 0u || length > DDF_MAX_PATH_BYTES) {
+    *failure = DDF_INVALID_ARGUMENT;
+    return -1;
+  }
+  if (directory_mode > 0777u) {
     *failure = DDF_INVALID_ARGUMENT;
     return -1;
   }
@@ -176,7 +177,7 @@ static int ddf_open_directory_path(const char *path, uint32_t create,
     int next = openat(descriptor, component,
                       O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
     if (next < 0 && errno == ENOENT && create != 0u) {
-      if (mkdirat(descriptor, component, DDF_DIRECTORY_MODE) != 0 &&
+      if (mkdirat(descriptor, component, (mode_t)directory_mode) != 0 &&
           errno != EEXIST) {
         *failure = ddf_errno_failure(errno, DDF_PERMISSION_DENIED);
         close(descriptor);
@@ -214,7 +215,8 @@ static int ddf_open_directory_path(const char *path, uint32_t create,
     *failure = DDF_WRONG_OWNER;
     return -1;
   }
-  if (fchmod(descriptor, DDF_DIRECTORY_MODE) != 0) {
+  if (narrow_permissions != 0u &&
+      fchmod(descriptor, (mode_t)directory_mode) != 0) {
     *failure = ddf_errno_failure(errno, DDF_PERMISSION_DENIED);
     close(descriptor);
     return -1;
@@ -230,9 +232,12 @@ DDF_EXPORT uint64_t ddf_debug_open_session_count(void) {
 }
 
 DDF_EXPORT intptr_t ddf_session_open(const char *path, uint32_t create,
+                                     uint32_t directory_mode,
+                                     uint32_t narrow_permissions,
                                      int32_t *failure) {
   if (failure == NULL) return 0;
-  const int descriptor = ddf_open_directory_path(path, create, failure);
+  const int descriptor = ddf_open_directory_path(
+      path, create, directory_mode, narrow_permissions, failure);
   if (descriptor < 0) return 0;
   ddf_session *session = (ddf_session *)calloc(1u, sizeof(ddf_session));
   if (session == NULL) {
@@ -295,7 +300,7 @@ DDF_EXPORT int32_t ddf_inspect(intptr_t handle, const char *leaf,
                                ddf_file_info_v1 *info) {
   if (handle == 0 || !ddf_valid_leaf(leaf) || info == NULL ||
       info->struct_size != sizeof(ddf_file_info_v1) ||
-      info->version != DDF_ABI_VERSION) {
+      info->version != DDF_FILE_INFO_VERSION) {
     return DDF_INVALID_ARGUMENT;
   }
   ddf_session *session = (ddf_session *)handle;
