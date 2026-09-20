@@ -28,6 +28,7 @@ export 'src/surface.dart'
         TerminalNotesNativeOpenResult,
         TerminalNotesNativeResult,
         TerminalNotesNativeException,
+        TerminalNotesNativeFocusTarget,
         TerminalNotesNativePresentation,
         TerminalNotesNativeSnapshot,
         TerminalNotesNativeSurface,

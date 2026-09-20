@@ -584,8 +584,8 @@ terminal-notes-capability-audit: $(TERMINAL_NOTES_PLUGIN_LIBRARY)
 terminal-notes-acceptance: terminal-notes-contract-check \
 	terminal-notes-native-test terminal-notes-dart-test \
 	terminal-notes-host-acceptance terminal-notes-capability-audit \
-	product-native-sanitizer
-	@echo "TERMINAL_NOTES_ACCEPTANCE_PASS vectors=G1-G3,B1-B2,P1-P2,T1,A2-A3,L1 modes=2 geometry_delta=0"
+	product-native-sanitizer runtime-window-interaction-integration
+	@echo "TERMINAL_NOTES_ACCEPTANCE_PASS vectors=G1-G3,B1-B2,P1-P2,E1-E5,I1-I3,F1-F2,T1,A1-native-actions,A2-A3,L1 modes=2 geometry_delta=0 terminal_bytes=0 native_owners=0"
 
 runtime-architecture-check:
 	@if [[ "$(RUNTIME_ARCH)" != "arm64" && "$(RUNTIME_ARCH)" != "x86_64" ]]; then \

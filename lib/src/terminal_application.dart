@@ -8860,6 +8860,16 @@ final class TerminalApplication {
       _ => TerminalWindowInteractionRouteTarget.noteRail,
     };
 
+    TerminalWindowInteractionRouteTarget noteEditorRoute(
+      TerminalWindowInteractionInputFamily family,
+    ) => switch (family) {
+      TerminalWindowInteractionInputFamily.menuKeyEquivalent =>
+        TerminalWindowInteractionRouteTarget.applicationAction,
+      TerminalWindowInteractionInputFamily.automationWrite =>
+        TerminalWindowInteractionRouteTarget.interactionBusy,
+      _ => TerminalWindowInteractionRouteTarget.noteEditor,
+    };
+
     _expectLifecycle(
       state.windowCount == 1 &&
           state.tabCount == 1 &&
@@ -9037,20 +9047,22 @@ final class TerminalApplication {
 
     final TerminalSecureKeyboardEntryStatus secureBefore =
         secureKeyboardEntry.status;
-    final TerminalWindowInteractionTransferResult noteRequested = authority
-        .requestOwner(
-          TerminalWindowInteractionOwner.noteRail(
-            windowId: ordinaryWindow.id,
-            paneId: ordinaryPaneId,
-            surfaceGeneration: 1,
-          ),
+    final TerminalWindowNoteInteractionAdapter noteAdapter =
+        TerminalWindowNoteInteractionAdapter(
+          authority: authority,
+          router: router,
+          windowId: ordinaryWindow.id,
+          paneId: ordinaryPaneId,
+          surfaceGeneration: 1,
         );
+    final TerminalWindowInteractionTransferResult noteRequested = noteAdapter
+        .requestRailFocus();
     _expectLifecycle(
       noteRequested.disposition ==
               TerminalWindowInteractionTransferDisposition.requested &&
-          authority.confirm(noteRequested.request!).disposition ==
+          noteAdapter.confirmNativeFocus(noteRequested.request!).disposition ==
               TerminalWindowInteractionTransferDisposition.confirmed,
-      'future Note rail test owner could not acquire interaction authority',
+      'Note rail adapter could not acquire interaction authority',
     );
     expectRoutes(
       windowId: ordinaryWindow.id,
@@ -9090,16 +9102,62 @@ final class TerminalApplication {
           secureKeyboardEntry.status.hasSameProjection(secureBefore),
       'future Note ownership leaked terminal input or changed secure input',
     );
-    final TerminalWindowInteractionTransferResult terminalRequested = authority
-        .requestTerminal(ordinaryWindow.id);
+    final TerminalWindowConsumedGestureResult noteGesture = noteAdapter
+        .beginGesture(eventSequence: 1);
+    final TerminalWindowInteractionTransferResult editorRequested = noteAdapter
+        .requestEditorFocus(draftGeneration: 1);
+    _expectLifecycle(
+      noteGesture.disposition ==
+              TerminalWindowConsumedGestureDisposition.started &&
+          editorRequested.disposition ==
+              TerminalWindowInteractionTransferDisposition.requested &&
+          noteAdapter
+                  .confirmNativeFocus(editorRequested.request!)
+                  .disposition ==
+              TerminalWindowInteractionTransferDisposition.confirmed &&
+          router
+                  .consumeGesture(
+                    noteGesture.identity!,
+                    TerminalWindowConsumedGesturePhase.up,
+                  )
+                  .disposition ==
+              TerminalWindowConsumedGestureDisposition.consumedStale &&
+          noteAdapter.synchronizeEditorPhase(
+            dirty: true,
+            confirmingDiscard: false,
+          ),
+      'Note editor did not acquire the authority or consume its gesture',
+    );
+    expectRoutes(
+      windowId: ordinaryWindow.id,
+      paneId: ordinaryPaneId,
+      expected: noteEditorRoute,
+      stage: 'Note editor owner',
+    );
+    final TerminalWindowNoteOutsideResult dirtyOutside = noteAdapter
+        .handleOutsidePointerDown();
+    _expectLifecycle(
+      dirtyOutside.disposition ==
+              TerminalWindowNoteOutsideDisposition.discardConfirmation &&
+          !dirtyOutside.forwardsToTerminal &&
+          noteAdapter.keepEditingAfterDiscardConfirmation() &&
+          terminalInputDeliveryCount() == noteInputBaseline &&
+          (focusReportCounts[ordinaryPaneId] ?? 0) == focusReportBaseline,
+      'dirty Note outside click replayed input or changed window focus',
+    );
+    final TerminalWindowInteractionTransferResult terminalRequested =
+        noteAdapter.requestTerminalAfterResolution();
     _expectLifecycle(
       terminalRequested.disposition ==
               TerminalWindowInteractionTransferDisposition.requested &&
-          authority.confirm(terminalRequested.request!).disposition ==
+          noteAdapter
+                  .confirmNativeFocus(terminalRequested.request!)
+                  .disposition ==
               TerminalWindowInteractionTransferDisposition.confirmed &&
           secureKeyboardEntry.status.hasSameProjection(secureBefore),
-      'future Note owner did not return explicitly to the terminal',
+      'Note editor did not return explicitly to the terminal',
     );
+    noteAdapter.dispose();
     expectRoutes(
       windowId: ordinaryWindow.id,
       paneId: ordinaryPaneId,
@@ -9223,7 +9281,8 @@ final class TerminalApplication {
     stdout.writeln(
       'TERMINAL_WINDOW_INTERACTION_TEST exactly_one=true responder=true '
       'raw=true ime=true input_matrix=true system_surface=true '
-      'future_note=true focus_report_delta=0 secure=true '
+      'note_adapter=true outside_no_replay=true automation_busy=true '
+      'focus_report_delta=0 secure=true '
       'quick_terminal=true close_reopen=true sessions_clean=4 '
       'text_clients=0 native_handles=0',
     );

@@ -101,6 +101,17 @@ typedef enum DtnResultDisposition {
   DTN_RESULT_UNAVAILABLE = 4,
 } DtnResultDisposition;
 
+typedef enum DtnFocusTarget {
+  DTN_FOCUS_NONE = 0,
+  DTN_FOCUS_RAIL = 1,
+  DTN_FOCUS_EDITOR = 2,
+} DtnFocusTarget;
+
+enum {
+  DTN_INTERACTION_EDITOR_DIRTY = 1u << 0,
+  DTN_INTERACTION_CONFIRM_DISCARD = 1u << 1,
+};
+
 typedef struct DtnSurface DtnSurface;
 
 typedef struct DtnSurfaceSnapshotV1 {
@@ -134,7 +145,8 @@ typedef struct DtnSurfaceSnapshotV1 {
   uint32_t outstanding_intent;
   uint32_t emitted_intent_count;
   uint32_t applied_result_count;
-  uint32_t reserved[2];
+  uint32_t interaction_flags;
+  uint32_t focus_target;
 } DtnSurfaceSnapshotV1;
 
 typedef struct DtnSurfaceIntentV1 {
@@ -262,6 +274,11 @@ __attribute__((visibility("default"))) int32_t dtn_surface_take_intent(
 
 __attribute__((visibility("default"))) int32_t dtn_surface_apply_result(
     DtnSurface* surface, const DtnSurfaceResultV1* result);
+
+// Moves first responder only within this surface. Product authority must
+// confirm its generation-bound transfer only after this call succeeds.
+__attribute__((visibility("default"))) int32_t dtn_surface_focus(
+    DtnSurface* surface, uint32_t target);
 
 // Native-to-native composition seam. The returned view is unretained and must
 // never cross Dart FFI. attach consumes neither object.

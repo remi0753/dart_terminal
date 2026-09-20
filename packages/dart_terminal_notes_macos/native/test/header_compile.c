@@ -6,6 +6,10 @@ _Static_assert(DTN_CARD_RECORD_BYTES == 32u, "card layout changed");
 _Static_assert(DTN_MAX_CARDS == 64u, "projection card bound changed");
 _Static_assert(sizeof(DtnSurfaceSnapshotV1) == 160u,
                "snapshot ABI layout changed");
+_Static_assert(offsetof(DtnSurfaceSnapshotV1, interaction_flags) == 152u,
+               "interaction flags ABI offset changed");
+_Static_assert(offsetof(DtnSurfaceSnapshotV1, focus_target) == 156u,
+               "focus target ABI offset changed");
 _Static_assert(sizeof(DtnPresentationSnapshotV1) == 232u,
                "presentation snapshot ABI layout changed");
 _Static_assert(sizeof(DtnSurfaceIntentV1) == 112u,

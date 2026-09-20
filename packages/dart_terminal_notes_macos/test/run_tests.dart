@@ -335,6 +335,19 @@ void _testSurfaceFacade() {
         presentation.badgeDisplayCount == 2,
     'content-free presentation state',
   );
+  final TerminalNotesNativeSnapshot interaction = surface.snapshot;
+  _expect(
+    !interaction.editorDirty &&
+        !interaction.confirmingDiscard &&
+        interaction.focusTarget == TerminalNotesNativeFocusTarget.none &&
+        surface.focus(TerminalNotesNativeFocusTarget.rail) &&
+        !surface.focus(TerminalNotesNativeFocusTarget.editor),
+    'typed content-free interaction snapshot and focus request',
+  );
+  _expectThrows<ArgumentError>(
+    () => surface.focus(TerminalNotesNativeFocusTarget.none),
+    'none is not a focus request',
+  );
   bindings.intent = TerminalNotesNativeRawIntent(
     surfaceGeneration: 7,
     projectionGeneration: 3,
@@ -447,6 +460,8 @@ class _FakeBindings implements TerminalNotesNativeBindings {
         outstandingIntent: intent != null,
         emittedIntentCount: intent == null ? 0 : 1,
         appliedResultCount: 0,
+        interactionFlags: 0,
+        focusTarget: 0,
       );
 
   @override
@@ -496,6 +511,9 @@ class _FakeBindings implements TerminalNotesNativeBindings {
     _expect(result.eventGeneration == 9, 'fake result event generation');
     return 0;
   }
+
+  @override
+  int focus(Object handle, int target) => target == 1 ? 0 : 6;
 
   @override
   void destroySurface(Object handle) {

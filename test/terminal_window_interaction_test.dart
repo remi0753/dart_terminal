@@ -10,6 +10,7 @@ Future<void> runTerminalWindowInteractionTests() async {
   await _testHierarchyStaleFallbackAndWindowLifecycle();
   await _testContextDockUsesSharedAuthorityProjection();
   await _testInputFamilyRoutingAndGestureNoReplay();
+  await _testNoteInteractionAdapterAcceptance();
   await _testSystemSurfaceCoordinatorLifecycle();
   await _testBoundedDeterministicOwnerSequence();
 }
@@ -547,6 +548,207 @@ Future<void> _testInputFamilyRoutingAndGestureNoReplay() async {
         router.activeConsumedGestureCount == 0,
     'removed window rejects late input and releases gesture state',
   );
+  router.dispose();
+  authority.dispose();
+  await application.shutdown();
+}
+
+Future<void> _testNoteInteractionAdapterAcceptance() async {
+  final List<_InteractionFakeSession> sessions = <_InteractionFakeSession>[];
+  final TerminalApplicationState application = TerminalApplicationState();
+  final TerminalWindowState window = await application.createWindow(
+    _configuration(sessions),
+  );
+  final PaneId paneId = window.selectedTab.focusedPaneId;
+  final TerminalWindowInteractionAuthority authority =
+      TerminalWindowInteractionAuthority(application);
+  final TerminalWindowInteractionRouter router =
+      TerminalWindowInteractionRouter(authority);
+  final TerminalWindowNoteInteractionAdapter adapter =
+      TerminalWindowNoteInteractionAdapter(
+        authority: authority,
+        router: router,
+        windowId: window.id,
+        paneId: paneId,
+        surfaceGeneration: 7,
+      );
+  var terminalByteCount = 0;
+  var focusReportCount = 0;
+
+  void countTerminalForward(TerminalWindowInteractionInputFamily family) {
+    if (adapter.route(family).forwardsToTerminal) ++terminalByteCount;
+  }
+
+  final TerminalWindowInteractionTransferResult rail = adapter
+      .requestRailFocus();
+  _expect(
+    rail.disposition ==
+            TerminalWindowInteractionTransferDisposition.requested &&
+        adapter.hasPendingNativeFocus &&
+        TerminalWindowInteractionInputFamily.values.every(
+          (TerminalWindowInteractionInputFamily family) =>
+              adapter.route(family).target ==
+              TerminalWindowInteractionRouteTarget.consumed,
+        ) &&
+        adapter.confirmNativeFocus(rail.request!).disposition ==
+            TerminalWindowInteractionTransferDisposition.confirmed,
+    'Note rail confirms authority only after the native focus hop',
+  );
+  for (final TerminalWindowInteractionInputFamily family
+      in TerminalWindowInteractionInputFamily.values) {
+    final TerminalWindowInteractionRouteTarget expected = switch (family) {
+      TerminalWindowInteractionInputFamily.menuKeyEquivalent =>
+        TerminalWindowInteractionRouteTarget.applicationAction,
+      TerminalWindowInteractionInputFamily.automationWrite =>
+        TerminalWindowInteractionRouteTarget.interactionBusy,
+      TerminalWindowInteractionInputFamily.ime ||
+      TerminalWindowInteractionInputFamily.cutPasteSelectAll ||
+      TerminalWindowInteractionInputFamily.servicesText ||
+      TerminalWindowInteractionInputFamily.plainTextDrop ||
+      TerminalWindowInteractionInputFamily.richOrFileDrop =>
+        TerminalWindowInteractionRouteTarget.consumed,
+      _ => TerminalWindowInteractionRouteTarget.noteRail,
+    };
+    _expect(
+      adapter.route(family).target == expected,
+      'Note rail adapter assigns exactly one consumer to ${family.name}',
+    );
+    countTerminalForward(family);
+  }
+
+  final TerminalWindowConsumedGestureResult began = adapter.beginGesture(
+    eventSequence: 1,
+  );
+  final TerminalWindowConsumedGestureIdentity gesture = began.identity!;
+  final TerminalWindowInteractionTransferResult editor = adapter
+      .requestEditorFocus(draftGeneration: 3);
+  _expect(
+    began.disposition == TerminalWindowConsumedGestureDisposition.started &&
+        editor.disposition ==
+            TerminalWindowInteractionTransferDisposition.requested &&
+        adapter.confirmNativeFocus(editor.request!).disposition ==
+            TerminalWindowInteractionTransferDisposition.confirmed &&
+        router
+                .consumeGesture(gesture, TerminalWindowConsumedGesturePhase.up)
+                .disposition ==
+            TerminalWindowConsumedGestureDisposition.consumedStale &&
+        !router
+            .consumeGesture(gesture, TerminalWindowConsumedGesturePhase.up)
+            .forwardsToTerminal,
+    'rail-to-editor transfer consumes the complete pointer sequence once',
+  );
+  _expect(
+    adapter.synchronizeEditorPhase(dirty: true, confirmingDiscard: false),
+    'native dirty bit projects into the sole interaction authority',
+  );
+  for (final TerminalWindowInteractionInputFamily family
+      in TerminalWindowInteractionInputFamily.values) {
+    final TerminalWindowInteractionRouteTarget expected = switch (family) {
+      TerminalWindowInteractionInputFamily.menuKeyEquivalent =>
+        TerminalWindowInteractionRouteTarget.applicationAction,
+      TerminalWindowInteractionInputFamily.automationWrite =>
+        TerminalWindowInteractionRouteTarget.interactionBusy,
+      _ => TerminalWindowInteractionRouteTarget.noteEditor,
+    };
+    _expect(
+      adapter.route(family).target == expected,
+      'Note editor adapter assigns exactly one consumer to ${family.name}',
+    );
+    countTerminalForward(family);
+  }
+  final int dirtyGeneration = authority
+      .snapshotForWindow(window.id)!
+      .generation;
+  _expect(
+    adapter
+            .route(
+              TerminalWindowInteractionInputFamily.rawKey,
+              expectedAuthorityGeneration: dirtyGeneration - 1,
+            )
+            .target ==
+        TerminalWindowInteractionRouteTarget.stale,
+    'stale Note input generation fails closed',
+  );
+
+  final TerminalWindowNoteOutsideResult dirtyOutside = adapter
+      .handleOutsidePointerDown();
+  _expect(
+    dirtyOutside.disposition ==
+            TerminalWindowNoteOutsideDisposition.discardConfirmation &&
+        !dirtyOutside.forwardsToTerminal &&
+        authority.snapshotForWindow(window.id)!.noteEditorPhase ==
+            TerminalWindowNoteEditorPhase.confirmDiscard &&
+        !adapter.hasPendingNativeFocus &&
+        adapter.keepEditingAfterDiscardConfirmation() &&
+        authority.snapshotForWindow(window.id)!.noteEditorPhase ==
+            TerminalWindowNoteEditorPhase.dirty,
+    'dirty outside click opens confirmation without replay or focus change',
+  );
+
+  final TerminalWindowInteractionTransferResult resolved = adapter
+      .requestTerminalAfterResolution();
+  _expect(
+    resolved.disposition ==
+            TerminalWindowInteractionTransferDisposition.requested &&
+        adapter.route(TerminalWindowInteractionInputFamily.mouse).target ==
+            TerminalWindowInteractionRouteTarget.consumed &&
+        adapter.confirmNativeFocus(resolved.request!).disposition ==
+            TerminalWindowInteractionTransferDisposition.confirmed &&
+        authority.snapshotForWindow(window.id)!.owner.kind ==
+            TerminalWindowInteractionOwnerKind.terminal,
+    'resolved dirty editor restores terminal only after native focus',
+  );
+
+  final TerminalWindowInteractionTransferResult cleanEditor = adapter
+      .requestEditorFocus(draftGeneration: 4);
+  adapter.confirmNativeFocus(cleanEditor.request!);
+  final TerminalWindowNoteOutsideResult cleanOutside = adapter
+      .handleOutsidePointerDown();
+  _expect(
+    cleanOutside.disposition ==
+            TerminalWindowNoteOutsideDisposition.focusTransferRequested &&
+        !cleanOutside.forwardsToTerminal &&
+        cleanOutside.request != null &&
+        adapter.confirmNativeFocus(cleanOutside.request!).disposition ==
+            TerminalWindowInteractionTransferDisposition.confirmed,
+    'clean outside click is consumed before terminal focus transfer',
+  );
+
+  final TerminalWindowInteractionTransferResult secondRail = adapter
+      .requestRailFocus();
+  adapter.confirmNativeFocus(secondRail.request!);
+  final TerminalWindowConsumedGestureResult teardownGesture = adapter
+      .beginGesture(eventSequence: 2);
+  var rejectedUnsafeDispose = false;
+  try {
+    adapter.dispose();
+  } on StateError {
+    rejectedUnsafeDispose = true;
+  }
+  final TerminalWindowInteractionTransferResult teardown = adapter
+      .prepareForViewTeardown();
+  _expect(
+    rejectedUnsafeDispose &&
+        teardownGesture.disposition ==
+            TerminalWindowConsumedGestureDisposition.started &&
+        router.activeConsumedGestureCount == 0 &&
+        teardown.disposition ==
+            TerminalWindowInteractionTransferDisposition.requested &&
+        adapter.confirmNativeFocus(teardown.request!).disposition ==
+            TerminalWindowInteractionTransferDisposition.confirmed,
+    'adapter enforces owner release and gesture drain before view teardown',
+  );
+  adapter.dispose();
+  final bool nativeViewDestroyedAfterAdapter = adapter.isDisposed;
+  _expect(
+    nativeViewDestroyedAfterAdapter &&
+        terminalByteCount == 0 &&
+        focusReportCount == 0 &&
+        authority.snapshotForWindow(window.id)!.owner.kind ==
+            TerminalWindowInteractionOwnerKind.terminal,
+    'E/I/F teardown vectors preserve terminal bytes and focus reports at zero',
+  );
+
   router.dispose();
   authority.dispose();
   await application.shutdown();

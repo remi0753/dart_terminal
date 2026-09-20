@@ -264,6 +264,11 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 @end
 
 @interface DtnPlainTextView : NSTextView
+@property(nonatomic, copy) NSString* markedBaseline;
+@property(nonatomic) NSRange markedBaselineSelection;
+@property(nonatomic) NSRange markedReplacementRange;
+- (BOOL)cancelMarkedTextRestoringBaseline;
+- (void)commitMarkedText;
 @end
 
 @implementation DtnPlainTextView
@@ -280,6 +285,67 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
                                 type:(NSPasteboardType)type {
   if (![type isEqualToString:NSPasteboardTypeString]) return NO;
   return [super readSelectionFromPasteboard:pasteboard type:type];
+}
+
+- (void)setMarkedText:(id)string
+         selectedRange:(NSRange)selectedRange
+      replacementRange:(NSRange)replacementRange {
+  if (!self.hasMarkedText) {
+    self.markedBaseline = self.string;
+    self.markedBaselineSelection = self.selectedRange;
+    self.markedReplacementRange =
+        replacementRange.location == NSNotFound ? self.selectedRange
+                                                 : replacementRange;
+  }
+  [self.undoManager disableUndoRegistration];
+  [super setMarkedText:string
+         selectedRange:selectedRange
+      replacementRange:replacementRange];
+  [self.undoManager enableUndoRegistration];
+}
+
+- (void)insertText:(id)string replacementRange:(NSRange)replacementRange {
+  if (self.markedBaseline != nil) {
+    NSString* baseline = self.markedBaseline;
+    const NSRange baseline_selection = self.markedBaselineSelection;
+    const NSRange baseline_replacement = self.markedReplacementRange;
+    [self.undoManager disableUndoRegistration];
+    [super unmarkText];
+    self.string = baseline;
+    self.selectedRange = baseline_selection;
+    [self.undoManager enableUndoRegistration];
+    self.markedBaseline = nil;
+    replacementRange = baseline_replacement;
+  }
+  [super insertText:string replacementRange:replacementRange];
+}
+
+- (void)unmarkText {
+  if (self.markedBaseline != nil && self.hasMarkedText) {
+    [self commitMarkedText];
+    return;
+  }
+  [super unmarkText];
+}
+
+- (BOOL)cancelMarkedTextRestoringBaseline {
+  if (!self.hasMarkedText || self.markedBaseline == nil) return NO;
+  NSString* baseline = self.markedBaseline;
+  const NSRange selection = self.markedBaselineSelection;
+  [self.undoManager disableUndoRegistration];
+  [super unmarkText];
+  self.string = baseline;
+  self.selectedRange = selection;
+  [self.undoManager enableUndoRegistration];
+  self.markedBaseline = nil;
+  return YES;
+}
+
+- (void)commitMarkedText {
+  if (!self.hasMarkedText || self.markedBaseline == nil) return;
+  const NSRange marked = self.markedRange;
+  NSString* committed = [self.string substringWithRange:marked];
+  [self insertText:committed replacementRange:marked];
 }
 
 @end
@@ -309,6 +375,7 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 - (void)showFixedError;
 - (void)showDiscardConfirmation;
 - (void)hideDiscardConfirmation;
+- (void)clearDraft;
 @end
 
 @implementation DtnNoteEditorView
@@ -400,6 +467,9 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
    draftGeneration:(uint64_t)draftGeneration
     bodyFontPoints:(CGFloat)bodyFontPoints
     japaneseLocale:(BOOL)japaneseLocale {
+  if (self.textView.hasMarkedText) {
+    [(DtnPlainTextView*)self.textView cancelMarkedTextRestoringBaseline];
+  }
   self.japaneseLocale = japaneseLocale;
   self.baselineBody = body;
   self.baselineColor = color;
@@ -440,7 +510,9 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 }
 
 - (BOOL)validateForSave {
-  if ([self.textView hasMarkedText]) [self.textView unmarkText];
+  if ([self.textView hasMarkedText]) {
+    [(DtnPlainTextView*)self.textView commitMarkedText];
+  }
   if (!dtn_valid_editor_string(self.textView.string, true)) {
     [self showFixedError];
     return NO;
@@ -463,6 +535,20 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 - (void)hideDiscardConfirmation {
   self.discardConfirmation.hidden = YES;
   self.textView.editable = YES;
+}
+
+- (void)clearDraft {
+  if (self.textView.hasMarkedText) {
+    [(DtnPlainTextView*)self.textView cancelMarkedTextRestoringBaseline];
+  }
+  [self.textView.undoManager disableUndoRegistration];
+  self.textView.string = @"";
+  [self.textView.undoManager enableUndoRegistration];
+  [self.textView.undoManager removeAllActions];
+  self.baselineBody = @"";
+  self.draftGeneration = 0u;
+  self.errorLabel.hidden = YES;
+  [self hideDiscardConfirmation];
 }
 
 - (BOOL)textView:(NSTextView*)textView
@@ -488,6 +574,30 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 - (void)textDidChange:(NSNotification*)notification {
   (void)notification;
   self.errorLabel.hidden = YES;
+}
+
+- (BOOL)textView:(NSTextView*)textView
+    doCommandBySelector:(SEL)commandSelector {
+  if (commandSelector != @selector(cancelOperation:)) return NO;
+  if (textView.hasMarkedText) {
+    [(DtnPlainTextView*)textView cancelMarkedTextRestoringBaseline];
+    return YES;
+  }
+  [self.cancelButton performClick:nil];
+  return YES;
+}
+
+- (NSArray*)accessibilityChildren {
+  if (!self.discardConfirmation.hidden) {
+    return @[
+      self.confirmationLabel, self.keepEditingButton, self.discardButton
+    ];
+  }
+  NSMutableArray* children = [NSMutableArray
+      arrayWithObjects:self.textScrollView, self.colorControl, self.saveButton,
+                       self.cancelButton, nil];
+  if (!self.errorLabel.hidden) [children addObject:self.errorLabel];
+  return children;
 }
 
 - (void)layout {
@@ -550,6 +660,8 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 - (void)applySemanticResult:(DtnSurfaceResultV1)result
                  intentKind:(uint32_t)intentKind;
 - (void)setSemanticControlsEnabled:(BOOL)enabled;
+- (uint32_t)focusTarget;
+- (int32_t)focusInsideSurface:(uint32_t)target;
 @end
 
 @implementation DtnNoteSurfaceView
@@ -842,7 +954,7 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     self.locallyClosedEditor = YES;
     self.editor.hidden = YES;
     self.scrollView.hidden = NO;
-    [self.editor.textView.undoManager removeAllActions];
+    [self.editor clearDraft];
     [self layoutPresentation];
     return;
   }
@@ -955,7 +1067,7 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     self.locallyClosedEditor = NO;
     self.editor.hidden = YES;
     self.scrollView.hidden = NO;
-    self.editor.draftGeneration = 0u;
+    [self.editor clearDraft];
   } else {
     if (projection.draft_generation != previous_draft) {
       self.locallyClosedEditor = NO;
@@ -987,6 +1099,39 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   self.visibleAcknowledgementEligibleGeneration = 0u;
   [self setSemanticControlsEnabled:YES];
   [self layoutPresentation];
+}
+
+- (uint32_t)focusTarget {
+  NSResponder* responder = self.window.firstResponder;
+  if (![responder isKindOfClass:NSView.class]) return DTN_FOCUS_NONE;
+  NSView* focused = (NSView*)responder;
+  if (focused == self.editor || [focused isDescendantOf:self.editor]) {
+    return DTN_FOCUS_EDITOR;
+  }
+  if (focused == self.badge || focused == self.rail ||
+      [focused isDescendantOf:self.rail]) {
+    return DTN_FOCUS_RAIL;
+  }
+  return DTN_FOCUS_NONE;
+}
+
+- (int32_t)focusInsideSurface:(uint32_t)target {
+  if (self.window == nil) return DTN_STATUS_NOT_FOUND;
+  NSView* responder = nil;
+  if (target == DTN_FOCUS_RAIL) {
+    responder = self.rail.hidden ? self.badge : self.sectionControl;
+    if (responder.hidden) return DTN_STATUS_NOT_FOUND;
+  } else if (target == DTN_FOCUS_EDITOR) {
+    if (self.editor.hidden ||
+        self.projection.editor_mode == DTN_EDITOR_INACTIVE) {
+      return DTN_STATUS_NOT_FOUND;
+    }
+    responder = self.editor.textView;
+  } else {
+    return DTN_STATUS_INVALID_ARGUMENT;
+  }
+  return [self.window makeFirstResponder:responder] ? DTN_STATUS_OK
+                                                    : DTN_STATUS_INTERNAL;
 }
 
 - (void)applyLayout:(DtnLayoutV1)layout {
@@ -1082,6 +1227,30 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
                  fmax(0, self.rail.bounds.size.height - content_y - 12));
   self.scrollView.frame = content_frame;
   self.editor.frame = content_frame;
+  if (editor_visible) {
+    [self.rail setAccessibilityChildren:@[ self.toolbar, self.editor ]];
+    self.sectionControl.nextKeyView = self.editor.textView;
+    self.editor.textView.nextKeyView = self.editor.colorControl;
+    self.editor.colorControl.nextKeyView = self.editor.saveButton;
+    self.editor.saveButton.nextKeyView = self.editor.cancelButton;
+    self.editor.cancelButton.nextKeyView = self.sectionControl;
+    self.editor.keepEditingButton.nextKeyView = self.editor.discardButton;
+    self.editor.discardButton.nextKeyView = self.editor.keepEditingButton;
+  } else {
+    [self.rail
+        setAccessibilityChildren:@[ self.toolbar, self.scrollView,
+                                     self.actionBar ]];
+    NSMutableArray* action_children =
+        [NSMutableArray arrayWithObject:self.cardColorControl];
+    [action_children addObjectsFromArray:self.actionButtons];
+    [self.actionBar setAccessibilityChildren:action_children];
+    self.sectionControl.nextKeyView = self.cardColorControl;
+    self.cardColorControl.nextKeyView = self.actionButtons.firstObject;
+    for (NSUInteger index = 0; index + 1 < self.actionButtons.count; ++index) {
+      self.actionButtons[index].nextKeyView = self.actionButtons[index + 1];
+    }
+    self.actionButtons.lastObject.nextKeyView = self.sectionControl;
+  }
   CGFloat card_y = 0;
   const CGFloat card_width = fmax(0, self.scrollView.bounds.size.width - 12);
   for (DtnNoteCardView* card in self.cardViews) {
@@ -1576,6 +1745,15 @@ int32_t dtn_surface_snapshot(DtnSurface* surface,
   snapshot->outstanding_intent = surface->has_pending_intent ? 1u : 0u;
   snapshot->emitted_intent_count = surface->emitted_intent_count;
   snapshot->applied_result_count = surface->applied_result_count;
+  uint32_t interaction_flags = 0u;
+  if (!surface->view.editor.hidden && surface->view.editor.isDirty) {
+    interaction_flags |= DTN_INTERACTION_EDITOR_DIRTY;
+  }
+  if (!surface->view.editor.discardConfirmation.hidden) {
+    interaction_flags |= DTN_INTERACTION_CONFIRM_DISCARD;
+  }
+  snapshot->interaction_flags = interaction_flags;
+  snapshot->focus_target = surface->view.focusTarget;
   return DTN_STATUS_OK;
 }
 
@@ -1900,6 +2078,12 @@ int32_t dtn_surface_apply_result(DtnSurface* surface,
     ++surface->applied_result_count;
   }
   return DTN_STATUS_OK;
+}
+
+int32_t dtn_surface_focus(DtnSurface* surface, uint32_t target) {
+  if (surface == NULL) return DTN_STATUS_INVALID_ARGUMENT;
+  if (![NSThread isMainThread]) return DTN_STATUS_WRONG_THREAD;
+  return [surface->view focusInsideSurface:target];
 }
 
 void* dtn_surface_native_view(DtnSurface* surface) {

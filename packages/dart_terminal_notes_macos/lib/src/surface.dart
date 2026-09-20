@@ -43,6 +43,8 @@ enum TerminalNotesResultApplyDisposition {
   failed,
 }
 
+enum TerminalNotesNativeFocusTarget { none, rail, editor }
+
 final class TerminalNotesNativeIntent {
   const TerminalNotesNativeIntent({
     required this.surfaceGeneration,
@@ -156,6 +158,9 @@ final class TerminalNotesNativeSnapshot {
     required this.outstandingIntent,
     required this.emittedIntentCount,
     required this.appliedResultCount,
+    required this.editorDirty,
+    required this.confirmingDiscard,
+    required this.focusTarget,
   });
 
   final int paneId;
@@ -190,6 +195,9 @@ final class TerminalNotesNativeSnapshot {
   final bool outstandingIntent;
   final int emittedIntentCount;
   final int appliedResultCount;
+  final bool editorDirty;
+  final bool confirmingDiscard;
+  final TerminalNotesNativeFocusTarget focusTarget;
 }
 
 final class TerminalNotesRect {
@@ -326,7 +334,9 @@ final class TerminalNotesNativeSurface {
         raw.surfaceState >= TerminalNotesSurfaceState.values.length ||
         raw.section >= TerminalNotesCollectionSection.values.length ||
         raw.editorMode >= TerminalNotesEditorMode.values.length ||
-        raw.messageKey >= TerminalNotesMessageKey.values.length) {
+        raw.messageKey >= TerminalNotesMessageKey.values.length ||
+        raw.focusTarget >= TerminalNotesNativeFocusTarget.values.length ||
+        raw.interactionFlags & ~3 != 0) {
       throw const TerminalNotesNativeException('snapshot.visibility', -1);
     }
     return TerminalNotesNativeSnapshot(
@@ -362,7 +372,20 @@ final class TerminalNotesNativeSurface {
       outstandingIntent: raw.outstandingIntent,
       emittedIntentCount: raw.emittedIntentCount,
       appliedResultCount: raw.appliedResultCount,
+      editorDirty: raw.interactionFlags & 1 != 0,
+      confirmingDiscard: raw.interactionFlags & 2 != 0,
+      focusTarget: TerminalNotesNativeFocusTarget.values[raw.focusTarget],
     );
+  }
+
+  bool focus(TerminalNotesNativeFocusTarget target) {
+    if (target == TerminalNotesNativeFocusTarget.none) {
+      throw ArgumentError.value(target, 'target');
+    }
+    final int status = _bindings.focus(_requireHandle(), target.index);
+    if (status == nativeStatusOk) return true;
+    if (status == nativeStatusNotFound) return false;
+    throw TerminalNotesNativeException('focus', status);
   }
 
   void updateLayout({

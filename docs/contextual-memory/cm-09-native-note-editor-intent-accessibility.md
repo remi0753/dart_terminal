@@ -1,7 +1,7 @@
 # CM-09 native Note editor、intent、accessibility interaction
 
 日付: 2026-09-21
-状態: 実装中
+状態: 完了
 
 ## 目的
 
@@ -173,3 +173,58 @@ fail closedにする。
 - Rail内editor、atomic draft admission、Save/Cancel/dirty confirmation、six-colorと全fixed semantic actionの実装・受け入れを完了した。
 - Window interaction authorityとのall-input routing、Escape/outside click、focus/VoiceOver順、adapter-before-view teardownのaggregate
   acceptanceは第3サブタスクで実施する。
+
+## 2026-09-21: 第3サブタスク着手
+
+- ROADMAPを再確認し、CM-09の先頭未完了が「input isolation、focus/accessibility、teardown acceptance」であることを確認した。
+- CM-07のsole `TerminalWindowInteractionAuthority`、12 input family、generation-bound transfer、consumed Note gestureを再確認した。
+  別authorityやnative owner stackは作らず、Note surfaceごとの薄いproduct adapterで既存authorityを使用する。
+- Native draft本文をDartへmirrorしてdirty判定する案はprivacy/ownership境界に反するため不採用とする。既存snapshotの予約領域を
+  content-freeなinteraction flagsとfocus targetへ割り当て、struct size/versionを変えずdirty/confirm/focusだけを同期する。
+- Native focusを`dart_appkit`固有widget APIへ追加する案は不採用とする。Note capability自身がrail/editor内のfirst responderを選ぶ
+  bounded focus callを公開し、root adapterはnative focus成功後だけauthority transferをconfirmする二段階を維持する。
+- Outside clickをterminalへhit-test replayする案は不採用とする。Note owner中は既存routerがcurrent eventをconsumeし、cleanなら
+  terminal focus transfer、dirtyならinline discard confirmationへ遷移する。どちらも同じmouse eventをterminalへ再配送しない。
+- Production manifest/dependency、Note store mutation、menu/action公開はCM-10のままとする。第3サブタスクではmanifest-independentな
+  native harness、pure product adapter test、既存window-interaction runtime gateへのtest-only exerciseだけを接続する。
+
+### 第3サブタスクの実装と判断
+
+- `TerminalWindowNoteInteractionAdapter`を既存のsole `TerminalWindowInteractionAuthority`の薄いproduct adapterとして追加した。
+  Rail/editorへの移行はnative focus成功後にだけauthorityをconfirmする二段階とし、stale/busy/focus failureは
+  current ownerを変更せずfail closedにする。
+- Authorityの12 input familyをNote owner時は全てNoteへのみrouteし、terminal raw byteとfocus reportを0に保つ。
+  AutomationはNote owner中busyとし、gestureはrelease時にconsumeする。Clean/dirtyのoutside clickはどちらも現在eventを
+  terminalへreplayせず、dirtyはinline confirmation、cleanは別のexplicit focus resolutionまでterminal入力を再開しない。
+- Native snapshot ABIの予約済み8 bytesを`interaction_flags`/`focus_target`に割り当てた。ABI v1は160 bytesのままで、
+  dirty/confirm/focus以外のbody、selection、tokenをDartへ出さない。`dtn_surface_focus`はrail/editorの有界targetだけを受ける。
+- Marked textはcomposition開始時のbaseline/selection/replacementを保存し、composition中の変更はUndo登録しない。
+  Commit時はbaselineから1つのUndoable editにし、最初のEscapeはcompositionだけをcancel、次のEscapeはdirty confirmation/
+  Cancelを実行する。Accepted Save/Cancel、inactive projection、teardownはtext/baseline/Undo/generationを破棄する。
+- Editor/confirmation表示に応じてAX childrenとkeyboard traversalを確定し、rail/editorへのfocus targetもsnapshotで観測できる。
+  Viewを破棄する前にadapter ownerとgestureをreleaseし、delegate、Undo、native ownerを残さない。
+- A1のうちCM-09で確定済みのSave/Cancel/color/reorder/resolve/delete/reattach/export/copyのnative action controlsを受け入れた。
+  S2/S3 trigger selectorはこのnative editor固定ABIへ先行追加せず、CM-11/CM-17でproduct trigger stateと共に実装する。
+
+### 第3サブタスクの検証
+
+- `make terminal-notes-native-test`: pass。Actual AppKitのAX tree/key order、rail/editor focus、content-free dirty/confirm/focus snapshot、
+  marked text Escape、accepted action後のdraft/Undo消去、read-mode action順を確認した。
+- `make terminal-notes-contract-check terminal-notes-native-test terminal-notes-dart-test terminal-notes-capability-audit`: pass。
+  Package format 9 files 0 changed、analyze issue 0、ABI header C/C++ compile、exports 15、manifest absent、snapshot content-free、
+  generic `dart_appkit`を確認した。
+- `DART_SUPPRESS_ANALYTICS=true dart run test/terminal_window_interaction_test.dart`: pass。12 input familyのexactly-one consumer、
+  automation busy、stale request、gesture/outside no-replay、dirty confirmation、focus report/terminal byte sentinel 0、teardown順を確認した。
+- `make RUNTIME_ARCH=arm64 terminal-notes-acceptance`: pass。Developer JIT/Release AOTの実AppKit integration、
+  `geometry_delta=0 terminal_bytes=0 native_owners=0`、Notesを含む5 sanitizer suite/11 artifactを確認した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: pass。370 root files format 0 changed、root/package analyze issue 0、
+  native/package/generated freshness/compatibility/application/distribution/securityと`dart_terminal tests passed`を確認した。
+- `phase7_acceptance_v1.json`、`ghostty_p0_p1_gap_inventory.json`、`release_candidate_daily_use_matrix.json`は、
+  変更したapplication/runtime smoke/Makefileのsource hashだけをgeneratorで更新し、各freshness checkをpassした。
+- `git diff --check`: pass。`../dart_appkit`は着手前からの3変更のみで、Dart Terminal固有のNote code/referenceを0に保った。
+
+### CM-09完了
+
+- Intent/result、native editor/actions、input isolation、focus/accessibility、teardownをmanifest-independentに実装し、CM-09の全完了条件を満たした。
+- Production manifest、durable authority/store mutation、menu/palette、Quick Terminal lifecycleはCM-10、On Return triggerはCM-11、
+  At Next Prompt triggerはCM-17まで未実装である。

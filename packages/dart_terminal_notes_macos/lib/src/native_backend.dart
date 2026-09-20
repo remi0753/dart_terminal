@@ -48,6 +48,8 @@ final class TerminalNotesNativeRawSnapshot {
     required this.outstandingIntent,
     required this.emittedIntentCount,
     required this.appliedResultCount,
+    required this.interactionFlags,
+    required this.focusTarget,
   });
 
   final int paneId;
@@ -82,6 +84,8 @@ final class TerminalNotesNativeRawSnapshot {
   final bool outstandingIntent;
   final int emittedIntentCount;
   final int appliedResultCount;
+  final int interactionFlags;
+  final int focusTarget;
 }
 
 final class TerminalNotesNativeRawIntent {
@@ -193,6 +197,8 @@ abstract interface class TerminalNotesNativeBindings {
 
   int applyResult(Object handle, TerminalNotesNativeRawResult result);
 
+  int focus(Object handle, int target);
+
   void destroySurface(Object handle);
 
   int get liveSurfaceCount;
@@ -268,6 +274,10 @@ final class TerminalNotesNativeFfiBindings
   }
 
   @override
+  int focus(Object handle, int target) =>
+      _surfaceFocus(_handle(handle), target);
+
+  @override
   int applyProjection(Object handle, Uint8List bytes) {
     final Pointer<Void> nativeHandle = _handle(handle);
     final Pointer<Uint8> pointer = calloc<Uint8>(bytes.length);
@@ -327,6 +337,8 @@ final class TerminalNotesNativeFfiBindings
         outstandingIntent: snapshot.ref.outstandingIntent != 0,
         emittedIntentCount: snapshot.ref.emittedIntentCount,
         appliedResultCount: snapshot.ref.appliedResultCount,
+        interactionFlags: snapshot.ref.interactionFlags,
+        focusTarget: snapshot.ref.focusTarget,
       );
     } finally {
       calloc.free(snapshot);
@@ -527,8 +539,11 @@ final class _DtnSurfaceSnapshotV1 extends Struct {
   @Uint32()
   external int appliedResultCount;
 
-  @Array<Uint32>(2)
-  external Array<Uint32> reserved;
+  @Uint32()
+  external int interactionFlags;
+
+  @Uint32()
+  external int focusTarget;
 }
 
 final class _DtnLayoutV1 extends Struct {
@@ -797,6 +812,12 @@ external int _surfaceApplyResult(
   Pointer<Void> surface,
   Pointer<_DtnSurfaceResultV1> result,
 );
+
+@Native<Int32 Function(Pointer<Void>, Uint32)>(
+  symbol: 'dtn_surface_focus',
+  assetId: _assetId,
+)
+external int _surfaceFocus(Pointer<Void> surface, int target);
 
 @Native<Void Function(Pointer<Void>)>(
   symbol: 'dtn_surface_destroy',

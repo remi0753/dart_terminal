@@ -469,6 +469,22 @@ final class TerminalWindowInteractionRouter {
     );
   }
 
+  int releaseNoteGestures({
+    required TerminalWindowId windowId,
+    required PaneId paneId,
+    required int surfaceGeneration,
+  }) {
+    _ensureAlive();
+    final int before = _gestures.length;
+    _gestures.removeWhere(
+      (_, TerminalWindowConsumedGestureIdentity identity) =>
+          identity.windowId == windowId &&
+          identity.paneId == paneId &&
+          identity.surfaceGeneration == surfaceGeneration,
+    );
+    return before - _gestures.length;
+  }
+
   void dispose() {
     if (_isDisposed) return;
     _isDisposed = true;
@@ -485,6 +501,330 @@ final class TerminalWindowInteractionRouter {
 
   void _ensureAlive() {
     if (_isDisposed) throw StateError('window interaction router is disposed');
+  }
+}
+
+enum TerminalWindowNoteOutsideDisposition {
+  focusTransferRequested,
+  discardConfirmation,
+  noChange,
+  busy,
+  rejected,
+  stale,
+  unavailable,
+}
+
+/// Content-free result for an outside pointer-down while a Note owns input.
+///
+/// The current pointer event is always consumed. A caller may move native
+/// focus only for [focusTransferRequested], then confirm the attached token.
+final class TerminalWindowNoteOutsideResult {
+  const TerminalWindowNoteOutsideResult(this.disposition, {this.request});
+
+  final TerminalWindowNoteOutsideDisposition disposition;
+  final TerminalWindowInteractionTransferRequest? request;
+
+  bool get forwardsToTerminal => false;
+}
+
+/// Product adapter binding one native Note surface to the sole window input
+/// authority. It owns no Note content and performs no native focus mutation.
+///
+/// Focus transfer remains two-phase: request here, move the native first
+/// responder, then call [confirmNativeFocus]. Teardown must similarly return
+/// ownership, dispose this adapter, and only then destroy the native view.
+final class TerminalWindowNoteInteractionAdapter {
+  TerminalWindowNoteInteractionAdapter({
+    required this.authority,
+    required this.router,
+    required this.windowId,
+    required this.paneId,
+    required this.surfaceGeneration,
+  }) {
+    if (!_validGeneration(surfaceGeneration)) {
+      throw ArgumentError.value(
+        surfaceGeneration,
+        'surfaceGeneration',
+        'must be a positive bounded generation',
+      );
+    }
+  }
+
+  final TerminalWindowInteractionAuthority authority;
+  final TerminalWindowInteractionRouter router;
+  final TerminalWindowId windowId;
+  final PaneId paneId;
+  final int surfaceGeneration;
+
+  TerminalWindowInteractionTransferRequest? _pendingFocus;
+  var _isDisposed = false;
+
+  bool get isDisposed => _isDisposed;
+  bool get hasPendingNativeFocus => _pendingFocus != null;
+
+  TerminalWindowInteractionTransferResult requestRailFocus() => _requestOwner(
+    TerminalWindowInteractionOwner.noteRail(
+      windowId: windowId,
+      paneId: paneId,
+      surfaceGeneration: surfaceGeneration,
+    ),
+  );
+
+  TerminalWindowInteractionTransferResult requestEditorFocus({
+    required int draftGeneration,
+  }) => _requestOwner(
+    TerminalWindowInteractionOwner.noteEditor(
+      windowId: windowId,
+      paneId: paneId,
+      surfaceGeneration: surfaceGeneration,
+      draftGeneration: draftGeneration,
+    ),
+  );
+
+  TerminalWindowInteractionTransferResult confirmNativeFocus(
+    TerminalWindowInteractionTransferRequest request,
+  ) {
+    _ensureAlive();
+    if (!identical(_pendingFocus, request)) {
+      return const TerminalWindowInteractionTransferResult(
+        TerminalWindowInteractionTransferDisposition.stale,
+      );
+    }
+    _pendingFocus = null;
+    return authority.confirm(request);
+  }
+
+  TerminalWindowInteractionTransferResult cancelNativeFocus(
+    TerminalWindowInteractionTransferRequest request,
+  ) {
+    _ensureAlive();
+    if (!identical(_pendingFocus, request)) {
+      return const TerminalWindowInteractionTransferResult(
+        TerminalWindowInteractionTransferDisposition.stale,
+      );
+    }
+    _pendingFocus = null;
+    return authority.cancel(request);
+  }
+
+  bool synchronizeEditorPhase({
+    required bool dirty,
+    required bool confirmingDiscard,
+  }) {
+    _ensureAlive();
+    final TerminalWindowInteractionSnapshot? snapshot = authority
+        .snapshotForWindow(windowId);
+    if (!_ownsEditor(snapshot)) return false;
+    final TerminalWindowNoteEditorPhase phase = confirmingDiscard
+        ? TerminalWindowNoteEditorPhase.confirmDiscard
+        : dirty
+        ? TerminalWindowNoteEditorPhase.dirty
+        : TerminalWindowNoteEditorPhase.clean;
+    if (snapshot!.noteEditorPhase == phase) return true;
+    return authority.setNoteEditorPhase(windowId, phase);
+  }
+
+  TerminalWindowInteractionRouteResult route(
+    TerminalWindowInteractionInputFamily family, {
+    int? expectedAuthorityGeneration,
+  }) {
+    _ensureAlive();
+    return router.route(
+      windowId: windowId,
+      paneId: paneId,
+      family: family,
+      expectedAuthorityGeneration: expectedAuthorityGeneration,
+    );
+  }
+
+  TerminalWindowConsumedGestureResult beginGesture({
+    required int eventSequence,
+  }) {
+    _ensureAlive();
+    return router.beginNoteGesture(
+      windowId: windowId,
+      paneId: paneId,
+      surfaceGeneration: surfaceGeneration,
+      eventSequence: eventSequence,
+    );
+  }
+
+  TerminalWindowNoteOutsideResult handleOutsidePointerDown() {
+    _ensureAlive();
+    if (_pendingFocus != null) {
+      return const TerminalWindowNoteOutsideResult(
+        TerminalWindowNoteOutsideDisposition.busy,
+      );
+    }
+    final TerminalWindowInteractionSnapshot? snapshot = authority
+        .snapshotForWindow(windowId);
+    if (!_ownsSurface(snapshot)) {
+      return const TerminalWindowNoteOutsideResult(
+        TerminalWindowNoteOutsideDisposition.stale,
+      );
+    }
+    if (snapshot!.owner.kind == TerminalWindowInteractionOwnerKind.noteEditor &&
+        snapshot.noteEditorPhase != TerminalWindowNoteEditorPhase.clean) {
+      if (snapshot.noteEditorPhase == TerminalWindowNoteEditorPhase.dirty) {
+        authority.setNoteEditorPhase(
+          windowId,
+          TerminalWindowNoteEditorPhase.confirmDiscard,
+        );
+      }
+      return const TerminalWindowNoteOutsideResult(
+        TerminalWindowNoteOutsideDisposition.discardConfirmation,
+      );
+    }
+    final TerminalWindowInteractionTransferResult transfer = authority
+        .requestTerminal(windowId);
+    if (transfer.request != null) _pendingFocus = transfer.request;
+    return TerminalWindowNoteOutsideResult(
+      _outsideDisposition(transfer.disposition),
+      request: transfer.request,
+    );
+  }
+
+  bool keepEditingAfterDiscardConfirmation() {
+    _ensureAlive();
+    final TerminalWindowInteractionSnapshot? snapshot = authority
+        .snapshotForWindow(windowId);
+    if (!_ownsEditor(snapshot) ||
+        snapshot!.noteEditorPhase !=
+            TerminalWindowNoteEditorPhase.confirmDiscard) {
+      return false;
+    }
+    return authority.setNoteEditorPhase(
+      windowId,
+      TerminalWindowNoteEditorPhase.dirty,
+    );
+  }
+
+  TerminalWindowInteractionTransferResult requestTerminalAfterResolution() {
+    _ensureAlive();
+    if (_pendingFocus != null) {
+      return const TerminalWindowInteractionTransferResult(
+        TerminalWindowInteractionTransferDisposition.busy,
+      );
+    }
+    final TerminalWindowInteractionSnapshot? snapshot = authority
+        .snapshotForWindow(windowId);
+    if (!_ownsSurface(snapshot)) {
+      return const TerminalWindowInteractionTransferResult(
+        TerminalWindowInteractionTransferDisposition.stale,
+      );
+    }
+    if (snapshot!.owner.kind == TerminalWindowInteractionOwnerKind.noteEditor &&
+        snapshot.noteEditorPhase != TerminalWindowNoteEditorPhase.clean) {
+      authority.setNoteEditorPhase(
+        windowId,
+        TerminalWindowNoteEditorPhase.clean,
+      );
+    }
+    final TerminalWindowInteractionTransferResult transfer = authority
+        .requestTerminal(windowId);
+    if (transfer.request != null) _pendingFocus = transfer.request;
+    return transfer;
+  }
+
+  TerminalWindowInteractionTransferResult prepareForViewTeardown() {
+    _ensureAlive();
+    router.releaseNoteGestures(
+      windowId: windowId,
+      paneId: paneId,
+      surfaceGeneration: surfaceGeneration,
+    );
+    final TerminalWindowInteractionSnapshot? snapshot = authority
+        .snapshotForWindow(windowId);
+    if (snapshot == null) {
+      return const TerminalWindowInteractionTransferResult(
+        TerminalWindowInteractionTransferDisposition.unavailable,
+      );
+    }
+    if (!_ownsSurface(snapshot)) {
+      return const TerminalWindowInteractionTransferResult(
+        TerminalWindowInteractionTransferDisposition.noChange,
+      );
+    }
+    if (snapshot.blocksHierarchyMutation) {
+      return const TerminalWindowInteractionTransferResult(
+        TerminalWindowInteractionTransferDisposition.rejected,
+      );
+    }
+    return requestTerminalAfterResolution();
+  }
+
+  void dispose() {
+    if (_isDisposed) return;
+    final TerminalWindowInteractionTransferRequest? pending = _pendingFocus;
+    if (pending != null) {
+      authority.cancel(pending);
+      _pendingFocus = null;
+    }
+    router.releaseNoteGestures(
+      windowId: windowId,
+      paneId: paneId,
+      surfaceGeneration: surfaceGeneration,
+    );
+    final TerminalWindowInteractionSnapshot? snapshot = authority
+        .snapshotForWindow(windowId);
+    if (_ownsSurface(snapshot)) {
+      throw StateError(
+        'Note interaction adapter still owns input during teardown',
+      );
+    }
+    _isDisposed = true;
+  }
+
+  TerminalWindowInteractionTransferResult _requestOwner(
+    TerminalWindowInteractionOwner owner,
+  ) {
+    _ensureAlive();
+    if (_pendingFocus != null) {
+      return const TerminalWindowInteractionTransferResult(
+        TerminalWindowInteractionTransferDisposition.busy,
+      );
+    }
+    final TerminalWindowInteractionTransferResult transfer = authority
+        .requestOwner(owner);
+    if (transfer.request != null) _pendingFocus = transfer.request;
+    return transfer;
+  }
+
+  bool _ownsSurface(TerminalWindowInteractionSnapshot? snapshot) =>
+      snapshot != null &&
+      snapshot.owner.isNoteOwner &&
+      snapshot.owner.windowId == windowId &&
+      snapshot.owner.paneId == paneId &&
+      snapshot.owner.surfaceGeneration == surfaceGeneration;
+
+  bool _ownsEditor(TerminalWindowInteractionSnapshot? snapshot) =>
+      _ownsSurface(snapshot) &&
+      snapshot!.owner.kind == TerminalWindowInteractionOwnerKind.noteEditor;
+
+  static TerminalWindowNoteOutsideDisposition _outsideDisposition(
+    TerminalWindowInteractionTransferDisposition disposition,
+  ) => switch (disposition) {
+    TerminalWindowInteractionTransferDisposition.requested =>
+      TerminalWindowNoteOutsideDisposition.focusTransferRequested,
+    TerminalWindowInteractionTransferDisposition.noChange =>
+      TerminalWindowNoteOutsideDisposition.noChange,
+    TerminalWindowInteractionTransferDisposition.busy =>
+      TerminalWindowNoteOutsideDisposition.busy,
+    TerminalWindowInteractionTransferDisposition.rejected =>
+      TerminalWindowNoteOutsideDisposition.rejected,
+    TerminalWindowInteractionTransferDisposition.stale =>
+      TerminalWindowNoteOutsideDisposition.stale,
+    TerminalWindowInteractionTransferDisposition.unavailable =>
+      TerminalWindowNoteOutsideDisposition.unavailable,
+    TerminalWindowInteractionTransferDisposition.confirmed ||
+    TerminalWindowInteractionTransferDisposition.cancelled =>
+      TerminalWindowNoteOutsideDisposition.stale,
+  };
+
+  void _ensureAlive() {
+    if (_isDisposed) {
+      throw StateError('Note interaction adapter is disposed');
+    }
   }
 }
 

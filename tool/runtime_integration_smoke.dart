@@ -2623,7 +2623,8 @@ Future<void> _runWindowInteraction(
     RegExp(
           r'^TERMINAL_WINDOW_INTERACTION_TEST exactly_one=true '
           r'responder=true raw=true ime=true input_matrix=true '
-          r'system_surface=true future_note=true focus_report_delta=0 '
+          r'system_surface=true note_adapter=true outside_no_replay=true '
+          r'automation_busy=true focus_report_delta=0 '
           r'secure=true quick_terminal=true close_reopen=true '
           r'sessions_clean=4 text_clients=0 native_handles=0$',
           multiLine: true,

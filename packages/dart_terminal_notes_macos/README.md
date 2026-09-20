@@ -27,6 +27,21 @@ it once, and rejects mismatched or duplicate results without mutating the last
 projection. Results contain only a fixed disposition and new revision/
 generation values; they never echo body content or persistent identity.
 
+The rail also owns one standard plain-text `NSTextView` editor. Draft text,
+selection, marked text, scroll position, and Undo remain native and volatile;
+only Save snapshots a validated body. Every typing, IME, paste, plain-text
+drop, and Services mutation passes the same whole-draft admission (4,096 UTF-8
+bytes, 64 lines, no forbidden control/bidi/unpaired scalar). Rich, custom, and
+file pasteboard types are rejected. Dirty cancellation uses an inline
+Discard/Keep Editing confirmation, and fixed AppKit controls expose the six
+colors and semantic card actions without hover-only affordances.
+
+The content-free state snapshot reports only dirty/confirmation flags and the
+current native focus target. `focus` moves first responder within the surface;
+the product must still perform its generation-bound interaction-authority
+request before calling it and confirm only after focus succeeds. Current input
+events are never replayed by this package.
+
 Application capability registration and Dart Terminal model adaptation are
 intentionally deferred to product composition. Package tests load the code
 asset directly, so this package can be verified before manifest registration.

@@ -92,6 +92,7 @@ Future<void> main(List<String> arguments) async {
     '_dtn_surface_create',
     '_dtn_surface_destroy',
     '_dtn_surface_detach_from_host',
+    '_dtn_surface_focus',
     '_dtn_surface_native_view',
     '_dtn_surface_presentation_snapshot',
     '_dtn_surface_request_intent',

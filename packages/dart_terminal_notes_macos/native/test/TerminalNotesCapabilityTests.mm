@@ -813,6 +813,31 @@ int main() {
                    [[save_button accessibilityRole]
                        isEqualToString:NSAccessibilityButtonRole],
                "localized editor and actual accessibility controls");
+  NSView* editor_rail =
+      find_view_named(editor_note_view, @"DtnOpaqueRailView");
+  NSArray* editor_rail_children = [editor_rail accessibilityChildren];
+  NSArray* editor_children = [editor_view accessibilityChildren];
+  ok &= expect(editor_rail_children.count == 2u &&
+                   editor_rail_children[1] == editor_view &&
+                   editor_children.count == 4u &&
+                   text_view.nextKeyView == draft_color &&
+                   draft_color.nextKeyView == save_button &&
+                   save_button.nextKeyView == cancel_button &&
+                   cancel_button.nextKeyView != nil,
+               "editor VoiceOver tree and keyboard order are deterministic");
+  ok &= expect(dtn_surface_focus(editor_surface, 99u) ==
+                       DTN_STATUS_INVALID_ARGUMENT &&
+                   dtn_surface_focus(editor_surface, DTN_FOCUS_EDITOR) ==
+                       DTN_STATUS_OK,
+               "generation adapter can focus only a valid Note target");
+  snapshot = {};
+  snapshot.struct_size = sizeof(snapshot);
+  snapshot.version = DTN_SNAPSHOT_VERSION;
+  ok &= expect(dtn_surface_snapshot(editor_surface, &snapshot) ==
+                       DTN_STATUS_OK &&
+                   snapshot.focus_target == DTN_FOCUS_EDITOR &&
+                   snapshot.interaction_flags == 0u,
+               "initial interaction snapshot is content-free and clean");
   presentation = {};
   presentation.struct_size = sizeof(presentation);
   presentation.version = DTN_PRESENTATION_SNAPSHOT_VERSION;
@@ -824,6 +849,14 @@ int main() {
 
   [editor_window makeFirstResponder:text_view];
   [text_view setSelectedRange:NSMakeRange(text_view.string.length, 0u)];
+  [text_view setMarkedText:@"未確定"
+             selectedRange:NSMakeRange(3u, 0u)
+          replacementRange:NSMakeRange(NSNotFound, 0u)];
+  [text_view doCommandBySelector:@selector(cancelOperation:)];
+  ok &= expect(!text_view.hasMarkedText &&
+                   [text_view.string isEqualToString:@"baseline"] &&
+                   discard_confirmation.hidden,
+               "first Escape cancels marked text without closing editor");
   [text_view setMarkedText:@"かな"
              selectedRange:NSMakeRange(2u, 0u)
           replacementRange:NSMakeRange(NSNotFound, 0u)];
@@ -833,6 +866,15 @@ int main() {
                    [text_view.string isEqualToString:@"baseline仮名"] &&
                    text_view.undoManager.canUndo,
                "Japanese marked text commits into volatile Undo draft");
+  snapshot = {};
+  snapshot.struct_size = sizeof(snapshot);
+  snapshot.version = DTN_SNAPSHOT_VERSION;
+  ok &= expect(dtn_surface_snapshot(editor_surface, &snapshot) ==
+                       DTN_STATUS_OK &&
+                   snapshot.interaction_flags ==
+                       DTN_INTERACTION_EDITOR_DIRTY &&
+                   snapshot.focus_target == DTN_FOCUS_EDITOR,
+               "dirty state mirrors no Note content across the ABI");
 
   NSString* before_invalid = [text_view.string copy];
   [text_view setSelectedRange:NSMakeRange(3u, 2u)];
@@ -973,11 +1015,19 @@ int main() {
                    !editor_error.hidden && save_button.enabled,
                "conflict preserves draft selection Undo and re-enables editor");
 
-  [cancel_button performClick:nil];
+  [text_view doCommandBySelector:@selector(cancelOperation:)];
   editor_taken = {};
   editor_taken.struct_size = sizeof(editor_taken);
   editor_taken.version = DTN_INTENT_VERSION;
+  snapshot = {};
+  snapshot.struct_size = sizeof(snapshot);
+  snapshot.version = DTN_SNAPSHOT_VERSION;
   ok &= expect(!discard_confirmation.hidden && !text_view.editable &&
+                   dtn_surface_snapshot(editor_surface, &snapshot) ==
+                       DTN_STATUS_OK &&
+                   snapshot.interaction_flags ==
+                       (DTN_INTERACTION_EDITOR_DIRTY |
+                        DTN_INTERACTION_CONFIRM_DISCARD) &&
                    dtn_surface_take_intent(editor_surface, &editor_taken,
                                            editor_payload,
                                            sizeof(editor_payload)) ==
@@ -1011,8 +1061,32 @@ int main() {
   cancel_accepted.disposition = DTN_RESULT_ACCEPTED;
   ok &= expect(dtn_surface_apply_result(editor_surface, &cancel_accepted) ==
                        DTN_STATUS_OK &&
-                   editor_view.hidden,
+                   editor_view.hidden &&
+                   text_view.string.length == 0u &&
+                   !text_view.undoManager.canUndo &&
+                   dtn_surface_focus(editor_surface, DTN_FOCUS_EDITOR) ==
+                       DTN_STATUS_NOT_FOUND &&
+                   dtn_surface_focus(editor_surface, DTN_FOCUS_RAIL) ==
+                       DTN_STATUS_OK,
                "accepted Cancel closes volatile editor locally");
+  snapshot = {};
+  snapshot.struct_size = sizeof(snapshot);
+  snapshot.version = DTN_SNAPSHOT_VERSION;
+  ok &= expect(dtn_surface_snapshot(editor_surface, &snapshot) ==
+                       DTN_STATUS_OK &&
+                   snapshot.interaction_flags == 0u &&
+                   snapshot.focus_target == DTN_FOCUS_RAIL,
+               "rail focus and resolved editor state cross ABI without body");
+  NSView* action_bar = [editor_note_view valueForKey:@"actionBar"];
+  NSArray* read_rail_children = [editor_rail accessibilityChildren];
+  NSArray* action_children = [action_bar accessibilityChildren];
+  ok &= expect(read_rail_children.count == 3u &&
+                   read_rail_children[2] == action_bar &&
+                   action_children.count == 9u &&
+                   action_children.firstObject == card_color &&
+                   card_color.nextKeyView == semantic_buttons.firstObject &&
+                   semantic_buttons.lastObject.nextKeyView != nil,
+               "read-mode VoiceOver tree and keyboard actions are ordered");
 
   BOOL actual_actions = semantic_buttons.count == 8u;
   for (NSButton* button in semantic_buttons) {
