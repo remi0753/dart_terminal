@@ -33,6 +33,10 @@ enum TerminalNotesIntentKind {
   selectCard,
   beginCreate,
   beginEdit,
+  showCurrent,
+  showDetached,
+  previousPage,
+  nextPage,
 }
 
 enum TerminalNotesResultDisposition {

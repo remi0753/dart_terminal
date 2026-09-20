@@ -54,6 +54,11 @@ The native surface is an AppKit child overlay with a 44×44 point trailing
 badge hit target, an optional 240–360 point rail, and at most 32 materialized
 card views. Cards use the six canonical opaque light/dark sRGB palettes,
 fixed status shapes, an eight-line preview, and bounded 12–24 point body text.
+The authority-projected Current/Detached selector is semantic rather than local
+UI state. Detached uses exact-total 64-card pages with Previous/Next controls,
+a localized range, non-reused ephemeral card tokens, and an explicit
+Attach-to-This-Terminal action on every materialized card; it never suggests or
+performs automatic reattachment.
 Small panes retain a non-content badge and never expose a rail. Hidden,
 background, and collapsed card bodies are omitted from the accessibility tree.
 English and Japanese fixed accessibility labels are selected by the bounded

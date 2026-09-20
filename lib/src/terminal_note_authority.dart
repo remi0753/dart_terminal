@@ -94,6 +94,10 @@ final class TerminalNoteSurfaceResult {
 enum TerminalNoteSurfaceIntentKind {
   open,
   close,
+  showCurrent,
+  showDetached,
+  previousPage,
+  nextPage,
   selectCard,
   beginCreate,
   beginEdit,
@@ -105,6 +109,7 @@ enum TerminalNoteSurfaceIntentKind {
   resolve,
   reopen,
   delete,
+  reattach,
 }
 
 /// Content-free semantic intent result for one authority-owned surface.
@@ -781,8 +786,62 @@ final class TerminalNoteAuthority {
             surface.visibility = TerminalNoteSurfaceVisibility.collapsed;
           }),
         );
+      case TerminalNoteSurfaceIntentKind.showCurrent:
+      case TerminalNoteSurfaceIntentKind.showDetached:
+        final TerminalNoteCollectionSection section =
+            kind == TerminalNoteSurfaceIntentKind.showCurrent
+            ? TerminalNoteCollectionSection.current
+            : TerminalNoteCollectionSection.detached;
+        if (cardToken != null ||
+            draftGeneration != 0 ||
+            surface.visibility != TerminalNoteSurfaceVisibility.expanded ||
+            surface.editorMode != TerminalNoteEditorMode.inactive ||
+            surface.section == section) {
+          return Future<TerminalNoteSurfaceIntentResult>.value(
+            _invalidSurfaceIntent(surface),
+          );
+        }
+        return Future<TerminalNoteSurfaceIntentResult>.value(
+          _applyRuntimeSurfaceIntent(pane, surface, () {
+            surface
+              ..section = section
+              ..pageStart = 0
+              ..selectedNoteId = null;
+          }),
+        );
+      case TerminalNoteSurfaceIntentKind.previousPage:
+      case TerminalNoteSurfaceIntentKind.nextPage:
+        final int totalCount = surface.latest?.totalCount ?? 0;
+        final bool previous =
+            kind == TerminalNoteSurfaceIntentKind.previousPage;
+        final bool canMove = previous
+            ? surface.pageStart > 0
+            : surface.pageStart +
+                      TerminalNoteProjectionLimits.maximumExpandedCards <
+                  totalCount;
+        if (cardToken != null ||
+            draftGeneration != 0 ||
+            surface.visibility != TerminalNoteSurfaceVisibility.expanded ||
+            surface.section != TerminalNoteCollectionSection.detached ||
+            surface.editorMode != TerminalNoteEditorMode.inactive ||
+            !canMove) {
+          return Future<TerminalNoteSurfaceIntentResult>.value(
+            _invalidSurfaceIntent(surface),
+          );
+        }
+        return Future<TerminalNoteSurfaceIntentResult>.value(
+          _applyRuntimeSurfaceIntent(pane, surface, () {
+            surface
+              ..pageStart = previous
+                  ? surface.pageStart -
+                        TerminalNoteProjectionLimits.maximumExpandedCards
+                  : surface.pageStart +
+                        TerminalNoteProjectionLimits.maximumExpandedCards
+              ..selectedNoteId = null;
+          }),
+        );
       case TerminalNoteSurfaceIntentKind.selectCard:
-        final NoteId? noteId = _currentNoteId(surface, cardToken);
+        final NoteId? noteId = _projectedNoteId(surface, cardToken);
         if (noteId == null ||
             draftGeneration != 0 ||
             surface.editorMode != TerminalNoteEditorMode.inactive) {
@@ -798,6 +857,7 @@ final class TerminalNoteAuthority {
       case TerminalNoteSurfaceIntentKind.beginCreate:
         if (cardToken != null ||
             draftGeneration != 0 ||
+            surface.section != TerminalNoteCollectionSection.current ||
             surface.editorMode != TerminalNoteEditorMode.inactive ||
             surface.nextDraftGeneration >
                 TerminalNoteProjectionLimits.maximumGeneration) {
@@ -854,6 +914,7 @@ final class TerminalNoteAuthority {
       case TerminalNoteSurfaceIntentKind.resolve:
       case TerminalNoteSurfaceIntentKind.reopen:
       case TerminalNoteSurfaceIntentKind.delete:
+      case TerminalNoteSurfaceIntentKind.reattach:
         return _submitDurableSurfaceIntent(
           pane: pane,
           surface: surface,
@@ -1417,10 +1478,15 @@ final class TerminalNoteAuthority {
     TerminalNoteSurfaceIntentKind.moveLater ||
     TerminalNoteSurfaceIntentKind.resolve ||
     TerminalNoteSurfaceIntentKind.reopen ||
-    TerminalNoteSurfaceIntentKind.delete =>
+    TerminalNoteSurfaceIntentKind.delete ||
+    TerminalNoteSurfaceIntentKind.reattach =>
       body == null && color == null && updatedAtUtcMicros != null,
     TerminalNoteSurfaceIntentKind.open ||
     TerminalNoteSurfaceIntentKind.close ||
+    TerminalNoteSurfaceIntentKind.showCurrent ||
+    TerminalNoteSurfaceIntentKind.showDetached ||
+    TerminalNoteSurfaceIntentKind.previousPage ||
+    TerminalNoteSurfaceIntentKind.nextPage ||
     TerminalNoteSurfaceIntentKind.selectCard ||
     TerminalNoteSurfaceIntentKind.beginCreate ||
     TerminalNoteSurfaceIntentKind.beginEdit ||
@@ -1438,6 +1504,11 @@ final class TerminalNoteAuthority {
     }
     return surface.noteIdsByToken[token];
   }
+
+  NoteId? _projectedNoteId(
+    _LiveNoteSurface surface,
+    TerminalNoteCardToken? token,
+  ) => token == null ? null : surface.noteIdsByToken[token];
 
   bool _matchesEditorIntent(
     _LiveNoteSurface surface,
@@ -1506,13 +1577,20 @@ final class TerminalNoteAuthority {
     required String? body,
     required NoteColorKey? color,
   }) async {
-    if (surface.section != TerminalNoteCollectionSection.current) {
+    final bool detachedReorder =
+        surface.section == TerminalNoteCollectionSection.detached &&
+        (kind == TerminalNoteSurfaceIntentKind.moveEarlier ||
+            kind == TerminalNoteSurfaceIntentKind.moveLater);
+    final bool reattaching = kind == TerminalNoteSurfaceIntentKind.reattach;
+    if (surface.section != TerminalNoteCollectionSection.current &&
+        !detachedReorder &&
+        !reattaching) {
       return _invalidSurfaceIntent(surface);
     }
     final bool saving = kind == TerminalNoteSurfaceIntentKind.save;
     final NoteId? selectedNoteId = saving
         ? surface.selectedNoteId
-        : _currentNoteId(surface, cardToken);
+        : _projectedNoteId(surface, cardToken);
     if (saving) {
       if (!_matchesEditorIntent(surface, cardToken, draftGeneration)) {
         return _invalidSurfaceIntent(surface);
@@ -1525,9 +1603,11 @@ final class TerminalNoteAuthority {
     final NoteRecord? selectedNote = selectedNoteId == null
         ? null
         : _document.snapshot.noteFor(selectedNoteId);
-    if (selectedNote != null &&
-        selectedNote.attachment.contextId != pane.contextId) {
-      return _invalidSurfaceIntent(surface);
+    if (selectedNote != null) {
+      final bool validAttachment = reattaching || detachedReorder
+          ? selectedNote.attachment.isDetached
+          : selectedNote.attachment.contextId == pane.contextId;
+      if (!validAttachment) return _invalidSurfaceIntent(surface);
     }
 
     NoteId? createdNoteId;
@@ -1587,8 +1667,9 @@ final class TerminalNoteAuthority {
           final List<NoteRecord> notes =
               snapshot.notes.values
                   .where(
-                    (NoteRecord note) =>
-                        note.attachment.contextId == pane.contextId,
+                    (NoteRecord note) => detachedReorder
+                        ? note.attachment.isDetached
+                        : note.attachment.contextId == pane.contextId,
                   )
                   .toList()
                 ..sort((NoteRecord left, NoteRecord right) {
@@ -1608,12 +1689,18 @@ final class TerminalNoteAuthority {
             }
           }
           return TerminalNoteAuthorityMutationPlan(
-            mutation: snapshot.reorderAttachedNotes(
-              contextId: pane.contextId,
-              orderedNoteIds: notes.map((NoteRecord note) => note.id),
-              updatedAtUtcMicros: updatedAtUtcMicros,
-              expectedStoreRevision: expectedStoreRevision,
-            ),
+            mutation: detachedReorder
+                ? snapshot.reorderDetachedNotes(
+                    orderedNoteIds: notes.map((NoteRecord note) => note.id),
+                    updatedAtUtcMicros: updatedAtUtcMicros,
+                    expectedStoreRevision: expectedStoreRevision,
+                  )
+                : snapshot.reorderAttachedNotes(
+                    contextId: pane.contextId,
+                    orderedNoteIds: notes.map((NoteRecord note) => note.id),
+                    updatedAtUtcMicros: updatedAtUtcMicros,
+                    expectedStoreRevision: expectedStoreRevision,
+                  ),
           );
         };
         break;
@@ -1664,8 +1751,25 @@ final class TerminalNoteAuthority {
           );
         };
         break;
+      case TerminalNoteSurfaceIntentKind.reattach:
+        if (selectedNote == null) return _invalidSurfaceIntent(surface);
+        transition = (TerminalNoteSnapshot snapshot) =>
+            TerminalNoteAuthorityMutationPlan(
+              mutation: snapshot.reattachNote(
+                noteId: selectedNote.id,
+                contextId: pane.contextId,
+                updatedAtUtcMicros: updatedAtUtcMicros,
+                expectedStoreRevision: expectedStoreRevision,
+                expectedNoteRevision: selectedNote.revision,
+              ),
+            );
+        break;
       case TerminalNoteSurfaceIntentKind.open:
       case TerminalNoteSurfaceIntentKind.close:
+      case TerminalNoteSurfaceIntentKind.showCurrent:
+      case TerminalNoteSurfaceIntentKind.showDetached:
+      case TerminalNoteSurfaceIntentKind.previousPage:
+      case TerminalNoteSurfaceIntentKind.nextPage:
       case TerminalNoteSurfaceIntentKind.selectCard:
       case TerminalNoteSurfaceIntentKind.beginCreate:
       case TerminalNoteSurfaceIntentKind.beginEdit:
@@ -1690,6 +1794,8 @@ final class TerminalNoteAuthority {
                 ..selectedNoteId = null
                 ..editorMode = TerminalNoteEditorMode.inactive
                 ..draftGeneration = 0;
+            } else if (kind == TerminalNoteSurfaceIntentKind.reattach) {
+              surface.selectedNoteId = null;
             }
           },
         );
@@ -1733,13 +1839,16 @@ final class TerminalNoteAuthority {
         disposition: TerminalNoteSurfaceDisposition.unavailable,
       );
     }
-    if (surface.section != TerminalNoteCollectionSection.current) {
-      return TerminalNoteSurfaceResult(
-        disposition: TerminalNoteSurfaceDisposition.unavailable,
-        projection: surface.latest,
-      );
-    }
-    final List<NoteRecord> orderedNotes = contextProjection.orderedNotes;
+    final List<NoteRecord> orderedNotes =
+        surface.section == TerminalNoteCollectionSection.current
+        ? contextProjection.orderedNotes
+        : (_document.snapshot.notes.values
+              .where((NoteRecord note) => note.attachment.isDetached)
+              .toList()
+            ..sort((NoteRecord left, NoteRecord right) {
+              final int order = left.order.compareTo(right.order);
+              return order == 0 ? left.id.compareTo(right.id) : order;
+            }));
     final int totalCount = orderedNotes.length;
     final int selectedIndex = surface.selectedNoteId == null
         ? -1
@@ -1762,7 +1871,12 @@ final class TerminalNoteAuthority {
     if (totalCount == 0) {
       surface.pageStart = 0;
     } else if (surface.pageStart >= totalCount) {
-      surface.pageStart = totalCount - 1;
+      surface.pageStart =
+          surface.section == TerminalNoteCollectionSection.detached
+          ? ((totalCount - 1) ~/
+                    TerminalNoteProjectionLimits.maximumExpandedCards) *
+                TerminalNoteProjectionLimits.maximumExpandedCards
+          : totalCount - 1;
     }
     if (surface.visibility == TerminalNoteSurfaceVisibility.expanded &&
         selectedIndex >= 0 &&
@@ -1770,7 +1884,12 @@ final class TerminalNoteAuthority {
             selectedIndex >=
                 surface.pageStart +
                     TerminalNoteProjectionLimits.maximumExpandedCards)) {
-      surface.pageStart = selectedIndex;
+      surface.pageStart =
+          surface.section == TerminalNoteCollectionSection.detached
+          ? (selectedIndex ~/
+                    TerminalNoteProjectionLimits.maximumExpandedCards) *
+                TerminalNoteProjectionLimits.maximumExpandedCards
+          : selectedIndex;
     }
     final Map<TerminalNoteCardToken, NoteId> noteIdsByToken =
         <TerminalNoteCardToken, NoteId>{};

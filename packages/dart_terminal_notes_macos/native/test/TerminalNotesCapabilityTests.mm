@@ -1562,6 +1562,126 @@ int main(int argc, const char* argv[]) {
   ok &= expect(dtn_debug_live_surfaces() == 1u,
                "navigation surface releases native ownership");
 
+  DtnSurface* paging_surface = dtn_surface_create();
+  NSView* paging_view =
+      (__bridge NSView*)dtn_surface_native_view(paging_surface);
+  std::vector<uint8_t> paging_current =
+      packet(1u, 20u, {"current card"}, 0x01u);
+  ok &= expect(
+      paging_surface != nullptr &&
+          dtn_surface_set_notification_id(paging_surface, 302u) ==
+              DTN_STATUS_OK &&
+          dtn_surface_apply_projection(paging_surface, paging_current.data(),
+                                       paging_current.size()) ==
+              DTN_STATUS_OK &&
+          dtn_surface_update_layout(paging_surface, &normal_layout) ==
+              DTN_STATUS_OK &&
+          dtn_surface_attach_to_host(paging_surface,
+                                     (__bridge void*)editor_host) ==
+              DTN_STATUS_OK,
+      "Detached paging surface starts from an expanded Current projection");
+
+  auto take_paging_intent = [&](uint32_t kind, uint64_t event,
+                                uint64_t token) {
+    DtnSurfaceIntentV1 intent = {};
+    intent.struct_size = sizeof(intent);
+    intent.version = DTN_INTENT_VERSION;
+    uint8_t payload[DTN_MAX_INTENT_PAYLOAD_BYTES] = {};
+    ok &= expect(dtn_surface_take_intent(paging_surface, &intent, payload,
+                                         sizeof(payload)) == DTN_STATUS_OK &&
+                     intent.kind == kind && intent.event_generation == event &&
+                     intent.card_token == token && intent.payload_bytes == 0u,
+                 "Detached control emits one body-free semantic intent");
+    return intent;
+  };
+  auto settle_paging_intent = [&](const DtnSurfaceIntentV1& intent,
+                                  std::vector<uint8_t>& projection,
+                                  uint64_t new_projection_generation) {
+    DtnSurfaceResultV1 result = {};
+    result.struct_size = sizeof(result);
+    result.version = DTN_RESULT_VERSION;
+    result.surface_generation = intent.surface_generation;
+    result.projection_generation = intent.projection_generation;
+    result.event_generation = intent.event_generation;
+    result.draft_generation = intent.draft_generation;
+    result.new_store_revision = intent.expected_store_revision;
+    result.new_projection_generation = new_projection_generation;
+    result.disposition = DTN_RESULT_ACCEPTED;
+    ok &= expect(dtn_surface_apply_projection(paging_surface,
+                                              projection.data(),
+                                              projection.size()) ==
+                             DTN_STATUS_OK &&
+                         dtn_surface_apply_result(paging_surface, &result) ==
+                             DTN_STATUS_OK,
+                 "Detached authority projection precedes its accepted result");
+  };
+
+  NSSegmentedControl* paging_sections =
+      [paging_view valueForKey:@"sectionControl"];
+  paging_sections.selectedSegment = DTN_SECTION_DETACHED;
+  [paging_sections sendAction:paging_sections.action to:paging_sections.target];
+  DtnSurfaceIntentV1 show_detached =
+      take_paging_intent(DTN_INTENT_SHOW_DETACHED, 1u, 0u);
+  std::vector<uint8_t> detached_last =
+      packet(2u, 20u, {"detached-64"}, 0x01u);
+  detached_last[82u] = DTN_SECTION_DETACHED;
+  write_u64(detached_last, 48u, 0u);
+  write_u32(detached_last, 88u, 64u);
+  write_u32(detached_last, 96u, 65u);
+  settle_paging_intent(show_detached, detached_last, 2u);
+
+  NSButton* previous_page = find_button_with_title(paging_view, @"Previous");
+  NSButton* next_page = find_button_with_title(paging_view, @"Next");
+  NSTextField* page_range = [paging_view valueForKey:@"pageRangeLabel"];
+  NSButton* paging_new = find_button_with_title(paging_view, @"New");
+  NSButton* card_reattach =
+      find_button_with_title(paging_view, @"Attach to This Terminal");
+  ok &= expect(previous_page != nil && previous_page.enabled &&
+                   next_page != nil && !next_page.enabled &&
+                   [page_range.stringValue isEqualToString:@"65–65 of 65"] &&
+                   !paging_new.enabled && card_reattach != nil,
+               "Detached last page exposes exact range and explicit card reattach");
+
+  [previous_page performClick:nil];
+  DtnSurfaceIntentV1 previous_page_intent =
+      take_paging_intent(DTN_INTENT_PREVIOUS_PAGE, 2u, 0u);
+  std::vector<std::string> first_page_bodies;
+  for (size_t index = 0; index < DTN_MAX_CARDS; ++index) {
+    first_page_bodies.push_back("detached-" + std::to_string(index));
+  }
+  std::vector<uint8_t> detached_first =
+      packet(3u, 20u, first_page_bodies, 0x01u);
+  detached_first[82u] = DTN_SECTION_DETACHED;
+  write_u64(detached_first, 48u, 0u);
+  write_u32(detached_first, 88u, 0u);
+  write_u32(detached_first, 96u, 65u);
+  settle_paging_intent(previous_page_intent, detached_first, 3u);
+  NSArray* materialized_cards = [paging_view valueForKey:@"cardViews"];
+  ok &= expect(!previous_page.enabled && next_page.enabled &&
+                   [page_range.stringValue isEqualToString:@"1–64 of 65"] &&
+                   materialized_cards.count == DTN_MAX_MATERIALIZED_CARDS,
+               "Detached first page keeps 64 projected and 32 materialized cards");
+
+  [next_page performClick:nil];
+  DtnSurfaceIntentV1 next_page_intent =
+      take_paging_intent(DTN_INTENT_NEXT_PAGE, 3u, 0u);
+  std::vector<uint8_t> detached_last_again =
+      packet(4u, 20u, {"detached-64"}, 0x01u);
+  detached_last_again[82u] = DTN_SECTION_DETACHED;
+  write_u64(detached_last_again, 48u, 0u);
+  write_u32(detached_last_again, 88u, 64u);
+  write_u32(detached_last_again, 96u, 65u);
+  settle_paging_intent(next_page_intent, detached_last_again, 4u);
+  card_reattach =
+      find_button_with_title(paging_view, @"Attach to This Terminal");
+  [card_reattach performClick:nil];
+  take_paging_intent(DTN_INTENT_REATTACH, 4u, 1u);
+  ok &= expect(dtn_surface_detach_from_host(paging_surface) == DTN_STATUS_OK,
+               "Detached paging surface detaches with one pending reattach");
+  dtn_surface_destroy(paging_surface);
+  ok &= expect(dtn_debug_live_surfaces() == 1u,
+               "Detached paging surface releases native ownership");
+
   ok &= expect(std::memcmp(&terminal, &terminal_before, sizeof(terminal)) == 0,
                "G1-G3/T1 terminal geometry and input sentinel delta zero");
   ok &= expect(dtn_surface_detach_from_host(surface) == DTN_STATUS_OK &&

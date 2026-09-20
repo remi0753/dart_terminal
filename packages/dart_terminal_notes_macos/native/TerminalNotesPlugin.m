@@ -221,6 +221,7 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
      bodyFontPoints:(CGFloat)bodyFontPoints
   increaseContrast:(BOOL)increaseContrast
      japaneseLocale:(BOOL)japaneseLocale
+     reattachAction:(BOOL)reattachAction
             selected:(BOOL)selected;
 @end
 
@@ -310,6 +311,7 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
      bodyFontPoints:(CGFloat)bodyFontPoints
   increaseContrast:(BOOL)increaseContrast
      japaneseLocale:(BOOL)japaneseLocale
+     reattachAction:(BOOL)reattachAction
             selected:(BOOL)selected {
   self.model = model;
   self.surfaceRgba = DtnSurfaceRgba(model.color, dark);
@@ -339,7 +341,10 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   }
   self.chipLabel.stringValue = chip;
   self.chipLabel.textColor = DtnColor(self.accentRgba);
-  self.editButton.title = japaneseLocale ? @"編集" : @"Edit";
+  self.editButton.title = reattachAction
+                              ? (japaneseLocale ? @"このターミナルへ接続"
+                                                : @"Attach to This Terminal")
+                              : (japaneseLocale ? @"編集" : @"Edit");
   [self.editButton setAccessibilityLabel:self.editButton.title];
   [self setNeedsDisplay:YES];
 }
@@ -348,12 +353,15 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   [super layout];
   const CGFloat padding = 12;
   const CGFloat chipHeight = 16;
+  const CGFloat buttonWidth = fmin(
+      160, fmax(58, self.editButton.intrinsicContentSize.width + 16));
   self.chipLabel.frame = NSMakeRect(
       padding, self.bounds.size.height - padding - chipHeight,
-      fmax(0, self.bounds.size.width - 2 * padding - 64), chipHeight);
+      fmax(0, self.bounds.size.width - 2 * padding - buttonWidth - 6),
+      chipHeight);
   self.editButton.frame = NSMakeRect(
-      fmax(padding, self.bounds.size.width - padding - 58),
-      self.bounds.size.height - padding - 24, 58, 24);
+      fmax(padding, self.bounds.size.width - padding - buttonWidth),
+      self.bounds.size.height - padding - 24, buttonWidth, 24);
   self.bodyLabel.frame = NSMakeRect(
       padding, padding, fmax(0, self.bounds.size.width - 2 * padding),
       fmax(0, self.bounds.size.height - 3 * padding - chipHeight));
@@ -733,6 +741,10 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 @property(nonatomic, strong) NSSegmentedControl* sectionControl;
 @property(nonatomic, strong) NSButton* createButton;
 @property(nonatomic, strong) NSButton* closeButton;
+@property(nonatomic, strong) DtnFlippedView* pagingBar;
+@property(nonatomic, strong) NSButton* previousPageButton;
+@property(nonatomic, strong) NSTextField* pageRangeLabel;
+@property(nonatomic, strong) NSButton* nextPageButton;
 @property(nonatomic, strong) DtnFlippedView* actionBar;
 @property(nonatomic, copy) NSArray<NSButton*>* actionButtons;
 @property(nonatomic, strong) NSSegmentedControl* cardColorControl;
@@ -797,7 +809,8 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     [_sectionControl setLabel:@"Current" forSegment:0];
     [_sectionControl setLabel:@"Detached" forSegment:1];
     _sectionControl.selectedSegment = 0;
-    [_sectionControl setEnabled:NO forSegment:1];
+    _sectionControl.target = self;
+    _sectionControl.action = @selector(onSection:);
     [_toolbar addSubview:_sectionControl];
     _createButton = [NSButton buttonWithTitle:@"New"
                                        target:self
@@ -813,6 +826,29 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     [_toolbar addSubview:_closeButton];
     [_toolbar setAccessibilityChildren:@[
       _titleLabel, _sectionControl, _createButton, _closeButton
+    ]];
+    _pagingBar = [[DtnFlippedView alloc] initWithFrame:NSZeroRect];
+    [_pagingBar setAccessibilityElement:YES];
+    [_pagingBar setAccessibilityRole:NSAccessibilityGroupRole];
+    [_rail addSubview:_pagingBar];
+    _previousPageButton = [NSButton buttonWithTitle:@"Previous"
+                                             target:self
+                                             action:@selector(onPreviousPage:)];
+    _pageRangeLabel = [NSTextField labelWithString:@"0–0 of 0"];
+    _pageRangeLabel.alignment = NSTextAlignmentCenter;
+    [_pageRangeLabel setAccessibilityElement:YES];
+    [_pageRangeLabel setAccessibilityRole:NSAccessibilityStaticTextRole];
+    _nextPageButton = [NSButton buttonWithTitle:@"Next"
+                                         target:self
+                                         action:@selector(onNextPage:)];
+    for (NSButton* button in @[ _previousPageButton, _nextPageButton ]) {
+      [button setAccessibilityElement:YES];
+      [button setAccessibilityRole:NSAccessibilityButtonRole];
+      [_pagingBar addSubview:button];
+    }
+    [_pagingBar addSubview:_pageRangeLabel];
+    [_pagingBar setAccessibilityChildren:@[
+      _previousPageButton, _pageRangeLabel, _nextPageButton
     ]];
     _badge.target = self;
     _badge.action = @selector(onOpen:);
@@ -922,6 +958,35 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 - (void)onNew:(id)sender {
   (void)sender;
   [self emitIntent:DTN_INTENT_BEGIN_CREATE
+               body:nil
+              color:DTN_NO_COLOR
+              token:0u];
+}
+
+- (void)onSection:(id)sender {
+  (void)sender;
+  const NSInteger requested = self.sectionControl.selectedSegment;
+  self.sectionControl.selectedSegment = self.projection.section;
+  if (requested == (NSInteger)self.projection.section) return;
+  [self emitIntent:requested == DTN_SECTION_DETACHED
+                       ? DTN_INTENT_SHOW_DETACHED
+                       : DTN_INTENT_SHOW_CURRENT
+               body:nil
+              color:DTN_NO_COLOR
+              token:0u];
+}
+
+- (void)onPreviousPage:(id)sender {
+  (void)sender;
+  [self emitIntent:DTN_INTENT_PREVIOUS_PAGE
+               body:nil
+              color:DTN_NO_COLOR
+              token:0u];
+}
+
+- (void)onNextPage:(id)sender {
+  (void)sender;
+  [self emitIntent:DTN_INTENT_NEXT_PAGE
                body:nil
               color:DTN_NO_COLOR
               token:0u];
@@ -1082,11 +1147,20 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   self.badge.enabled = enabled;
   const BOOL navigation_enabled =
       enabled && self.projection.editor_mode == DTN_EDITOR_INACTIVE;
-  self.createButton.enabled = navigation_enabled;
+  self.sectionControl.enabled = navigation_enabled;
+  self.createButton.enabled =
+      navigation_enabled && self.projection.section == DTN_SECTION_CURRENT;
   self.closeButton.enabled = navigation_enabled;
+  self.previousPageButton.enabled =
+      navigation_enabled && self.projection.section == DTN_SECTION_DETACHED &&
+      self.projection.page_start > 0u;
+  self.nextPageButton.enabled =
+      navigation_enabled && self.projection.section == DTN_SECTION_DETACHED &&
+      self.projection.page_start + DTN_MAX_CARDS <
+          self.projection.total_count;
   for (DtnNoteCardView* card in self.cardViews) {
     card.interactionEnabled = enabled;
-    card.editButton.enabled = enabled;
+    card.editButton.enabled = navigation_enabled;
   }
   if (!enabled) {
     for (NSButton* button in self.actionButtons) button.enabled = NO;
@@ -1094,16 +1168,20 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   } else {
     DtnCardModel* selected = [self selectedModel];
     const BOOL has_selection = selected != nil;
-    self.actionButtons[0].enabled = has_selection;
-    self.actionButtons[1].enabled = has_selection;
-    self.actionButtons[2].enabled = has_selection && selected.status == 0u;
-    self.actionButtons[3].enabled = has_selection && selected.status == 1u;
-    self.actionButtons[4].enabled = has_selection;
+    const BOOL current = self.projection.section == DTN_SECTION_CURRENT;
+    self.actionButtons[0].enabled =
+        has_selection && (current || selected.order > 0u);
+    self.actionButtons[1].enabled =
+        has_selection &&
+        (current || selected.order < self.projection.total_count - 1u);
+    self.actionButtons[2].enabled = current && has_selection && selected.status == 0u;
+    self.actionButtons[3].enabled = current && has_selection && selected.status == 1u;
+    self.actionButtons[4].enabled = current && has_selection;
     self.actionButtons[5].enabled =
         has_selection && self.projection.section == DTN_SECTION_DETACHED;
     self.actionButtons[6].enabled = YES;
     self.actionButtons[7].enabled = has_selection;
-    self.cardColorControl.enabled = has_selection;
+    self.cardColorControl.enabled = current && has_selection;
   }
   self.editor.saveButton.enabled = enabled;
   self.editor.cancelButton.enabled = enabled;
@@ -1147,21 +1225,31 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
        bodyFontPoints:font_points
     increaseContrast:contrast
        japaneseLocale:japanese
+       reattachAction:projection.section == DTN_SECTION_DETACHED
               selected:cards[index].token == projection.selected_token];
     __weak DtnNoteSurfaceView* weak_self = self;
     card.onSelect = ^(uint64_t token) {
       [weak_self onSelectCardToken:token];
     };
     card.onEdit = ^(uint64_t token) {
-      [weak_self onEditCardToken:token];
+      if (projection.section == DTN_SECTION_DETACHED) {
+        [weak_self emitIntent:DTN_INTENT_REATTACH
+                         body:nil
+                        color:DTN_NO_COLOR
+                        token:token];
+      } else {
+        [weak_self onEditCardToken:token];
+      }
     };
     card.layer.contentsScale = self.backingScale;
     [card setAccessibilityLabel:japanese
               ? [NSString stringWithFormat:@"ノート %lu / %u",
-                                           (unsigned long)index + 1,
+                                           (unsigned long)projection.page_start +
+                                               index + 1,
                                            projection.total_count]
               : [NSString stringWithFormat:@"Note %lu of %u",
-                                           (unsigned long)index + 1,
+                                           (unsigned long)projection.page_start +
+                                               index + 1,
                                            projection.total_count]];
     [self.cardList addSubview:card];
     [card_views addObject:card];
@@ -1195,6 +1283,22 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   self.titleLabel.textColor =
       DtnColor(dark ? 0xf5f5f5ffu : 0x1f1f1fffu);
   self.sectionControl.selectedSegment = projection.section;
+  self.pagingBar.hidden = projection.section != DTN_SECTION_DETACHED;
+  self.previousPageButton.title = japanese ? @"前へ" : @"Previous";
+  self.nextPageButton.title = japanese ? @"次へ" : @"Next";
+  const uint32_t range_start = projection.total_count == 0u
+                                   ? 0u
+                                   : projection.page_start + 1u;
+  const uint32_t range_end =
+      projection.page_start + (uint32_t)cards.count < projection.total_count
+          ? projection.page_start + (uint32_t)cards.count
+          : projection.total_count;
+  self.pageRangeLabel.stringValue = japanese
+      ? [NSString stringWithFormat:@"%u〜%u / %u", range_start, range_end,
+                                   projection.total_count]
+      : [NSString stringWithFormat:@"%u–%u of %u", range_start, range_end,
+                                   projection.total_count];
+  [self.pageRangeLabel setAccessibilityLabel:self.pageRangeLabel.stringValue];
   NSArray<NSString*>* english_actions = @[
     @"Earlier", @"Later", @"Resolve", @"Reopen", @"Delete…", @"Reattach",
     @"Export", @"Copy"
@@ -1210,16 +1314,20 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   }
   DtnCardModel* selected_model = [self selectedModel];
   const BOOL has_selection = selected_model != nil;
-  self.actionButtons[0].enabled = has_selection;
-  self.actionButtons[1].enabled = has_selection;
-  self.actionButtons[2].enabled = has_selection && selected_model.status == 0u;
-  self.actionButtons[3].enabled = has_selection && selected_model.status == 1u;
-  self.actionButtons[4].enabled = has_selection;
+  const BOOL current = projection.section == DTN_SECTION_CURRENT;
+  self.actionButtons[0].enabled =
+      has_selection && (current || selected_model.order > 0u);
+  self.actionButtons[1].enabled =
+      has_selection &&
+      (current || selected_model.order < projection.total_count - 1u);
+  self.actionButtons[2].enabled = current && has_selection && selected_model.status == 0u;
+  self.actionButtons[3].enabled = current && has_selection && selected_model.status == 1u;
+  self.actionButtons[4].enabled = current && has_selection;
   self.actionButtons[5].enabled =
       has_selection && projection.section == DTN_SECTION_DETACHED;
   self.actionButtons[6].enabled = YES;
   self.actionButtons[7].enabled = has_selection;
-  self.cardColorControl.enabled = has_selection;
+  self.cardColorControl.enabled = current && has_selection;
   if (has_selection) {
     self.cardColorControl.selectedSegment = (NSInteger)selected_model.color;
   } else {
@@ -1380,10 +1488,18 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   self.createButton.frame =
       NSMakeRect(fmax(128, toolbar_width - 92), 0, 44, 24);
   self.closeButton.frame = NSMakeRect(fmax(174, toolbar_width - 46), 0, 46, 24);
+  const BOOL detached = self.projection.section == DTN_SECTION_DETACHED;
+  self.pagingBar.hidden = !detached;
+  self.pagingBar.frame = NSMakeRect(12, 60, fmax(0, rail_width - 24), 28);
+  self.previousPageButton.frame = NSMakeRect(0, 0, 82, 24);
+  self.nextPageButton.frame =
+      NSMakeRect(fmax(82, self.pagingBar.bounds.size.width - 82), 0, 82, 24);
+  self.pageRangeLabel.frame =
+      NSMakeRect(86, 3, fmax(0, self.pagingBar.bounds.size.width - 172), 18);
   const BOOL editor_visible = !self.editor.hidden;
   self.actionBar.hidden = editor_visible;
   self.actionBar.frame =
-      NSMakeRect(12, 60, fmax(0, rail_width - 24), 88);
+      NSMakeRect(12, detached ? 94 : 60, fmax(0, rail_width - 24), 88);
   const CGFloat action_width =
       fmax(0, (self.actionBar.bounds.size.width - 18) / 4);
   for (NSUInteger index = 0; index < self.actionButtons.count; ++index) {
@@ -1394,7 +1510,7 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   }
   self.cardColorControl.frame =
       NSMakeRect(0, 58, self.actionBar.bounds.size.width, 26);
-  const CGFloat content_y = editor_visible ? 62 : 154;
+  const CGFloat content_y = editor_visible ? 62 : (detached ? 188 : 154);
   const NSRect content_frame =
       NSMakeRect(12, content_y, fmax(0, rail_width - 24),
                  fmax(0, self.rail.bounds.size.height - content_y - 12));
@@ -1410,14 +1526,19 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     self.editor.keepEditingButton.nextKeyView = self.editor.discardButton;
     self.editor.discardButton.nextKeyView = self.editor.keepEditingButton;
   } else {
-    [self.rail
-        setAccessibilityChildren:@[ self.toolbar, self.scrollView,
-                                     self.actionBar ]];
+    [self.rail setAccessibilityChildren:
+                   detached
+                       ? @[ self.toolbar, self.pagingBar, self.scrollView,
+                            self.actionBar ]
+                       : @[ self.toolbar, self.scrollView, self.actionBar ]];
     NSMutableArray* action_children =
         [NSMutableArray arrayWithObject:self.cardColorControl];
     [action_children addObjectsFromArray:self.actionButtons];
     [self.actionBar setAccessibilityChildren:action_children];
-    self.sectionControl.nextKeyView = self.createButton;
+    self.sectionControl.nextKeyView =
+        detached ? self.previousPageButton : self.createButton;
+    self.previousPageButton.nextKeyView = self.nextPageButton;
+    self.nextPageButton.nextKeyView = self.closeButton;
     self.createButton.nextKeyView = self.closeButton;
     self.closeButton.nextKeyView = self.cardColorControl;
     self.cardColorControl.nextKeyView = self.actionButtons.firstObject;
@@ -2134,7 +2255,9 @@ static bool dtn_intent_kind_projects(uint32_t kind) {
   return dtn_intent_kind_commits(kind) || kind == DTN_INTENT_CANCEL ||
          kind == DTN_INTENT_OPEN || kind == DTN_INTENT_CLOSE ||
          kind == DTN_INTENT_SELECT_CARD || kind == DTN_INTENT_BEGIN_CREATE ||
-         kind == DTN_INTENT_BEGIN_EDIT;
+         kind == DTN_INTENT_BEGIN_EDIT || kind == DTN_INTENT_SHOW_CURRENT ||
+         kind == DTN_INTENT_SHOW_DETACHED ||
+         kind == DTN_INTENT_PREVIOUS_PAGE || kind == DTN_INTENT_NEXT_PAGE;
 }
 
 int32_t dtn_surface_request_intent(DtnSurface* surface,
@@ -2149,7 +2272,7 @@ int32_t dtn_surface_request_intent(DtnSurface* surface,
   }
   if (![NSThread isMainThread]) return DTN_STATUS_WRONG_THREAD;
   if (!surface->initialized || !dtn_intent_reserved_zero(intent) ||
-      intent->kind > DTN_INTENT_BEGIN_EDIT ||
+      intent->kind > DTN_INTENT_NEXT_PAGE ||
       intent->event_generation == 0u || intent->event_generation > INT64_MAX ||
       intent->payload_bytes > DTN_MAX_INTENT_PAYLOAD_BYTES ||
       (intent->payload_bytes == 0u) != (payload == NULL) ||
@@ -2201,6 +2324,7 @@ int32_t dtn_surface_request_intent(DtnSurface* surface,
     }
   } else if (intent->kind == DTN_INTENT_BEGIN_CREATE) {
     if (surface->projection.visibility != DTN_VISIBILITY_EXPANDED ||
+        surface->projection.section != DTN_SECTION_CURRENT ||
         editor_mode != DTN_EDITOR_INACTIVE || intent->draft_generation != 0u ||
         intent->card_token != 0u) {
       return DTN_STATUS_INVALID_ARGUMENT;
@@ -2209,11 +2333,40 @@ int32_t dtn_surface_request_intent(DtnSurface* surface,
              intent->kind == DTN_INTENT_BEGIN_EDIT) {
     if (surface->projection.visibility != DTN_VISIBILITY_EXPANDED ||
         editor_mode != DTN_EDITOR_INACTIVE || intent->draft_generation != 0u ||
+        (intent->kind == DTN_INTENT_BEGIN_EDIT &&
+         surface->projection.section != DTN_SECTION_CURRENT) ||
         !dtn_surface_has_card_token(surface, intent->card_token)) {
+      return DTN_STATUS_INVALID_ARGUMENT;
+    }
+  } else if (intent->kind == DTN_INTENT_SHOW_CURRENT ||
+             intent->kind == DTN_INTENT_SHOW_DETACHED) {
+    const uint32_t requested = intent->kind == DTN_INTENT_SHOW_CURRENT
+                                   ? DTN_SECTION_CURRENT
+                                   : DTN_SECTION_DETACHED;
+    if (surface->projection.visibility != DTN_VISIBILITY_EXPANDED ||
+        editor_mode != DTN_EDITOR_INACTIVE || intent->draft_generation != 0u ||
+        intent->card_token != 0u || surface->projection.section == requested) {
+      return DTN_STATUS_INVALID_ARGUMENT;
+    }
+  } else if (intent->kind == DTN_INTENT_PREVIOUS_PAGE ||
+             intent->kind == DTN_INTENT_NEXT_PAGE) {
+    const bool can_page = intent->kind == DTN_INTENT_PREVIOUS_PAGE
+                              ? surface->projection.page_start > 0u
+                              : surface->projection.page_start + DTN_MAX_CARDS <
+                                    surface->projection.total_count;
+    if (surface->projection.visibility != DTN_VISIBILITY_EXPANDED ||
+        surface->projection.section != DTN_SECTION_DETACHED ||
+        editor_mode != DTN_EDITOR_INACTIVE || intent->draft_generation != 0u ||
+        intent->card_token != 0u || !can_page) {
       return DTN_STATUS_INVALID_ARGUMENT;
     }
   } else if (intent->kind == DTN_INTENT_EXPORT) {
     if (intent->card_token != 0u) return DTN_STATUS_INVALID_ARGUMENT;
+  } else if (intent->kind == DTN_INTENT_REATTACH) {
+    if (surface->projection.section != DTN_SECTION_DETACHED ||
+        !dtn_surface_has_card_token(surface, intent->card_token)) {
+      return DTN_STATUS_INVALID_ARGUMENT;
+    }
   } else if (!dtn_surface_has_card_token(surface, intent->card_token)) {
     return DTN_STATUS_INVALID_ARGUMENT;
   }

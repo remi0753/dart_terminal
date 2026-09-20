@@ -358,6 +358,97 @@ explicit exportをdurable authorityに接続する。Default-offではentry/surf
   railを展開する。Accepted resultはdurable commit後にだけnativeへ返し、content-free境界を維持する。
 - 実AppKitのS1全flow、restart/fault、2 window/3 tab/5 pane、dirty confirmation、owner 0 aggregateはCM-10最後のtaskで実施する。
 
+## 2026-09-21: Detached、reattach、copy/export task分割
+
+- ROADMAPを再確認した。完了済みの「rail/editor navigationとdurable CRUD/reorder mutation bridge」は、3つの子taskがすべて
+  検証・commit済みだったため親項目も完了へ補正した。次の先頭未完了は
+  「Detached collection、reattach、explicit copy/exportを接続する」である。
+- このtaskは、authority-owned global collection navigation、OS pasteboardへの本文egress、save panel承認後のportable file exportという
+  異なる境界と失敗処理を含む。一つのcommitでは判断と残作業が曖昧になるため、次の順へ分割した。
+  1. Current/Detached切替、64件単位paging、選択Noteのexplicit reattach
+  2. authority検証後だけ実行する選択Note本文だけのexplicit pasteboard copy
+  3. sensitive-content warningとsave panel承認後だけ実行するportable export
+- 共通の範囲は、persistent Note IDをnative/productへ公開しないこと、native intentをauthorityのsurface generation/tokenで検証すること、
+  Detachedを全context横断のglobal collectionとして表示すること、action resultより先にaccepted projectionまたは外部effectを確定すること
+  である。Import、auto reattach、cwd/path/titleからの候補提示、Detached badge count、本文・pathを含む診断は対象外とする。
+- Detached sectionをnativeだけのlocal stateにする案は、authority generationやtoken mapとずれるため不採用とする。
+  Reattach先をcwd/path/titleから推測する案も、凍結仕様のexplicit actionとprivacy境界に反するため不採用とする。
+- Detached pageは64件、exact total、Previous/Next/rangeをauthority projectionから決める。Native materialization上限32、projection上限64件または
+  256 KiB、page切替時のcard token非再利用を維持する。
+- Copyは選択Noteのfull bodyだけを明示操作でpasteboardへ出し、IDやmetadataを付けない。Exportは既存portable v1 codecを使い、
+  body/color/status/order/passive trigger intentだけを含める。Save panel取消前のstore read/writeは行わず、path/contentを保持・記録しない。
+- `dart_appkit`にはDart Terminal固有codeを一切追加しない。既存の汎用pasteboard/save panel APIをapplication compositionから注入して使う。
+- 各子taskの完了条件はfocused native/Dart test、format/analyze、関連aggregate、`git diff --check`、隣接`dart_appkit`差分監査、
+  task memo更新、個別commitである。
+
+## 2026-09-21: Detached navigation、paging、reorder、explicit reattach着手
+
+- ROADMAPを再確認し、先頭未完了が
+  「authority-owned Detached navigation、64件paging、durable reorder、explicit reattachを接続する」であることを確認した。
+- 目的は、Miroの付箋一覧に近いGUI上の見通しを維持しつつ、Currentとは別のglobal Detached collectionを明示的に閲覧し、
+  選択したNoteだけを現在のterminal contextへ再接続できるようにすることである。
+- 範囲はCurrent/Detached section intent、Detachedのexact totalと64件page、Previous/Next/range、pageごとのephemeral token、
+  同じDetached section内のdurable reorder、selected detached Noteのauthority検証、現在pane contextへのdurable reattach、
+  projection-before-result orderingである。凍結済みrail仕様との照合で、直前taskのreorderはCurrentだけを受け付け、Detached reorderが
+  未追跡だと判明したため、実装前に現在taskへ追加した。
+- 対象外はcopy/export、hidden create/open action、menu/palette localization、auto reattach、候補提示、Detached badge、import、trigger編集である。
+- 依存関係はCM-05 authority/store queue、CM-08 projection codec/native surface、CM-09 semantic intent/result、直前taskのproduct intent pumpである。
+  `dart_appkit`の変更は依存関係にも成果物にも含めない。
+- 完了条件は、editor非active時だけのsection/page操作、64件境界に揃えたpage start、exact total、page遷移時token churn、
+  Detached内だけのEarlier/Later、Detached選択Noteだけの明示reattach、commit後に全surfaceへ反映、失敗時のfixed content-free result、native control/accessibility、
+  focused testとformat/analyze/関連aggregateの成功である。
+- 検証方針は、pure authorityで65件以上のglobal Detached collectionと別contextへのreattachを確認し、product testでnative ABI/pump順序、
+  native host acceptanceでsegmented control/pager/action状態、最後に関連aggregateと差分監査を行う。
+
+## 2026-09-21: Detached navigation、paging、reorder、explicit reattach完了
+
+### 実装と判断
+
+- Authority surface intentへCurrent/Detached切替、Previous/Next、reattachを追加した。Section/page/selectionはnative local stateにせず、
+  surface generation、projection generation、event generation、store revisionを照合したauthority transitionだけで更新する。
+- Detached projectionはsnapshot全体からdetached attachmentだけを抽出し、orderとopaque IDによるdeterministic tie-breakで並べる。
+  Badgeのactive/due countは従来どおり現在pane contextだけから算出し、Detached exact totalを混ぜない。
+- Page startは64件境界に限定し、Previous/Nextで64件ずつ移動する。各projectionでcard tokenを新規発行し、64 card／256 KiBの
+  projection上限と32 native viewのmaterialization上限を維持する。Reorderで選択Noteがpage境界を越えた場合は、そのNoteを含む64件pageへ
+  authorityが移動する。
+- Earlier/LaterはCurrentでは従来のattached reorder、Detachedではglobal detached reorderへ分岐する。同じsection内だけを対象にし、
+  section間dragやimplicit attachmentは追加していない。
+- ReattachはDetached projectionのephemeral tokenをauthority内部でpersistent IDへ解決し、選択Noteだけを操作したpane contextへdurable
+  commitする。cwd/path/titleは参照せず、commit後の全surface refreshとtarget projection acceptanceより先にsuccessを返さない。
+- Native ABIは既存0〜15を変更せず、show Current、show Detached、Previous、Nextを16〜19へappendした。Reattachは既存kind 8を使用する。
+  Native validationもCurrent-only create/edit、Detached-only paging/reattach、one-outstanding、body-free navigationをfail closedにした。
+- Railにはauthority-projected segmented control、localized Previous/Next、exact rangeを追加した。Detached cardのEdit位置は
+  `Attach to This Terminal`／`このターミナルへ接続`へ置き換え、各cardから明示reattachできる。New、edit、color、resolve/reopen/deleteは
+  Detachedで無効、Earlier/LaterはDetachedのcollection境界で無効になる。Cardのaccessibility positionはpage startを含むglobal位置を示す。
+- `dart_appkit`は変更していない。Dart Terminal固有のprojection、intent、paging、reattach policyはproduct packageとapplication authorityに
+  留めた。
+
+### 検証
+
+- Pure authority testは別contextから65件をDetached化し、exact total 65、64/1件page、往復時token非再利用、badge count 0、
+  Detached durable reorder、選択Noteだけのreattach、Currentへの反映を確認してpassした。
+- Product subsystem testは別pane closeからglobal Detached表示、native intent pump、reattach、Current復帰を実行し、各操作で
+  `take → projection → result`の順を確認してpassした。
+- Native capability testは実AppKit segmented control、Previous/Next、`1–64 of 65`／`65–65 of 65`、64 projected／32 materialized、
+  per-card Attach action、content-free intentを確認してpassした。Dart package testはappend-only intent index 16〜19を固定した。
+- `make terminal-notes-acceptance`はnative/Dart codec、Developer JIT/Release AOT host、capability audit、sanitizerを含めて成功し、
+  `manifest=registered snapshot=content-free exports=20 dart_appkit=generic`を報告した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`は376 file format変更0、root/package analyze issue 0、Notes、store、security stress、
+  compatibility、distributionを含めて`dart_terminal tests passed`で完了した。
+- `make RUNTIME_ARCH=arm64 developer-jit-audit release-aot-audit`は両modeで5 build assets、3 capabilities、Notes dylibを受け入れて成功した。
+  `git diff --check`も成功した。
+- 最後のoverflow防止式変更後に再実行したnative gateは、Notes assertionではなくrenderer identity/native host結合fixture 6件が一度だけ失敗した。
+  同じbinaryをbuildし直さず即時再実行すると全件passし、直前のNotes acceptance、full suite、JIT/AOT auditでも同fixtureはpassしている。
+  再現条件を固定できない単発のnative test environment failureとして記録し、再実行成功を確認した。
+- 隣接`dart_appkit`は着手前から存在する`docs/BUILDING_DART_ENGINE.md`、`scripts/bootstrap_dart_engine.sh`、
+  `scripts/build_dart_engine.sh`の3変更だけで、本taskによる変更は0である。
+
+### 次への引き継ぎ
+
+- 次の先頭未完了taskは「selected Noteのexplicit body-only pasteboard copyを接続する」である。
+- Native Copy intentは既存どおりfull bodyを持つが、現時点のproduct pumpは固定rejectする。次taskではauthorityがtoken、generation、
+  exact bodyを検証した後だけ、application compositionから注入した汎用pasteboard effectを一回実行する。IDやmetadataはcopyしない。
+
 ## 2026-09-21: S1 mutation/Detached/export/action task分割
 
 - ROADMAPを再確認し、先頭未完了がCM-10の「S1 mutation、Detached、export、localized actionを接続する」であることを確認した。

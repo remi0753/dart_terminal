@@ -13,6 +13,7 @@ Future<void> runTerminalNoteAuthorityTests() async {
   await _testProjectionAcknowledgementAndClose();
   await _testExpandedProjectionHardBounds();
   await _testSurfaceSemanticMutationContract();
+  await _testDetachedPagingReorderAndExplicitReattach();
   await _testSixtyFourPaneAndSessionBound();
   await _testApplicationShutdownAndReopen();
   await _testRealWorkerAuthorityReopen();
@@ -1221,6 +1222,179 @@ Future<void> _testSurfaceSemanticMutationContract() async {
         projection.totalCount == 1,
     'closing removes content from the projection without deleting the Note',
   );
+  await authority.stop();
+}
+
+Future<void> _testDetachedPagingReorderAndExplicitReattach() async {
+  final _FakeAuthorityStore store = _FakeAuthorityStore();
+  final TerminalNoteAuthority authority = await _startAuthority(store);
+  final TerminalNoteAuthorityMutationResult secondPane = await authority
+      .bindPane(sequence: authority.nextSequence(), paneId: const PaneId(2));
+  final TerminalNoteContextId sourceContext = authority.contextForPane(
+    const PaneId(2),
+  )!;
+  var mutationEvent = 0;
+  for (var index = 0; index < 65; index++) {
+    final NoteId noteId = _noteId(1000 + index);
+    final int createdAt = 1000 + index * 2;
+    final TerminalNoteAuthorityMutationResult created = await _mutate(
+      authority,
+      source: 63,
+      event: ++mutationEvent,
+      transition: _createNote(
+        contextId: sourceContext,
+        noteId: noteId,
+        body: 'detached-$index',
+        timestamp: createdAt,
+      ),
+    );
+    final TerminalNoteAuthorityMutationResult detached = await _mutate(
+      authority,
+      source: 63,
+      event: ++mutationEvent,
+      transition: (TerminalNoteSnapshot snapshot) {
+        final NoteRecord note = snapshot.noteFor(noteId)!;
+        return TerminalNoteAuthorityMutationPlan(
+          mutation: snapshot.detachNote(
+            noteId: note.id,
+            reason: TerminalNoteDetachReason.explicitDetach,
+            updatedAtUtcMicros: createdAt + 1,
+            expectedStoreRevision: snapshot.storeRevision,
+            expectedNoteRevision: note.revision,
+          ),
+        );
+      },
+    );
+    _expect(
+      created.isAccepted && detached.isAccepted,
+      'the global Detached fixture is committed durably',
+    );
+  }
+
+  final _FakeNoteSurface surface = _FakeNoteSurface();
+  TerminalNoteSurfaceProjection projection = authority
+      .attachSurface(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        port: surface,
+      )
+      .projection!;
+  var event = 0;
+  Future<TerminalNoteSurfaceIntentResult> intent(
+    TerminalNoteSurfaceIntentKind kind, {
+    TerminalNoteCardToken? cardToken,
+    int? timestamp,
+  }) async {
+    final TerminalNoteSurfaceIntentResult result = await authority
+        .submitSurfaceIntent(
+          sequence: authority.nextSequence(),
+          paneId: const PaneId(1),
+          surfaceGeneration: projection.surfaceGeneration,
+          projectionGeneration: projection.projectionGeneration,
+          eventGeneration: ++event,
+          draftGeneration: projection.draftGeneration,
+          cardToken: cardToken,
+          expectedStoreRevision: projection.storeRevision,
+          kind: kind,
+          updatedAtUtcMicros: timestamp,
+        );
+    if (result.projection != null) projection = result.projection!;
+    return result;
+  }
+
+  await intent(TerminalNoteSurfaceIntentKind.open);
+  final TerminalNoteSurfaceIntentResult detachedSection = await intent(
+    TerminalNoteSurfaceIntentKind.showDetached,
+  );
+  final Set<TerminalNoteCardToken> firstPageTokens = projection.cards
+      .map((TerminalNoteCardProjection card) => card.token)
+      .toSet();
+  _expect(
+    secondPane.isAccepted &&
+        detachedSection.isAccepted &&
+        projection.section == TerminalNoteCollectionSection.detached &&
+        projection.pageStart == 0 &&
+        projection.totalCount == 65 &&
+        projection.cards.length == 64 &&
+        projection.cards.first.body == 'detached-0' &&
+        projection.cards.last.body == 'detached-63' &&
+        projection.activeCount == 0 &&
+        projection.dueCount == 0,
+    'Detached is a global exact-total collection excluded from pane badges',
+  );
+
+  final TerminalNoteSurfaceIntentResult next = await intent(
+    TerminalNoteSurfaceIntentKind.nextPage,
+  );
+  final TerminalNoteCardToken lastPageToken = projection.cards.single.token;
+  _expect(
+    next.isAccepted &&
+        projection.pageStart == 64 &&
+        projection.totalCount == 65 &&
+        projection.cards.single.body == 'detached-64' &&
+        !firstPageTokens.contains(lastPageToken),
+    'Detached advances in exact 64-item pages without reusing card tokens',
+  );
+  final TerminalNoteSurfaceIntentResult previous = await intent(
+    TerminalNoteSurfaceIntentKind.previousPage,
+  );
+  _expect(
+    previous.isAccepted &&
+        projection.pageStart == 0 &&
+        projection.cards.length == 64 &&
+        projection.cards.every(
+          (TerminalNoteCardProjection card) =>
+              !firstPageTokens.contains(card.token) &&
+              card.token != lastPageToken,
+        ),
+    'returning to a page rotates every ephemeral token',
+  );
+
+  await intent(
+    TerminalNoteSurfaceIntentKind.selectCard,
+    cardToken: projection.cards[1].token,
+  );
+  final TerminalNoteSurfaceIntentResult reordered = await intent(
+    TerminalNoteSurfaceIntentKind.moveEarlier,
+    cardToken: projection.selectedToken,
+    timestamp: 2000,
+  );
+  _expect(
+    reordered.disposition ==
+            TerminalNoteAuthorityMutationDisposition.committed &&
+        projection.cards.first.body == 'detached-1' &&
+        projection.cards[1].body == 'detached-0',
+    'Earlier reorders only the global Detached collection durably',
+  );
+
+  final TerminalNoteSurfaceIntentResult reattached = await intent(
+    TerminalNoteSurfaceIntentKind.reattach,
+    cardToken: projection.selectedToken,
+    timestamp: 2001,
+  );
+  final NoteRecord attached = authority.document.snapshot.notes.values
+      .singleWhere((NoteRecord note) => note.body.value == 'detached-1');
+  _expect(
+    reattached.disposition ==
+            TerminalNoteAuthorityMutationDisposition.committed &&
+        attached.attachment.contextId ==
+            authority.contextForPane(const PaneId(1)) &&
+        projection.section == TerminalNoteCollectionSection.detached &&
+        projection.totalCount == 64 &&
+        projection.selectedToken == null,
+    'explicit reattach moves only the selected Note to this terminal context',
+  );
+  final TerminalNoteSurfaceIntentResult current = await intent(
+    TerminalNoteSurfaceIntentKind.showCurrent,
+  );
+  _expect(
+    current.isAccepted &&
+        projection.section == TerminalNoteCollectionSection.current &&
+        projection.totalCount == 1 &&
+        projection.cards.single.body == 'detached-1',
+    'the reattached Note appears in Current only after its durable commit',
+  );
+
   await authority.stop();
 }
 

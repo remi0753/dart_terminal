@@ -492,14 +492,128 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
       'color, Resolve, and Reopen flow through durable authority mutations',
     );
 
+    final TerminalNoteProductTopologyResult attachedSource = await subsystem
+        .attachSurface(
+          paneId: const PaneId(3),
+          configuration: _surfaceConfiguration(
+            handle: 31,
+            visibility: TerminalNoteSurfaceVisibility.expanded,
+            foreground: false,
+            occluded: false,
+          ),
+        );
+    final _FakeProductNativeChannel source = channels[1];
+    final TerminalNotesProjection sourceEmpty = source.projections.last;
+    source.intents.add(
+      _nativeIntent(
+        sourceEmpty,
+        eventGeneration: 1,
+        kind: TerminalNotesIntentKind.beginCreate,
+      ),
+    );
+    final TerminalNoteProductTopologyResult sourceCreate = await subsystem
+        .pumpSurfaceIntent(const PaneId(3));
+    final TerminalNotesProjection sourceDraft = source.projections.last;
+    source.intents.add(
+      _nativeIntent(
+        sourceDraft,
+        eventGeneration: 2,
+        kind: TerminalNotesIntentKind.save,
+        color: TerminalNotesColor.pink,
+        body: 'detached from another terminal',
+      ),
+    );
+    final TerminalNoteProductTopologyResult sourceSave = await subsystem
+        .pumpSurfaceIntent(const PaneId(3));
+    final TerminalNoteProductTopologyResult sourceClose = await subsystem
+        .closePane(paneId: const PaneId(3), updatedAtUtcMicros: 4000);
+    final TerminalNotesProjection refreshedCurrent = first.projections.last;
+    _expect(
+      attachedSource.isAccepted &&
+          sourceCreate.isAccepted &&
+          sourceSave.isAccepted &&
+          sourceClose.isAccepted &&
+          source.disposeCount == 1 &&
+          refreshedCurrent.section == TerminalNotesCollectionSection.current,
+      'closing another terminal moves its Note into the global Detached collection',
+    );
+
+    final int detachedStart = first.operations.length;
+    first.intents.add(
+      _nativeIntent(
+        refreshedCurrent,
+        eventGeneration: 12,
+        kind: TerminalNotesIntentKind.showDetached,
+      ),
+    );
+    final TerminalNoteProductTopologyResult showedDetached = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    final TerminalNotesProjection detachedProjection = first.projections.last;
+    first.intents.add(
+      _nativeIntent(
+        detachedProjection,
+        eventGeneration: 13,
+        kind: TerminalNotesIntentKind.reattach,
+        cardToken: detachedProjection.cards.single.token,
+      ),
+    );
+    final TerminalNoteProductTopologyResult reattached = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    final TerminalNotesProjection emptyDetached = first.projections.last;
+    first.intents.add(
+      _nativeIntent(
+        emptyDetached,
+        eventGeneration: 14,
+        kind: TerminalNotesIntentKind.showCurrent,
+      ),
+    );
+    final TerminalNoteProductTopologyResult showedCurrent = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    TerminalNotesProjection currentAfterDetachedRoundTrip =
+        first.projections.last;
+    _expect(
+      showedDetached.isAccepted &&
+          detachedProjection.section ==
+              TerminalNotesCollectionSection.detached &&
+          detachedProjection.totalCount == 1 &&
+          detachedProjection.cards.single.body ==
+              'detached from another terminal' &&
+          reattached.isAccepted &&
+          emptyDetached.totalCount == 0 &&
+          showedCurrent.isAccepted &&
+          currentAfterDetachedRoundTrip.section ==
+              TerminalNotesCollectionSection.current &&
+          currentAfterDetachedRoundTrip.cards.length == 3 &&
+          first.operations.skip(detachedStart).take(3).join(',') ==
+              'take,projection,result',
+      'section navigation and explicit reattach publish projection before result',
+    );
+    final TerminalNotesCard currentSelection = currentAfterDetachedRoundTrip
+        .cards
+        .singleWhere(
+          (TerminalNotesCard card) => card.body == 'check the release artifact',
+        );
+    first.intents.add(
+      _nativeIntent(
+        currentAfterDetachedRoundTrip,
+        eventGeneration: 15,
+        kind: TerminalNotesIntentKind.selectCard,
+        cardToken: currentSelection.token,
+      ),
+    );
+    final TerminalNoteProductTopologyResult selectedAgain = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    currentAfterDetachedRoundTrip = first.projections.last;
+    _expect(selectedAgain.isAccepted, 'Current card is selected again');
+
     final int projectionsBeforeCopy = first.projections.length;
     first.intents.add(
       _nativeIntent(
-        reopenedProjection,
-        eventGeneration: 12,
+        currentAfterDetachedRoundTrip,
+        eventGeneration: 16,
         kind: TerminalNotesIntentKind.copy,
-        cardToken: reopenedProjection.selectedToken,
-        body: selectedReopened.body,
+        cardToken: currentAfterDetachedRoundTrip.selectedToken,
+        body: currentSelection.body,
       ),
     );
     final TerminalNoteProductTopologyResult deferredCopy = await subsystem
@@ -511,27 +625,44 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
           first.results.last.disposition ==
               TerminalNotesResultDisposition.rejected &&
           first.results.last.newProjectionGeneration ==
-              reopenedProjection.projectionGeneration,
+              currentAfterDetachedRoundTrip.projectionGeneration,
       'deferred copy/export work rejects without advancing authority state',
     );
 
     first.intents.add(
       _nativeIntent(
-        reopenedProjection,
-        eventGeneration: 13,
+        currentAfterDetachedRoundTrip,
+        eventGeneration: 17,
         kind: TerminalNotesIntentKind.delete,
-        cardToken: reopenedProjection.selectedToken,
+        cardToken: currentAfterDetachedRoundTrip.selectedToken,
       ),
     );
     final TerminalNoteProductTopologyResult deleted = await subsystem
         .pumpSurfaceIntent(const PaneId(1));
     final TerminalNotesProjection afterDelete = first.projections.last;
     _expect(
-      deleted.isAccepted &&
-          afterDelete.cards.length == 1 &&
-          afterDelete.cards.single.body == 'remember the build command' &&
-          afterDelete.selectedToken == null,
-      'Delete durably removes the selected card and clears selection',
+      deleted.isAccepted,
+      'Delete is accepted: topology=${deleted.disposition.name}, '
+      'native=${first.results.last.disposition.name}',
+    );
+    _expect(
+      afterDelete.cards.length == 2,
+      'Delete removes exactly one of three Current cards',
+    );
+    _expect(
+      afterDelete.cards.any(
+            (TerminalNotesCard card) =>
+                card.body == 'remember the build command',
+          ) &&
+          afterDelete.cards.any(
+            (TerminalNotesCard card) =>
+                card.body == 'detached from another terminal',
+          ),
+      'Delete preserves the other Current cards',
+    );
+    _expect(
+      afterDelete.selectedToken == null,
+      'Delete clears the authority selection',
     );
     final TerminalNoteProductTopologyResult emptyPump = await subsystem
         .pumpSurfaceIntent(const PaneId(1));
@@ -560,7 +691,7 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
     first.intents.add(
       _nativeIntent(
         afterDelete,
-        eventGeneration: 14,
+        eventGeneration: 18,
         kind: TerminalNotesIntentKind.export,
       ),
     );
@@ -571,7 +702,7 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
     final TerminalNoteProductTopologyResult invalidClose = await subsystem
         .closePane(paneId: const PaneId(4), updatedAtUtcMicros: -1);
     final TerminalNoteProductTopologyResult closedStandard = await subsystem
-        .closePane(paneId: const PaneId(3), updatedAtUtcMicros: 2000);
+        .closePane(paneId: const PaneId(2), updatedAtUtcMicros: 2000);
     final TerminalNoteProductTopologyResult closedQuick = await subsystem
         .closePane(paneId: const PaneId(90), updatedAtUtcMicros: 2001);
     _expect(
@@ -587,7 +718,7 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
               TerminalNoteProductTopologyDisposition.noChange &&
           first.disposeCount == 1 &&
           subsystem.liveSurfaceCount == 0 &&
-          subsystem.livePaneCount == 3,
+          subsystem.livePaneCount == 2,
       'native result fault retires the surface before pane lifecycle continues',
     );
 

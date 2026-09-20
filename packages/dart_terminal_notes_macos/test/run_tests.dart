@@ -312,7 +312,11 @@ void _testSurfaceFacade() {
         TerminalNotesIntentKind.close.index == 12 &&
         TerminalNotesIntentKind.selectCard.index == 13 &&
         TerminalNotesIntentKind.beginCreate.index == 14 &&
-        TerminalNotesIntentKind.beginEdit.index == 15,
+        TerminalNotesIntentKind.beginEdit.index == 15 &&
+        TerminalNotesIntentKind.showCurrent.index == 16 &&
+        TerminalNotesIntentKind.showDetached.index == 17 &&
+        TerminalNotesIntentKind.previousPage.index == 18 &&
+        TerminalNotesIntentKind.nextPage.index == 19,
     'navigation intent ABI values are append-only and fixed',
   );
   final _FakeBindings bindings = _FakeBindings();

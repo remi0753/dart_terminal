@@ -98,6 +98,10 @@ typedef enum DtnIntentKind {
   DTN_INTENT_SELECT_CARD = 13,
   DTN_INTENT_BEGIN_CREATE = 14,
   DTN_INTENT_BEGIN_EDIT = 15,
+  DTN_INTENT_SHOW_CURRENT = 16,
+  DTN_INTENT_SHOW_DETACHED = 17,
+  DTN_INTENT_PREVIOUS_PAGE = 18,
+  DTN_INTENT_NEXT_PAGE = 19,
 } DtnIntentKind;
 
 typedef enum DtnResultDisposition {

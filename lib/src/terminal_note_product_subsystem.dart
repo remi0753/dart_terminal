@@ -822,6 +822,14 @@ final class TerminalNoteProductSubsystem
         TerminalNoteSurfaceIntentKind.beginCreate,
       TerminalNotesIntentKind.beginEdit =>
         TerminalNoteSurfaceIntentKind.beginEdit,
+      TerminalNotesIntentKind.showCurrent =>
+        TerminalNoteSurfaceIntentKind.showCurrent,
+      TerminalNotesIntentKind.showDetached =>
+        TerminalNoteSurfaceIntentKind.showDetached,
+      TerminalNotesIntentKind.previousPage =>
+        TerminalNoteSurfaceIntentKind.previousPage,
+      TerminalNotesIntentKind.nextPage =>
+        TerminalNoteSurfaceIntentKind.nextPage,
       TerminalNotesIntentKind.cancel =>
         TerminalNoteSurfaceIntentKind.cancelEditor,
       TerminalNotesIntentKind.save => TerminalNoteSurfaceIntentKind.save,
@@ -834,9 +842,9 @@ final class TerminalNoteProductSubsystem
       TerminalNotesIntentKind.resolve => TerminalNoteSurfaceIntentKind.resolve,
       TerminalNotesIntentKind.reopen => TerminalNoteSurfaceIntentKind.reopen,
       TerminalNotesIntentKind.delete => TerminalNoteSurfaceIntentKind.delete,
-      TerminalNotesIntentKind.reattach ||
-      TerminalNotesIntentKind.export ||
-      TerminalNotesIntentKind.copy => null,
+      TerminalNotesIntentKind.reattach =>
+        TerminalNoteSurfaceIntentKind.reattach,
+      TerminalNotesIntentKind.export || TerminalNotesIntentKind.copy => null,
     };
     if (authorityKind == null) {
       return _completeNativeIntent(
@@ -857,7 +865,8 @@ final class TerminalNoteProductSubsystem
       TerminalNoteSurfaceIntentKind.moveLater ||
       TerminalNoteSurfaceIntentKind.resolve ||
       TerminalNoteSurfaceIntentKind.reopen ||
-      TerminalNoteSurfaceIntentKind.delete => true,
+      TerminalNoteSurfaceIntentKind.delete ||
+      TerminalNoteSurfaceIntentKind.reattach => true,
       _ => false,
     };
     final int? timestamp = durable ? _clock() : null;
