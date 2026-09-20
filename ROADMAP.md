@@ -12,8 +12,10 @@
 [`docs/proposals/contextual-terminal-memory-and-input-checkpoints.md`](docs/proposals/contextual-terminal-memory-and-input-checkpoints.md)、
 既存実装との照合結果と判断項目は
 [`docs/proposals/contextual-terminal-memory-design-decisions.md`](docs/proposals/contextual-terminal-memory-design-decisions.md)
-を参照する。原案内の MVP と実装順は、以下の判断が完了するまで承認済み backlog と
-みなさない。
+を参照する。Gate 1の製品判断は
+[`docs/proposals/contextual-terminal-memory-product-slices.md`](docs/proposals/contextual-terminal-memory-product-slices.md)
+を正本とする。原案内の一括 MVP と実装順は superseded されており、以下の判断が完了するまで
+採用 slice も実装 backlog とみなさない。
 
 ## 作業順序
 
@@ -21,10 +23,10 @@
   （実施記録は
   [`contextual-terminal-memory-design-decisions.md`](docs/proposals/contextual-terminal-memory-design-decisions.md)
   を参照する）
-- [ ] 製品 slice と成功条件を決め、memory、prompt連動、exact-command checkpointを個別に採用・延期・不採用へ分類する
-  （実施時に
-  [`contextual-terminal-memory-design-decisions.md`](docs/proposals/contextual-terminal-memory-design-decisions.md)
-  の Gate 1 を参照する）
+- [x] 製品 slice と成功条件を決め、memory、prompt連動、exact-command checkpointを個別に採用・延期・不採用へ分類する
+  （判断結果は
+  [`contextual-terminal-memory-product-slices.md`](docs/proposals/contextual-terminal-memory-product-slices.md)
+  を参照する）
 - [ ] scope、identity、lifecycle と trigger delivery semantics を確定する
   （実施時に同文書の Gate 2、Gate 4 を参照する）
 - [ ] data model、永続化、privacy、security、migration 方針を確定する

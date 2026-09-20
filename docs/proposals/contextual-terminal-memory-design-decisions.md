@@ -1,6 +1,6 @@
 # Contextual terminal memory 設計判断一覧
 
-- 状態: 調査中（実装未承認）
+- 状態: Gate 1 完了、Gate 2以降は未決定（実装未承認）
 - 作成日: 2026-09-20
 - 対象提案: [`contextual-terminal-memory-and-input-checkpoints.md`](contextual-terminal-memory-and-input-checkpoints.md)
 
@@ -100,6 +100,23 @@ persistence、trigger、input authority、shell adapter、privacy、UX などに
   [`Context Dock terminal mode`](../phase7/context-dock-terminal-mode.md)
 - diagnostics boundary: [`terminal diagnostics`](../reference/terminal-diagnostics.md)
 
+### 2026-09-20: Gate 1 product slice decision
+
+- 利用者の指示に従い、`main` の `87c9a70` から
+  `codex/contextual-memory-design` branch を作成した。
+- 利用者は terminal note の mental model として Miro の付箋を示し、pixel-level な外観は
+  必須ではないが GUI ならではの見せ方を求めた。添付 screenshot 内の文言や toolbar は
+  instruction とせず、card、color、surface hierarchy の visual reference としてだけ扱った。
+- D-01〜D-06を
+  [`product slice decisions`](contextual-terminal-memory-product-slices.md) で閉じた。中心価値は
+  GUI-native contextual note と return cue、最小 slice は non-blocking な S1+S2 とした。
+- S3は S1/S2 acceptance 後の next increment として採用した。S4は receipt identity と
+  user value の確認まで延期、S5/S6は Gate 6の独立再評価まで延期した。
+- infinite canvas、自由座標、arrow、collaboration UI、Miro互換、cell-relative sticky noteは
+  明示的に不採用とした。visual note は pane chrome に anchor した badge／rail／card とする。
+- Product validation は production telemetry ではなく、scripted acceptance、5人以上の
+  moderated usability、明示的 opt-in feedback で行う。Note内容や利用時刻は収集しない。
+
 ## 判断方法
 
 各項目は次のいずれかで閉じる。`採用` だけが後続の仕様化と実装候補になる。
@@ -109,8 +126,10 @@ persistence、trigger、input authority、shell adapter、privacy、UX などに
 - **不採用**: 理由と、代替する user experience または明示的に許容する欠落を記録する。
 
 判断を閉じるには、少なくとも「選択結果」「理由」「既存 contract への影響」「privacy / failure
-behavior」「検証可能な acceptance」「後続 task」を本書へ追記する。以下はすべて
-**未決定**であり、表に挙げた選択肢は採用を意味しない。
+behavior」「検証可能な acceptance」「後続 task」を本書または直接 link した decision recordへ
+追記する。Gate 1 の D-01〜D-06 は
+[`product slice decisions`](contextual-terminal-memory-product-slices.md) で完了した。
+Gate 2〜7 は**未決定**であり、表に挙げた選択肢は採用を意味しない。
 
 ## 機能 slice
 
@@ -118,12 +137,12 @@ behavior」「検証可能な acceptance」「後続 task」を本書へ追記�
 
 | Slice | 利用者に提供する結果 | 主な依存 | 現在の状態 |
 | --- | --- | --- | --- |
-| S1 Basic memory | terminal を離れず note を作成・閲覧・編集し、必要時だけ badge/overlay で示す | note model、store、overlay、editor、privacy | 未決定 |
-| S2 Park / next focus | pane へ戻ったとき一度だけ user-authored note を提示する | S1、session scope、focus event、exactly-once lifecycle | 未決定 |
-| S3 Next prompt | command 完了後の次の prompt で note を提示する | S1、OSC 133 capability、prompt state machine | 未決定 |
-| S4 Invocation receipt | 既に実行した invocation の semantic range へ note を関連付ける | S1、receipt identity、anchor retention | 未決定 |
-| S5 Exact-command checkpoint | shell が受理する直前の完全一致 command を一時停止し user 判断を求める | global input authority、新 shell adapter、secret handling、fail-open | 未決定 |
-| S6 Simulation / observe | S5 を有効化する前に real PTY write なしで rule と protocol を検証する | S5 の matcher と protocol | S5 採用時のみ検討 |
+| S1 Basic memory | terminal を離れず note を作成・閲覧・編集し、必要時だけ badge/overlay で示す | note model、store、overlay、editor、privacy | **採用: initial release** |
+| S2 Park / next focus | pane へ戻ったとき一度だけ user-authored note を提示する | S1、session scope、focus event、exactly-once lifecycle | **採用: initial release、input holdなし** |
+| S3 Next prompt | command 完了後の次の prompt で note を提示する | S1、OSC 133 capability、prompt state machine | **採用: next increment** |
+| S4 Invocation receipt | 既に実行した invocation の semantic range へ note を関連付ける | S1、receipt identity、anchor retention | **延期: S1〜S3検証とidentity判断後** |
+| S5 Exact-command checkpoint | shell が受理する直前の完全一致 command を一時停止し user 判断を求める | global input authority、新 shell adapter、secret handling、fail-open | **延期: Gate 6の独立再評価まで** |
+| S6 Simulation / observe | S5 を有効化する前に real PTY write なしで rule と protocol を検証する | S5 の matcher と protocol | **延期: S5採用時のみ** |
 
 ## 設計判断一覧
 
@@ -131,6 +150,12 @@ behavior」「検証可能な acceptance」「後続 task」を本書へ追記�
 
 この gate は最初に実施する。ここで slice を独立に扱うことを確定しない限り、後続の
 大きな shell / input 基盤を「MVP」という名前だけで必須にしてしまう。
+
+**状態: 完了。** D-01〜D-06の選択結果、visual direction、success/kill criteria、support
+matrix、terminology は
+[`contextual-terminal-memory-product-slices.md`](contextual-terminal-memory-product-slices.md)
+を正本とする。中心価値は付箋として視覚化した contextual note と return cue、最小 slice は
+S1+S2、S3は次 increment、S4〜S6は延期とした。
 
 | ID | 決めること | 主な選択肢・問い | 完了証拠と影響 |
 | --- | --- | --- | --- |
@@ -232,7 +257,7 @@ S1〜S4を巻き込まず S5/S6 を延期または不採用にする。
 - sensitive command data の保管・削除・診断境界を説明できない。
 - bounded resource、fail-open、rollback、検証可能な acceptance を定義できない。
 
-## 初期仮説（判断ではない）
+## Gate 1 着手前の初期仮説
 
 - S1 は shell adapter に依存しないため、他 slice から独立して価値検証できる。
 - 現行製品に workspace identity はないため、D-07 が閉じるまでは session scope だけで
@@ -244,15 +269,19 @@ S1〜S4を巻き込まず S5/S6 を延期または不採用にする。
 - encrypted raw command は secure key storage と recovery/delete contract が決まるまで
   採用しない。digest-only も key lifecycle が未決定なら実装しない。
 
+Gate 1で、S1/S2採用、S3を次 incrementとして採用、S4〜S6延期となり、これらの仮説と
+矛盾しない。S5/S6の最終的な採否はGate 6まで確定しない。
+
 ## 次の検討で最初に閉じる事項
 
-`ROADMAP.md` の次の未完了 task は Gate 1 である。最初の discussion では次の順に答える。
+`ROADMAP.md` の次の未完了 task は Gate 2/4 の scope、identity、lifecycle、trigger delivery
+semantics である。S1〜S3だけを current scope とし、次の順に決める。
 
-1. この機能の中心価値を S1〜S5 のどれに置くか。
-2. 最初に user へ届ける最小 slice はどれか。
-3. 各 slice を採用、延期、不採用のどれにするか。未決定なら、決定に必要な prototype または
-   user validation を何にするか。
-4. safety claim、対象 shell/environment、成功・中止基準を何にするか。
+1. initial attach target を pane lifetime と terminal session のどちらとして定義するか。
+2. app restart、pane close、restoration、shell restartでNoteをretain、orphan、expireのどれにするか。
+3. `On Return` の正確なfocus event、arming、exactly-once consumptionを決める。
+4. `At Next Prompt` のverified event、capability loss、waiting/delivery semanticsを決める。
+5. workspace scopeをinitial releaseで不採用または延期にするか、stable identityを新設するか決める。
 
 ## 検証記録
 

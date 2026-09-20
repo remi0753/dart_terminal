@@ -1,9 +1,25 @@
 # Contextual terminal memory and input checkpoints
 
-- Status: Proposal, not scheduled
+- Status: Product direction accepted in slices; detailed design incomplete; implementation not scheduled
 - Date: 2026-09-20
 - Design intake: [`contextual-terminal-memory-design-decisions.md`](contextual-terminal-memory-design-decisions.md)
+- Product decisions: [`contextual-terminal-memory-product-slices.md`](contextual-terminal-memory-product-slices.md)
 - Target: Dart Terminal
+
+## Current decision status
+
+The product center is a GUI-native, sticky-note-like surface for short terminal context, not a
+spatial session canvas or a command-security product. The visual reference is an affordance reference:
+cards, color, grouping, and direct manipulation should feel native to a GUI, but Miro's layout,
+toolbar, collaboration model, and brand are not requirements.
+
+- S1 Basic memory and S2 Park / next focus are adopted for the initial release slice. S2 does not
+  block terminal input.
+- S3 Next prompt is adopted as the next increment after S1/S2 acceptance.
+- S4 Invocation receipt, S5 Exact-command checkpoint, and S6 Simulation / observe are deferred and
+  are not part of the initial implementation scope.
+- The linked product decision record supersedes the original all-in-one MVP and implementation order
+  below. Adoption means the slice proceeds to detailed design; it does not authorize product-code work.
 
 ## Purpose
 
@@ -263,7 +279,10 @@ A developer leaves Vim or Codex midway through a task and records: "The failing 
 
 ## Scope
 
-### MVP
+### Original proposed MVP (superseded for scheduling)
+
+This list is retained as the complete proposal explored before Gate 1. The current adopted and deferred
+boundaries are defined in the product decision record linked above.
 
 1. Pane overlay compositor and collapsed memory badge.
 2. Input-router modes for terminal input, note editing, and checkpoints.
@@ -310,7 +329,10 @@ A developer leaves Vim or Codex midway through a task and records: "The failing 
 - Persistence must separate terminal scrollback from application annotations.
 - The feature must honor existing profile, workspace, and session lifecycle semantics.
 
-## Completion conditions
+## Original proposal completion conditions
+
+These conditions remain design input. Conditions for S4–S6 are conditional and do not block the
+adopted S1–S3 slices while those features are deferred.
 
 The proposal is ready for release when all of the following are true:
 
@@ -327,7 +349,9 @@ The proposal is ready for release when all of the following are true:
 - unavailable integration is visible and fails open without presenting a false safe state;
 - users can inspect, disable, export, and delete every note and rule they created.
 
-## Verification plan
+## Verification considerations
+
+Shell-adapter, exact-match, checkpoint, and simulation checks apply only if S5/S6 are later adopted.
 
 ### Automated tests
 
@@ -356,7 +380,10 @@ The proposal is ready for release when all of the following are true:
 
 Measure whether users create and later act on next-focus and next-prompt notes. If usage settles on static session notes alone, the proposal has not demonstrated enough value over existing note surfaces. Validate that users understand three distinct states: no rule exists, a rule matched, and matching was unavailable.
 
-## Implementation order
+## Original implementation order (not approved)
+
+This sequence is retained for provenance and must not be treated as the active roadmap. The root
+`ROADMAP.md` and the linked decision records define the current design order.
 
 1. Build the overlay compositor and prove the PTY invariants.
 2. Centralize input routing and add `NoteEdit` without shell integration.
@@ -367,7 +394,10 @@ Measure whether users create and later act on next-focus and next-prompt notes. 
 7. Add simulation, observe-only mode, and explicit activation.
 8. Complete the compatibility matrix before considering context providers.
 
-## Decision record
+## Original proposal assumptions
+
+These assumptions record the proposal's starting point. Gate decisions may adopt, narrow, defer, or
+reject them; the linked decision records are authoritative when they differ.
 
 - Conventional tabs, splits, and windows remain the session layout model.
 - Notes live above the terminal renderer, never inside terminal output.
