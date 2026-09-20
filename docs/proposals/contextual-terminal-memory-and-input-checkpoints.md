@@ -1,12 +1,13 @@
 # Contextual terminal memory and input checkpoints
 
-- Status: Product direction accepted in slices; detailed design incomplete; implementation not scheduled
+- Status: S1–S3 design in progress; S4 deferred; S5/S6 rejected; implementation not scheduled
 - Date: 2026-09-20
 - Design intake: [`contextual-terminal-memory-design-decisions.md`](contextual-terminal-memory-design-decisions.md)
 - Product decisions: [`contextual-terminal-memory-product-slices.md`](contextual-terminal-memory-product-slices.md)
 - Scope and triggers: [`contextual-terminal-memory-scope-trigger-semantics.md`](contextual-terminal-memory-scope-trigger-semantics.md)
 - Data and privacy: [`contextual-terminal-memory-data-persistence-privacy.md`](contextual-terminal-memory-data-persistence-privacy.md)
 - Overlay and interaction: [`contextual-terminal-memory-overlay-editor-accessibility.md`](contextual-terminal-memory-overlay-editor-accessibility.md)
+- Checkpoint feasibility: [`contextual-terminal-memory-checkpoint-feasibility.md`](contextual-terminal-memory-checkpoint-feasibility.md)
 - Target: Dart Terminal
 
 ## Current decision status
@@ -19,8 +20,8 @@ toolbar, collaboration model, and brand are not requirements.
 - S1 Basic memory and S2 Park / next focus are adopted for the initial release slice. S2 does not
   block terminal input.
 - S3 Next prompt is adopted as the next increment after S1/S2 acceptance.
-- S4 Invocation receipt, S5 Exact-command checkpoint, and S6 Simulation / observe are deferred and
-  are not part of the initial implementation scope.
+- S4 Invocation receipt is deferred. S5 Exact-command checkpoint and S6 Simulation / observe are
+  rejected from this product roadmap after the Gate 6 zsh and trust-boundary review.
 - The initial attachment is `This Terminal`, backed by a durable note-context identity that is separate
   from live pane and PTY-session IDs. Workspace and invocation scopes are deferred.
 - `On Return` is a non-blocking, once-per-arm focus transition. `At Next Prompt` requires a matching
@@ -36,6 +37,8 @@ toolbar, collaboration model, and brand are not requirements.
 - A due rail may open without taking keyboard or VoiceOver focus. Explicit note interaction uses one
   generation-bound window input owner, and the native multiline editor uses explicit Save/Cancel;
   autosave, durable drafts, rich text, and checkpoint controls are absent.
+- The current schema, shell integration, and UI reserve no command matcher, digest, bidirectional
+  adapter, checkpoint owner, or simulation mode. Reconsideration requires a separate product proposal.
 - The linked product decision record supersedes the original all-in-one MVP and implementation order
   below. Adoption means the slice proceeds to detailed design; it does not authorize product-code work.
 
@@ -349,8 +352,9 @@ boundaries are defined in the product decision record linked above.
 
 ## Original proposal completion conditions
 
-These conditions remain design input. Conditions for S4–S6 are conditional and do not block the
-adopted S1–S3 slices while those features are deferred.
+These conditions remain historical design input. Conditions for S4 remain conditional and do not
+block the adopted S1–S3 slices while S4 is deferred. S5/S6 conditions are not release requirements;
+those slices were rejected by Gate 6 and require a separate product proposal to be reconsidered.
 
 The proposal is ready for release when all of the following are true:
 
@@ -369,7 +373,8 @@ The proposal is ready for release when all of the following are true:
 
 ## Verification considerations
 
-Shell-adapter, exact-match, checkpoint, and simulation checks apply only if S5/S6 are later adopted.
+Shell-adapter, exact-match, checkpoint, and simulation checks below are historical proposal material,
+not acceptance criteria for S1–S3. They apply only to a separately approved future product proposal.
 
 ### Automated tests
 

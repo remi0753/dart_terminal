@@ -1,6 +1,6 @@
 # Contextual terminal memory 設計判断一覧
 
-- 状態: Gate 1/2/3/4/5 完了、Gate 6/7は未決定（実装未承認）
+- 状態: Gate 1/2/3/4/5/6 完了、Gate 7は未決定（実装未承認）
 - 作成日: 2026-09-20
 - 対象提案: [`contextual-terminal-memory-and-input-checkpoints.md`](contextual-terminal-memory-and-input-checkpoints.md)
 
@@ -166,6 +166,25 @@ persistence、trigger、input authority、shell adapter、privacy、UX などに
   DEC focusの正本は
   [`overlay, editor, and accessibility`](contextual-terminal-memory-overlay-editor-accessibility.md) とする。
 
+### 2026-09-20: Gate 6 exact-command feasibility decision
+
+- Isolated zsh 5.9 prototypeでは、ZLE `accept-line` wrapperがeditable bufferをcommand実行前に
+  観測し、builtinへdelegateしなければholdできた。一方、後から同じwidget名を登録するとwrapperは
+  完全に迂回され、`preexec` hookのnon-zero returnでは実行を止められなかった。
+- 現行zsh integrationはuser `.zshrc`／pluginより前に読み込まれるため、S5 wrapperを追加しても
+  user widgetに後勝ちされ得る。毎promptで奪い返す方法はuser設定を破壊するため採用しない。
+- zsh、bash、fish、nushellが共有する現行contractはcontent-freeなone-way lifecycleだけである。
+  Line editor API、buffer表現、async holdはshell別で、remote、tmux、nested shellではlocal appが
+  authoritative editorを特定できない。
+- PTY custom sequenceでは正規adapterと任意child outputを認証できない。Unix socket/helperなら
+  分離できるが、session secret、cleanup、crash、same-user process、remote非到達を持つ新control planeになる。
+- ZLE character bufferはhistory/alias/substitution/parser適用前で、portableな「executed exact bytes」ではない。
+  Raw commandまたはkeyed digestを扱うにはGate 3のprivacy/store/key lifecycleを再設計する必要がある。
+- 以上のcostと誤送信防止のuser outcomeは付箋による文脈再開の中心価値から独立しているため、S5/S6を
+  **不採用**とした。Current modelへRule、Checkpoint、digest、request/reply、simulationを予約しない。
+  正本は
+  [`checkpoint feasibility`](contextual-terminal-memory-checkpoint-feasibility.md) とする。
+
 ## 判断方法
 
 各項目は次のいずれかで閉じる。`採用` だけが後続の仕様化と実装候補になる。
@@ -184,7 +203,9 @@ Gate 3 のD-12〜D-20は
 [`data, persistence, and privacy`](contextual-terminal-memory-data-persistence-privacy.md) で完了した。
 Gate 5 のD-27〜D-34は
 [`overlay, editor, and accessibility`](contextual-terminal-memory-overlay-editor-accessibility.md) で完了した。
-Gate 6/7は**未決定**であり、表に挙げた選択肢は採用を意味しない。
+Gate 6 のD-35〜D-42は
+[`checkpoint feasibility`](contextual-terminal-memory-checkpoint-feasibility.md) で完了し、すべて不採用とした。
+Gate 7は**未決定**であり、表に挙げた選択肢は採用を意味しない。
 
 ## 機能 slice
 
@@ -196,8 +217,8 @@ Gate 6/7は**未決定**であり、表に挙げた選択肢は採用を意味�
 | S2 Park / next focus | pane へ戻ったとき一度だけ user-authored note を提示する | S1、session scope、focus event、exactly-once lifecycle | **採用: initial release、input holdなし** |
 | S3 Next prompt | command 完了後の次の prompt で note を提示する | S1、OSC 133 capability、prompt state machine | **採用: next increment** |
 | S4 Invocation receipt | 既に実行した invocation の semantic range へ note を関連付ける | S1、receipt identity、anchor retention | **延期: S1〜S3検証とidentity判断後** |
-| S5 Exact-command checkpoint | shell が受理する直前の完全一致 command を一時停止し user 判断を求める | global input authority、新 shell adapter、secret handling、fail-open | **延期: Gate 6の独立再評価まで** |
-| S6 Simulation / observe | S5 を有効化する前に real PTY write なしで rule と protocol を検証する | S5 の matcher と protocol | **延期: S5採用時のみ** |
+| S5 Exact-command checkpoint | shell が受理する直前の完全一致 command を一時停止し user 判断を求める | global input authority、新 shell adapter、secret handling、fail-open | **不採用: current roadmapに互換予約なし** |
+| S6 Simulation / observe | S5 を有効化する前に real PTY write なしで rule と protocol を検証する | S5 の matcher と protocol | **不採用: S5なしでstandalone実装しない** |
 
 ## 設計判断一覧
 
@@ -278,7 +299,8 @@ arm後C→D→A/N→B cycleで一度だけdueになる。passive/due、FIFO coal
 **状態: 完了。** Interactive child overlay、edge badge、trailing rail、sticky-note card、explicit editor、
 window interaction owner、focus/TUI/mouse、accessibility/localization/appearanceの正本は
 [`contextual-terminal-memory-overlay-editor-accessibility.md`](contextual-terminal-memory-overlay-editor-accessibility.md)
-を参照する。D-31のCheckpoint interactionだけはS5とともにGate 6へ延期した。
+を参照する。D-31のCheckpoint interactionはGate 5時点で延期し、Gate 6のS5不採用に伴って
+current contractから除外した。
 
 | ID | 決めること | 主な選択肢・問い | 完了証拠と影響 |
 | --- | --- | --- | --- |
@@ -295,6 +317,11 @@ window interaction owner、focus/TUI/mouse、accessibility/localization/appearan
 
 S5/S6 を Gate 1 で採用候補に残した場合だけ実施する。ここで feasibility が成立しなければ、
 S1〜S4を巻き込まず S5/S6 を延期または不採用にする。
+
+**状態: 完了。** D-35〜D-42はすべて不採用。Clean zshでの限定的なhold成立、widgetの
+load-order conflict、existing preexecの非blocking性、transport／secret／remote境界の比較、再提案条件は
+[`contextual-terminal-memory-checkpoint-feasibility.md`](contextual-terminal-memory-checkpoint-feasibility.md)
+を正本とする。S5/S6用の型、protocol、UI、implementation taskをcurrent roadmapへ追加しない。
 
 | ID | 決めること | 主な選択肢・問い | 完了証拠と影響 |
 | --- | --- | --- | --- |
@@ -346,15 +373,14 @@ S1〜S4を巻き込まず S5/S6 を延期または不採用にする。
 - encrypted raw command は secure key storage と recovery/delete contract が決まるまで
   採用しない。digest-only も key lifecycle が未決定なら実装しない。
 
-Gate 1で、S1/S2採用、S3を次 incrementとして採用、S4〜S6延期となり、これらの仮説と
-矛盾しない。S5/S6の最終的な採否はGate 6まで確定しない。
+Gate 1でS1/S2をinitial、S3をnext incrementとして採用し、S4〜S6を延期した。その後Gate 6で
+S5/S6を不採用へ閉じた。S4だけが延期を維持する。
 
 ## 次の検討で最初に閉じる事項
 
-`ROADMAP.md` の次の未完了 task は Gate 6 のexact-command shell adapter feasibilityとtrust boundaryで
-ある。S5/S6はGate 1から延期中であり、S1〜S3のNote仕様を変更せず、product value、content-free
-shell integration境界、pre-submit hook、transport spoofing、command secret、input holdの追加costを独立に
-評価して採用、延期、不採用のいずれかへ閉じる。
+`ROADMAP.md` の次の未完了taskはGate 7である。採用済みS1〜S3だけについてownership、config、
+schema evolution、verification budget、rollout／rollbackを確定する。S4は延期、S5/S6は不採用のため、
+Gate 7のmodel、message、kill switch、test matrixへreceipt、rule、checkpoint、shell replyを混入させない。
 
 ## 検証記録
 

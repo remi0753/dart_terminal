@@ -5,6 +5,7 @@
 - Branch: `codex/contextual-memory-design`
 - 親文書: [`contextual-terminal-memory-design-decisions.md`](contextual-terminal-memory-design-decisions.md)
 - 製品判断: [`contextual-terminal-memory-product-slices.md`](contextual-terminal-memory-product-slices.md)
+- Checkpoint採否: [`contextual-terminal-memory-checkpoint-feasibility.md`](contextual-terminal-memory-checkpoint-feasibility.md)
 
 ## 目的
 
@@ -86,7 +87,7 @@ shell restart、tmux/SSHを推測してはならない。
 | D-07 | 延期 | Initial releaseにworkspace scopeを設けない。cwd、Git root、remote hostから自動identityを作らない。 |
 | D-08 | 採用 | Note専用のdurable `TerminalNoteContextId`を導入し、runtimeの`PaneId`／`TerminalSessionId`から分離する。 |
 | D-09 | 延期 | S4とともにinvocation/receipt identityを延期し、現行`commandId`を永続化しない。 |
-| D-10 | 延期 | S5とともにexact-command rule scopeとprecedenceを延期する。 |
+| D-10 | 不採用 | Gate 6でS5を不採用としたためexact-command rule scopeとprecedenceを定義せず、型や互換予約も残さない。 |
 | D-11 | 採用 | context、runtime session、triggerを別lifecycleとして扱い、transition tableを正本にする。 |
 | D-21 | 採用 | passive Noteとdue deliveryを分離し、badgeはactive countとdue countだけを投影する。 |
 | D-22 | 採用 | `On Return`をpane visibility/focusのfalse→true visitで一度だけdueにするstate machineとする。 |
@@ -358,8 +359,8 @@ initial releaseに設けず、starvationを防ぐ。
 
 - `git diff --check`: pass。
 - changed/new Markdown 5件の相対 link target検査: pass。
-- D-07〜D-11、D-21〜D-26の11 decision rowを期待順で抽出し、全項目が`採用`または
-  `延期`で閉じていることを確認: pass。
+- D-07〜D-11、D-21〜D-26の11 decision rowを期待順で抽出し、全項目が`採用`、`延期`、
+  `不採用`のいずれかで閉じていることを確認: pass。D-10はGate 6で延期から不採用へ更新した。
 - focus 4件、prompt 7件、coalescing 1件の計12 review vectorを確認: pass。
 - prompt-ready markerをBだけに限定したことを検査: pass。最初のscriptは現行modelの事実を
   説明する「B/Iをinput」という調査記録まで拾いfalse failureになったため、qualifying arrowの

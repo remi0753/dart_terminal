@@ -6,6 +6,7 @@
 - 親文書: [`contextual-terminal-memory-design-decisions.md`](contextual-terminal-memory-design-decisions.md)
 - 原案: [`contextual-terminal-memory-and-input-checkpoints.md`](contextual-terminal-memory-and-input-checkpoints.md)
 - Overlay仕様: [`contextual-terminal-memory-overlay-editor-accessibility.md`](contextual-terminal-memory-overlay-editor-accessibility.md)
+- Checkpoint採否: [`contextual-terminal-memory-checkpoint-feasibility.md`](contextual-terminal-memory-checkpoint-feasibility.md)
 
 ## 目的
 
@@ -95,15 +96,16 @@ pane chrome に anchor された一覧と一時的な overlay で表示する。
 | D-01 | 採用 | GUI-native な contextual note と、pane に戻ったときの return cue を中心課題にする。exact-command の誤操作防止は中心課題にしない。 | 利用者が示した付箋の mental model と、一般 note app にはない terminal transition を組み合わせられる。S1/S2を優先し、S5を基盤要件から外す。 |
 | D-02 | 採用 | 最小 release slice は S1+S2。S2は note の再提示までで、input hold は含めない。S3は次の increment として採用する。 | shell adapter と global checkpoint authority なしで end-to-end value を検証できる。S3は静的 note との差別化を強めるが、verified lifecycle event が必要なので分離する。 |
 | D-03 | 採用 | production telemetry を追加せず、scripted acceptance、moderated usability、明示的な opt-in feedback で判断する。hard safety invariant と product comprehension を別 gate にする。 | note本文や利用時刻を収集せずに価値を評価できる。基準未達時は default-on や次 slice を停止する。詳細は「成功・中止基準」に固定する。 |
-| D-04 | 採用 | S1〜S3を「記憶と再開の補助」と表現し、security、policy、command safety を名乗らない。初期 release は terminal input を block しない。 | 色も risk 判定を意味しない。将来の checkpoint は別機能として unavailable/fail-open を明示し、別途採否する。 |
+| D-04 | 採用 | S1〜S3を「記憶と再開の補助」と表現し、security、policy、command safety を名乗らない。initial releaseはterminal inputをblockしない。 | 色もrisk判定を意味しない。S5/S6はGate 6で不採用とし、将来の再検討には別product proposalを要求する。 |
 | D-05 | 採用 | S1/S2は macOS 14+ のすべての pane と shell/TUI で local feature として提供する。S3は verified prompt capability がある local shell だけを対象とする。 | tmux/SSH/alternate screen で推測しない。capability が確認できない場合も note は失わず、passive note として閲覧可能にする。 |
-| D-06 | 採用 | user-facing object は `Note`、entry point は `Notes`、expanded collection の内部名は `note rail` とする。`Checkpoint` と `Rule` は S5 専用に予約する。 | 一般 note と input-blocking behavior を言葉で混同しない。workspace/receipt は採用されるまで UI 用語にしない。 |
+| D-06 | 採用 | user-facing objectは`Note`、entry pointは`Notes`、expanded collectionの内部名は`note rail`とする。Current featureへ`Checkpoint`と`Rule`を導入・予約しない。 | 一般noteとinput-blocking behaviorを言葉で混同しない。workspace/receiptは採用されるまでUI用語にしない。 |
 
 ## Slice classification
 
 ここでの「採用」は後続の仕様確定対象に入れることを意味し、直ちに製品コードの実装を
 承認するものではない。「延期」は現在の initial implementation backlog に入れず、表の
-再検討条件が満たされた場合だけ再判断する。
+再検討条件が満たされた場合だけ再判断する。「不採用」はcurrent contextual-memory roadmapに
+互換予約やimplementation taskを残さず、再検討には別product proposalを要求する。
 
 | Slice | 判断 | Release boundary | 含むもの | 含まないもの／再検討条件 |
 | --- | --- | --- | --- | --- |
@@ -111,8 +113,8 @@ pane chrome に anchor された一覧と一時的な overlay で表示する。
 | S2 Park / next focus | **採用** | 最初の release slice | 利用者が明示的に return note を arm し、対象 pane へ戻ったとき一度だけ card を展開する。 | input hold、resume 強制、TUI 操作の阻止は含めない。focus と exactly-once の詳細は Gate 2/4 で決める。 |
 | S3 Next prompt | **採用** | S1/S2の acceptance 後の次 increment | verified prompt-ready event で user-authored note を一度だけ提示し、unsupported/degraded を明示する。 | command text収集、screen scraping、input hold、未確認 event の推測は含めない。 |
 | S4 Invocation receipt | **延期** | initial roadmap外 | なし。 | S1〜S3の価値検証後、利用者が過去 command 単位の紐付けを必要とし、live-only/durable receipt identity を説明できた場合に再検討する。 |
-| S5 Exact-command checkpoint | **延期** | initial roadmap外の独立 product fork | なし。 | Gate 6 で user value、pre-submit hook、trust boundary、secret handling、fail-open が成立し、利用者が明示的に採用した場合だけ再検討する。S1〜S3の設計を阻害しない。 |
-| S6 Simulation / observe | **延期** | S5と同時にのみ再検討 | なし。 | S5を採用しない限り standalone feature として実装しない。S5採用時は active rule の必須前段として再評価する。 |
+| S5 Exact-command checkpoint | **不採用** | current roadmap外。将来も別product proposalが必要 | なし。 | Gate 6でclean zshのholdは可能と確認したが、widget ownership、4-shell差、bidirectional trust、command secret、failure semanticsが中心価値に見合わない。S1〜S3へ互換予約を残さない。 |
+| S6 Simulation / observe | **不採用** | current roadmap外 | なし。 | S5なしでは実経路を検証せず、observeには同じcommand exposureが必要なためstandalone実装しない。 |
 
 ### 明示的に不採用とする製品方向
 
@@ -166,8 +168,9 @@ Initial release の hard invariant と product validation を満たした後、S
 `At Next Prompt` は verified capability がある場合だけ選択可能で、capability を失った note は
 消去せず `Waiting for supported prompt integration` と同等の neutral state で rail に残す。
 
-S4〜S6はこの2段階の schema、protocol、UI extension point を先回りして複雑化させない。
-将来の互換性のためだけの optional field、digest、checkpoint mode は initial model に入れない。
+延期中のS4と不採用のS5/S6のために、この2段階のschema、protocol、UI extension pointを先回りして
+複雑化させない。将来の互換性のためだけのoptional field、digest、checkpoint modeはinitial modelに
+入れない。
 
 ## 成功・中止基準
 
@@ -206,7 +209,7 @@ task memo に手動記録する。外部 evaluator を用意できない間は o
   static note surfaceを製品に持つ価値から再評価する。
 - S3は supported、degraded、unavailable の scripted sequence 各20回で false delivery 0、lost note 0、
   duplicate delivery 0を満たさなければ releaseしない。
-- S4〜S6は延期条件を満たさない限り、未実装であることを欠落として扱わない。
+- S4は延期条件を満たさない限り、S5/S6は別proposalが承認されない限り、未実装を欠落として扱わない。
 
 ## Safety claim
 
@@ -215,9 +218,9 @@ User-facing copy は `reminder`、`return note`、`show at next prompt` を使�
 severity を自動的に意味しない。初期 release では Note 表示中も terminal input は通常どおり
 利用できるため、この挙動を GUI 内で隠さない。
 
-将来 S5 を採用する場合も checkpoint は一つの client における mistake-prevention であり、
-authorization boundary ではない。adapter unavailable／timeout は明示し、no-match と
-safe state を区別する。
+S5/S6はGate 6で不採用としたため、current UIはcheckpoint、adapter unavailable、match、safe stateを
+表示しない。将来の別proposalでも、一つのclientにおけるmistake-preventionをauthorization boundaryと
+呼ばないという制約は維持する。
 
 ## Target environment matrix
 
@@ -242,8 +245,8 @@ safe state を区別する。
 | Return timing | `On Return` / `戻ったとき` | next-focus trigger |
 | Prompt timing | `At Next Prompt` / `次のプロンプト` | next-prompt trigger |
 | Completed item | `Resolved` / `解決済み` | resolved state |
-| Input hold | initial UIには出さない | checkpoint。S5専用 |
-| Exact matcher | initial UIには出さない | rule。S5専用 |
+| Input hold | current featureには存在しない | S5不採用。型／modeを予約しない |
+| Exact matcher | current featureには存在しない | S5不採用。rule／digestを予約しない |
 | Past command attachment | initial UIには出さない | invocation receipt。S4専用 |
 | Workspace | 定義完了までUIに出さない | Gate 2で採否するscope候補 |
 
@@ -254,15 +257,27 @@ Gate 2/4の結果は
 を正本とする。以下の制約を保ったまま、`This Terminal` scope、durable note context、
 deterministic On Return／At Next Prompt semanticsを採用した。
 
-- Gate 2/4 は S1〜S3だけを current scope とし、S4〜S6のための durable receipt、digest、
+- Gate 2/4 は S1〜S3だけを current scope とし、S4のdurable receipt、または不採用のS5/S6のdigest、
   rule scope、checkpoint stateを先行設計しない。
 - Gate 2では initial release の attach target を pane/session のどちらとして userへ説明するか、
   app restart、pane close、restoration を跨ぐかを最初に決める。
 - Gate 3では note entity と store を設計し、exact-command secret field は含めない。
 - Gate 5では本書のvisual directionをinteractive child overlay、edge badge、trailing railとして確定した。
   Infinite canvasやcell-relative positioningは候補へ戻さない。
-- Gate 6は S5/S6だけの独立再評価であり、S1〜S3の採用を取り消したり、その model を
-  speculative checkpoint fieldsで汚染したりしない。
+- Gate 6はS5/S6を不採用とした。ZLE probe、trust boundary、再提案条件の正本は
+  [`checkpoint feasibility`](contextual-terminal-memory-checkpoint-feasibility.md)である。S1〜S3の採用は
+  変更せず、そのmodelへspeculative checkpoint fieldを入れない。
+
+## Gate 6での分類更新
+
+2026-09-20のGate 6でS5/S6を延期から不採用へ更新した。Clean zshでは`accept-line` wrapperが
+pre-submit bufferをholdできた一方、後から同名widgetを登録するとwrapperが完全に迂回され、既存
+`preexec` lifecycle hookではexecutionを停止できなかった。4-shell共通hook、authenticated control
+channel、portable exact-byte identity、command secret lifecycleも現行contractにはない。
+
+従ってS5/S6を「後で実装するNote mode」として残さない。再検討時はNote roadmapを再開するのではなく、
+誤送信防止を中心価値とする別proposalでuser demand、adapter support、trust、privacy、failure
+semantics、simulationを一体で判断する。
 
 ## 検証記録
 

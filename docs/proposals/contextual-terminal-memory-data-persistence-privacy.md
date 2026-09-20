@@ -5,12 +5,13 @@
 - Branch: `codex/contextual-memory-design`
 - 親文書: [`contextual-terminal-memory-design-decisions.md`](contextual-terminal-memory-design-decisions.md)
 - Scope/trigger仕様: [`contextual-terminal-memory-scope-trigger-semantics.md`](contextual-terminal-memory-scope-trigger-semantics.md)
+- Checkpoint採否: [`contextual-terminal-memory-checkpoint-feasibility.md`](contextual-terminal-memory-checkpoint-feasibility.md)
 
 ## 目的
 
 採用したS1〜S3について、Note、trigger、delivery、attachmentのdata invariant、本文format、
-lifecycle、永続store、quota、privacy、export/delete、schema migrationを確定する。延期した
-S4〜S6のcommand data、digest、rule、receiptをinitial schemaへ先行導入しない。
+lifecycle、永続store、quota、privacy、export/delete、schema migrationを確定する。延期中の
+S4とGate 6で不採用になったS5/S6のcommand data、digest、rule、receiptをschemaへ導入しない。
 
 ## 背景
 
@@ -83,8 +84,8 @@ defaultで除外しているため、Note本文やcontext identityを暗黙に�
 | D-14 | 採用 | Note lifecycleはactive/resolved、trigger/delivery lifecycleは別state machine。draft/snooze/expire/disabledはinitial schemaに入れない。 |
 | D-15 | 採用 | Versioned canonical JSON snapshot、single writer、checksum、atomic same-directory replace、known-good backup、deletion journalを使う。 |
 | D-16 | 採用 | count/body/fileにhard capを設け、user Noteを自動evictしない。capacity超過はmutationを無変更で拒否する。 |
-| D-17 | 延期 | S5 command digest/raw command/key storageをinitial schemaへ入れない。Note store自体のapp-level encryptionもinitial releaseでは提供しない。 |
-| D-18 | 延期 | Exact-command bytes/label UIはS5とともに延期する。 |
+| D-17 | 延期 | Note store自体のapp-level encryptionはinitial releaseでは提供せず将来判断とする。S5 command digest/raw command/key storageはGate 6の不採用によりschemaへ入れない。 |
+| D-18 | 不採用 | Gate 6でS5を不採用としたためExact-command bytes/label fieldとUIを定義せず、互換予約も残さない。 |
 | D-19 | 採用 | 明示exportとlogical deleteを採用し、importはinitial releaseで延期する。 |
 | D-20 | 採用 | Note content/identity/time/color/trigger historyをdiagnostics、log、analytics、crash metadataからdefault-excludeする。 |
 
@@ -425,7 +426,7 @@ permission/symlink/hard-link、lock contention、deletion crash matrixをautomat
 2026-09-20 に次を実行した。
 
 - D-12〜D-20のdecision rowを静的に数え、9件すべてが`採用`、`延期`、`不採用`のいずれかで
-  閉じていることを確認した（採用7件、延期2件）。
+  閉じていることを確認した。Gate 6後の現在値は採用7件、延期1件、不採用1件である。
 - `NoteRecord`、`NoteTriggerRecord`、`NoteDeliveryRecord`、`NoteContextRecord`のfield tableと
   cross-record invariantを読み合わせ、延期したcommand/receipt fieldがinitial schemaへ混入して
   いないことを確認した。

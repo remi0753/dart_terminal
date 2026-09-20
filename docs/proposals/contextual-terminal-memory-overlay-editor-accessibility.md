@@ -5,6 +5,7 @@
 - Branch: `codex/contextual-memory-design`
 - 親文書: [`contextual-terminal-memory-design-decisions.md`](contextual-terminal-memory-design-decisions.md)
 - Data/privacy仕様: [`contextual-terminal-memory-data-persistence-privacy.md`](contextual-terminal-memory-data-persistence-privacy.md)
+- Checkpoint採否: [`contextual-terminal-memory-checkpoint-feasibility.md`](contextual-terminal-memory-checkpoint-feasibility.md)
 
 ## 目的
 
@@ -42,7 +43,7 @@ surface、AppKit first responder/IME、pane badge、Context Dock、menu/action r
 - plain-text body、color key、explicit transaction、revision conflict、privacy/accessibility boundary
 - current pane focus projection、`TerminalViewBadgeProjection`、Context Dock input owner、action registry
 - `dart_appkit`のview hierarchy、text editor、focus、accessibility、appearance capability
-- Gate 6のS5採否。S5固有Checkpoint interactionは今回のS1〜S3 contractへ先行導入しない。
+- Gate 6でS5/S6は不採用となった。S5固有Checkpoint interactionはS1〜S3 contractへ導入しない。
 
 ## 完了条件
 
@@ -106,7 +107,7 @@ surface、AppKit first responder/IME、pane badge、Context Dock、menu/action r
 | D-28 | 採用 | Note専用のinteractive edge badgeとView menu／palette actionを入口にする。既存のnon-interactive system badgeとは別layer・別位置にする。 |
 | D-29 | 採用 | Native multiline editor、explicit Save/Cancel、volatile draft、IME/selection/Undo、revision conflictを持つin-rail editorとする。autosave/durable draftは採用しない。 |
 | D-30 | 採用 | window単位のgeneration-bound interaction ownerへterminal、Context Dock、Note rail、Note editorを統合し、全input familyを一意にrouteする。 |
-| D-31 | 延期 | Checkpoint interactionはS5とともにGate 6へ延期する。Initial owner model、UI、文言にCheckpoint modeやAllow/Cancelを先行導入しない。 |
+| D-31 | 不採用 | Gate 6でS5を不採用とした。Owner model、UI、文言にCheckpoint modeやAllow/Cancelを導入せず、将来の互換caseも予約しない。 |
 | D-32 | 採用 | Note childへのfirst-responder移動は同じpaneのterminal-visible focusを維持し、DEC 1004 blur/focusを生成しない。 |
 | D-33 | 採用 | alternate screen／mouse reporting中もbadgeと明示openを提供し、due時だけ単一railをnon-blockingに展開する。overlay内pointer/scrollはterminalへ送らない。 |
 | D-34 | 採用 | Native accessibility tree、keyboard-only flow、英語／日本語localization、light/dark、contrast、non-color cue、Reduce Motion、12〜24 pt Note fontを必須にする。 |
@@ -305,7 +306,8 @@ noteEditor(windowId, paneId, surfaceGeneration, draftGeneration)
 systemSurface(windowId)  // palette/settings/sheet等、既存ownerのprojection
 ```
 
-`checkpoint` caseは存在しない。Gate 6でS5を採用する場合だけ新しいreviewとmigrationを経て追加する。
+`checkpoint` caseは存在しない。Gate 6でS5を不採用としたため互換caseも予約しない。将来の別product
+proposalで再検討する場合は、このowner modelを暗黙に拡張せず新しいreviewとmigrationを要求する。
 Owner transferはrequest→native first-responder acquisition→generation revalidation→confirmの順に行う。
 失敗/stale requestでは旧ownerを維持する。owner stackやlast-write-winsは使わない。
 
@@ -446,7 +448,7 @@ byte spy、Metal drawable/grid snapshot、Developer JIT/Release AOT、arm64/x86_
 2026-09-20 に次を実行した。
 
 - D-27〜D-34のdecision rowを静的に数え、8件すべてが`採用`、`延期`、`不採用`のいずれかで
-  閉じていることを確認した（採用7件、延期1件）。
+  閉じていることを確認した。Gate 6後の現在値は採用7件、不採用1件である。
 - Input routing matrixを静的に数え、raw key、IME、menu、clipboard、Services、drop、mouse、scroll、
   accessibility、automationを覆う14 familyがあることを確認した。
 - geometry、badge、projection、editor、input、focus、TUI、accessibility、localizationを覆うverification
