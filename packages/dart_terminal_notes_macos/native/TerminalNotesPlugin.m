@@ -33,6 +33,7 @@ typedef struct DtnParsedProjection {
   uint32_t total_count;
   uint32_t locale;
   uint32_t body_font_millipoints;
+  uint64_t draft_generation;
   uint32_t projection_flags;
 } DtnParsedProjection;
 
@@ -552,6 +553,13 @@ struct DtnSurface {
   DtnParsedProjection projection;
   uint64_t accepted_projection_count;
   uint64_t rejected_projection_count;
+  DtnSurfaceIntentV1 pending_intent;
+  uint8_t pending_payload[DTN_MAX_INTENT_PAYLOAD_BYTES];
+  uint64_t last_event_generation;
+  uint32_t emitted_intent_count;
+  uint32_t applied_result_count;
+  bool has_pending_intent;
+  bool pending_intent_delivered;
   bool initialized;
 };
 
@@ -710,6 +718,7 @@ static int32_t dtn_parse_projection(const uint8_t* bytes, size_t length,
   const uint32_t page_length = dtn_read_u32(bytes + 92u);
   const uint32_t total_count = dtn_read_u32(bytes + 96u);
   const uint32_t body_font_millipoints = dtn_read_u32(bytes + 104u);
+  const uint64_t draft_generation = dtn_read_u64(bytes + 108u);
   if (dtn_read_u32(bytes) != DTN_PROJECTION_MAGIC ||
       total_bytes != length || header_bytes != DTN_PROJECTION_HEADER_BYTES ||
       card_record_bytes != DTN_CARD_RECORD_BYTES || visibility > 1u ||
@@ -728,7 +737,7 @@ static int32_t dtn_parse_projection(const uint8_t* bytes, size_t length,
       page_start > total_count || page_length > total_count - page_start ||
       dtn_read_u32(bytes + 100u) != 0u ||
       body_font_millipoints < 12000u || body_font_millipoints > 24000u ||
-      !dtn_zero_bytes(bytes + 108u, 20u)) {
+      draft_generation > INT64_MAX || !dtn_zero_bytes(bytes + 116u, 12u)) {
     return DTN_STATUS_INVALID_ARGUMENT;
   }
   const uint64_t pane_id = dtn_read_u64(bytes + 16u);
@@ -742,6 +751,11 @@ static int32_t dtn_parse_projection(const uint8_t* bytes, size_t length,
   const bool presentation_eligible =
       (flags & kDtnProjectionFlagPresentationEligible) != 0u;
   const uint64_t selected_token = dtn_read_u64(bytes + 48u);
+  if ((editor_mode == DTN_EDITOR_INACTIVE) != (draft_generation == 0u) ||
+      (editor_mode == DTN_EDITOR_CREATING && selected_token != 0u) ||
+      (editor_mode == DTN_EDITOR_EDITING && selected_token == 0u)) {
+    return DTN_STATUS_INVALID_ARGUMENT;
+  }
   if (visibility == DTN_VISIBILITY_COLLAPSED &&
       (card_count != 0u || body_bytes != 0u || selected_token != 0u)) {
     return DTN_STATUS_INVALID_ARGUMENT;
@@ -813,6 +827,7 @@ static int32_t dtn_parse_projection(const uint8_t* bytes, size_t length,
   output->page_start = page_start;
   output->total_count = total_count;
   output->body_font_millipoints = body_font_millipoints;
+  output->draft_generation = draft_generation;
   output->projection_flags = flags;
   return DTN_STATUS_OK;
 }
@@ -872,6 +887,14 @@ int32_t dtn_surface_apply_projection(DtnSurface* surface, const uint8_t* bytes,
     return DTN_STATUS_INTERNAL;
   }
   memcpy(owned_packet, bytes, length);
+  if (surface->has_pending_intent) {
+    surface->last_event_generation =
+        surface->pending_intent.event_generation;
+    memset(&surface->pending_intent, 0, sizeof(surface->pending_intent));
+    memset(surface->pending_payload, 0, sizeof(surface->pending_payload));
+    surface->has_pending_intent = false;
+    surface->pending_intent_delivered = false;
+  }
   uint8_t* previous_packet = surface->packet;
   surface->packet = owned_packet;
   surface->packet_length = length;
@@ -912,6 +935,7 @@ int32_t dtn_surface_snapshot(DtnSurface* surface,
   snapshot->store_revision_high = 0u;
   snapshot->accepted_projection_count = accepted;
   snapshot->rejected_projection_count = rejected;
+  snapshot->draft_generation = projection.draft_generation;
   snapshot->active_count = projection.active_count;
   snapshot->due_count = projection.due_count;
   snapshot->projected_card_count = projection.card_count;
@@ -930,6 +954,9 @@ int32_t dtn_surface_snapshot(DtnSurface* surface,
   snapshot->page_start = projection.page_start;
   snapshot->total_count = projection.total_count;
   snapshot->body_font_millipoints = projection.body_font_millipoints;
+  snapshot->outstanding_intent = surface->has_pending_intent ? 1u : 0u;
+  snapshot->emitted_intent_count = surface->emitted_intent_count;
+  snapshot->applied_result_count = surface->applied_result_count;
   return DTN_STATUS_OK;
 }
 
@@ -1039,6 +1066,189 @@ int32_t dtn_surface_presentation_snapshot(
   snapshot->body_font_millipoints = view.projection.body_font_millipoints;
   snapshot->badge_display_count =
       view.projection.active_count > 99u ? 99u : view.projection.active_count;
+  return DTN_STATUS_OK;
+}
+
+static bool dtn_surface_has_card_token(DtnSurface* surface, uint64_t token) {
+  if (token == 0u) return false;
+  for (DtnCardModel* model in surface->view.models) {
+    if (model.token == token) return true;
+  }
+  return false;
+}
+
+static bool dtn_intent_reserved_zero(const DtnSurfaceIntentV1* intent) {
+  if (intent->reserved0 != 0u) return false;
+  for (size_t index = 0; index < 10u; ++index) {
+    if (intent->reserved[index] != 0u) return false;
+  }
+  return true;
+}
+
+static bool dtn_result_reserved_zero(const DtnSurfaceResultV1* result) {
+  if (result->reserved0 != 0u) return false;
+  for (size_t index = 0; index < 6u; ++index) {
+    if (result->reserved[index] != 0u) return false;
+  }
+  return true;
+}
+
+static bool dtn_intent_kind_mutates(uint32_t kind) {
+  return kind == DTN_INTENT_SAVE || kind == DTN_INTENT_CHANGE_COLOR ||
+         kind == DTN_INTENT_MOVE_EARLIER ||
+         kind == DTN_INTENT_MOVE_LATER || kind == DTN_INTENT_RESOLVE ||
+         kind == DTN_INTENT_REOPEN || kind == DTN_INTENT_DELETE ||
+         kind == DTN_INTENT_REATTACH;
+}
+
+int32_t dtn_surface_request_intent(DtnSurface* surface,
+                                   const DtnSurfaceIntentV1* intent,
+                                   const uint8_t* payload) {
+  if (surface == NULL || intent == NULL ||
+      intent->struct_size != sizeof(DtnSurfaceIntentV1)) {
+    return DTN_STATUS_INVALID_ARGUMENT;
+  }
+  if (intent->version != DTN_INTENT_VERSION) {
+    return DTN_STATUS_UNSUPPORTED_VERSION;
+  }
+  if (![NSThread isMainThread]) return DTN_STATUS_WRONG_THREAD;
+  if (!surface->initialized || !dtn_intent_reserved_zero(intent) ||
+      intent->kind > DTN_INTENT_COPY ||
+      intent->event_generation == 0u || intent->event_generation > INT64_MAX ||
+      intent->payload_bytes > DTN_MAX_INTENT_PAYLOAD_BYTES ||
+      (intent->payload_bytes == 0u) != (payload == NULL) ||
+      intent->surface_generation != surface->projection.surface_generation ||
+      intent->projection_generation !=
+          surface->projection.projection_generation ||
+      intent->expected_store_revision !=
+          surface->projection.store_revision_low ||
+      intent->event_generation <= surface->last_event_generation ||
+      intent->draft_generation != surface->projection.draft_generation) {
+    return DTN_STATUS_INVALID_ARGUMENT;
+  }
+  if (surface->has_pending_intent) return DTN_STATUS_BUSY;
+
+  const bool payload_kind = intent->kind == DTN_INTENT_SAVE ||
+                            intent->kind == DTN_INTENT_COPY;
+  if (payload_kind != (intent->payload_bytes > 0u) ||
+      (payload_kind &&
+       !dtn_valid_body_utf8(payload, intent->payload_bytes))) {
+    return DTN_STATUS_INVALID_ARGUMENT;
+  }
+  const bool color_kind = intent->kind == DTN_INTENT_SAVE ||
+                          intent->kind == DTN_INTENT_CHANGE_COLOR;
+  if ((color_kind && intent->color > 5u) ||
+      (!color_kind && intent->color != DTN_NO_COLOR)) {
+    return DTN_STATUS_INVALID_ARGUMENT;
+  }
+
+  const uint32_t editor_mode = surface->projection.editor_mode;
+  const uint64_t selected = surface->projection.selected_token;
+  if (intent->kind == DTN_INTENT_SAVE ||
+      intent->kind == DTN_INTENT_CANCEL) {
+    if (editor_mode == DTN_EDITOR_INACTIVE ||
+        intent->draft_generation == 0u ||
+        intent->card_token != selected) {
+      return DTN_STATUS_INVALID_ARGUMENT;
+    }
+  } else if (intent->kind == DTN_INTENT_EXPORT) {
+    if (intent->card_token != 0u) return DTN_STATUS_INVALID_ARGUMENT;
+  } else if (!dtn_surface_has_card_token(surface, intent->card_token)) {
+    return DTN_STATUS_INVALID_ARGUMENT;
+  }
+
+  surface->pending_intent = *intent;
+  if (intent->payload_bytes > 0u) {
+    memcpy(surface->pending_payload, payload, intent->payload_bytes);
+  }
+  surface->has_pending_intent = true;
+  surface->pending_intent_delivered = false;
+  if (surface->emitted_intent_count != UINT32_MAX) {
+    ++surface->emitted_intent_count;
+  }
+  return DTN_STATUS_OK;
+}
+
+int32_t dtn_surface_take_intent(DtnSurface* surface,
+                                DtnSurfaceIntentV1* intent,
+                                uint8_t* payload,
+                                size_t payload_capacity) {
+  if (surface == NULL || intent == NULL ||
+      intent->struct_size != sizeof(DtnSurfaceIntentV1)) {
+    return DTN_STATUS_INVALID_ARGUMENT;
+  }
+  if (intent->version != DTN_INTENT_VERSION) {
+    return DTN_STATUS_UNSUPPORTED_VERSION;
+  }
+  if (![NSThread isMainThread]) return DTN_STATUS_WRONG_THREAD;
+  if (!surface->has_pending_intent || surface->pending_intent_delivered) {
+    return DTN_STATUS_NOT_FOUND;
+  }
+  const size_t payload_bytes = surface->pending_intent.payload_bytes;
+  if (payload_capacity < payload_bytes ||
+      (payload_bytes > 0u && payload == NULL)) {
+    return DTN_STATUS_INVALID_ARGUMENT;
+  }
+  *intent = surface->pending_intent;
+  if (payload_bytes > 0u) {
+    memcpy(payload, surface->pending_payload, payload_bytes);
+  }
+  surface->pending_intent_delivered = true;
+  return DTN_STATUS_OK;
+}
+
+int32_t dtn_surface_apply_result(DtnSurface* surface,
+                                 const DtnSurfaceResultV1* result) {
+  if (surface == NULL || result == NULL ||
+      result->struct_size != sizeof(DtnSurfaceResultV1)) {
+    return DTN_STATUS_INVALID_ARGUMENT;
+  }
+  if (result->version != DTN_RESULT_VERSION) {
+    return DTN_STATUS_UNSUPPORTED_VERSION;
+  }
+  if (![NSThread isMainThread]) return DTN_STATUS_WRONG_THREAD;
+  if (!surface->has_pending_intent || !surface->pending_intent_delivered) {
+    return DTN_STATUS_STALE;
+  }
+  const DtnSurfaceIntentV1 pending = surface->pending_intent;
+  if (!dtn_result_reserved_zero(result) ||
+      result->disposition > DTN_RESULT_UNAVAILABLE ||
+      result->surface_generation != pending.surface_generation ||
+      result->projection_generation != pending.projection_generation ||
+      result->event_generation != pending.event_generation ||
+      result->draft_generation != pending.draft_generation) {
+    return DTN_STATUS_STALE;
+  }
+  const bool mutates = dtn_intent_kind_mutates(pending.kind);
+  if (result->disposition == DTN_RESULT_ACCEPTED) {
+    if (mutates) {
+      if (result->new_store_revision <= pending.expected_store_revision ||
+          result->new_projection_generation <= pending.projection_generation) {
+        return DTN_STATUS_INVALID_ARGUMENT;
+      }
+    } else if (result->new_store_revision !=
+                   pending.expected_store_revision ||
+               result->new_projection_generation !=
+                   pending.projection_generation) {
+      return DTN_STATUS_INVALID_ARGUMENT;
+    }
+  } else {
+    if ((result->disposition == DTN_RESULT_CONFLICT &&
+         pending.kind != DTN_INTENT_SAVE) ||
+        result->new_store_revision != pending.expected_store_revision ||
+        result->new_projection_generation != pending.projection_generation) {
+      return DTN_STATUS_INVALID_ARGUMENT;
+    }
+  }
+
+  surface->last_event_generation = pending.event_generation;
+  memset(&surface->pending_intent, 0, sizeof(surface->pending_intent));
+  memset(surface->pending_payload, 0, sizeof(surface->pending_payload));
+  surface->has_pending_intent = false;
+  surface->pending_intent_delivered = false;
+  if (surface->applied_result_count != UINT32_MAX) {
+    ++surface->applied_result_count;
+  }
   return DTN_STATUS_OK;
 }
 

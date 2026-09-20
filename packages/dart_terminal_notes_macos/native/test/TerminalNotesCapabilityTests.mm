@@ -601,6 +601,134 @@ int main() {
               isEqualToString:@"ノート"],
       "localized accessible name and clipped narrow card");
 
+  std::vector<uint8_t> editing = packet(15u, 12u, {"baseline"}, 0x01u);
+  editing[83u] = DTN_EDITOR_EDITING;
+  write_u64(editing, 108u, 21u);
+  ok &= expect(dtn_surface_apply_projection(surface, editing.data(),
+                                            editing.size()) == DTN_STATUS_OK,
+               "editor projection with draft generation");
+
+  const std::string edited = "edited body";
+  DtnSurfaceIntentV1 save = {};
+  save.struct_size = sizeof(save);
+  save.version = DTN_INTENT_VERSION;
+  save.surface_generation = 7u;
+  save.projection_generation = 15u;
+  save.event_generation = 21u;
+  save.draft_generation = 21u;
+  save.card_token = 1u;
+  save.expected_store_revision = 12u;
+  save.kind = DTN_INTENT_SAVE;
+  save.payload_bytes = static_cast<uint32_t>(edited.size());
+  save.color = 1u;
+  ok &= expect(dtn_surface_request_intent(
+                   surface, &save,
+                   reinterpret_cast<const uint8_t*>(edited.data())) ==
+                   DTN_STATUS_OK,
+               "semantic Save intent accepted");
+  DtnSurfaceIntentV1 busy = save;
+  busy.event_generation = 22u;
+  ok &= expect(dtn_surface_request_intent(
+                   surface, &busy,
+                   reinterpret_cast<const uint8_t*>(edited.data())) ==
+                   DTN_STATUS_BUSY,
+               "one outstanding intent bound");
+  snapshot = {};
+  snapshot.struct_size = sizeof(snapshot);
+  snapshot.version = DTN_SNAPSHOT_VERSION;
+  ok &= expect(dtn_surface_snapshot(surface, &snapshot) == DTN_STATUS_OK &&
+                   snapshot.draft_generation == 21u &&
+                   snapshot.outstanding_intent == 1u &&
+                   snapshot.emitted_intent_count == 1u,
+               "content-free outstanding intent snapshot");
+
+  DtnSurfaceIntentV1 taken = {};
+  taken.struct_size = sizeof(taken);
+  taken.version = DTN_INTENT_VERSION;
+  uint8_t payload[DTN_MAX_INTENT_PAYLOAD_BYTES] = {};
+  ok &= expect(dtn_surface_take_intent(surface, &taken, payload,
+                                       edited.size() - 1u) ==
+                   DTN_STATUS_INVALID_ARGUMENT,
+               "undersized take buffer leaves intent pending");
+  taken = {};
+  taken.struct_size = sizeof(taken);
+  taken.version = DTN_INTENT_VERSION;
+  ok &= expect(dtn_surface_take_intent(surface, &taken, payload,
+                                       sizeof(payload)) == DTN_STATUS_OK &&
+                   taken.event_generation == 21u &&
+                   taken.kind == DTN_INTENT_SAVE &&
+                   std::memcmp(payload, edited.data(), edited.size()) == 0,
+               "semantic intent take preserves bounded payload");
+  DtnSurfaceIntentV1 duplicate_take = {};
+  duplicate_take.struct_size = sizeof(duplicate_take);
+  duplicate_take.version = DTN_INTENT_VERSION;
+  ok &= expect(dtn_surface_take_intent(surface, &duplicate_take, payload,
+                                       sizeof(payload)) ==
+                   DTN_STATUS_NOT_FOUND,
+               "intent is delivered once");
+
+  DtnSurfaceResultV1 stale_result = {};
+  stale_result.struct_size = sizeof(stale_result);
+  stale_result.version = DTN_RESULT_VERSION;
+  stale_result.surface_generation = 7u;
+  stale_result.projection_generation = 15u;
+  stale_result.event_generation = 20u;
+  stale_result.draft_generation = 21u;
+  stale_result.new_store_revision = 12u;
+  stale_result.new_projection_generation = 15u;
+  stale_result.disposition = DTN_RESULT_CONFLICT;
+  ok &= expect(dtn_surface_apply_result(surface, &stale_result) ==
+                   DTN_STATUS_STALE,
+               "mismatched result fails closed");
+  DtnSurfaceResultV1 conflict = stale_result;
+  conflict.event_generation = 21u;
+  ok &= expect(dtn_surface_apply_result(surface, &conflict) == DTN_STATUS_OK &&
+                   dtn_surface_apply_result(surface, &conflict) ==
+                       DTN_STATUS_STALE,
+               "conflict clears exactly one outstanding intent");
+
+  DtnSurfaceIntentV1 oversized = save;
+  oversized.event_generation = 22u;
+  oversized.payload_bytes = DTN_MAX_INTENT_PAYLOAD_BYTES + 1u;
+  ok &= expect(dtn_surface_request_intent(surface, &oversized, payload) ==
+                   DTN_STATUS_INVALID_ARGUMENT,
+               "oversized intent payload rejected atomically");
+  std::string maximum_intent(DTN_MAX_INTENT_PAYLOAD_BYTES, 'x');
+  DtnSurfaceIntentV1 maximum_save = save;
+  maximum_save.event_generation = 22u;
+  maximum_save.payload_bytes = DTN_MAX_INTENT_PAYLOAD_BYTES;
+  ok &= expect(dtn_surface_request_intent(
+                   surface, &maximum_save,
+                   reinterpret_cast<const uint8_t*>(maximum_intent.data())) ==
+                   DTN_STATUS_OK,
+               "maximum intent payload accepted");
+  taken = {};
+  taken.struct_size = sizeof(taken);
+  taken.version = DTN_INTENT_VERSION;
+  ok &= expect(dtn_surface_take_intent(surface, &taken, payload,
+                                       sizeof(payload)) == DTN_STATUS_OK,
+               "maximum intent delivered");
+  DtnSurfaceResultV1 accepted = {};
+  accepted.struct_size = sizeof(accepted);
+  accepted.version = DTN_RESULT_VERSION;
+  accepted.surface_generation = 7u;
+  accepted.projection_generation = 15u;
+  accepted.event_generation = 22u;
+  accepted.draft_generation = 21u;
+  accepted.new_store_revision = 13u;
+  accepted.new_projection_generation = 16u;
+  accepted.disposition = DTN_RESULT_ACCEPTED;
+  ok &= expect(dtn_surface_apply_result(surface, &accepted) == DTN_STATUS_OK,
+               "accepted mutation result advances revision and generation");
+  snapshot = {};
+  snapshot.struct_size = sizeof(snapshot);
+  snapshot.version = DTN_SNAPSHOT_VERSION;
+  ok &= expect(dtn_surface_snapshot(surface, &snapshot) == DTN_STATUS_OK &&
+                   snapshot.outstanding_intent == 0u &&
+                   snapshot.emitted_intent_count == 2u &&
+                   snapshot.applied_result_count == 2u,
+               "intent/result counters and ownership return to zero");
+
   ok &= expect(std::memcmp(&terminal, &terminal_before, sizeof(terminal)) == 0,
                "G1-G3/T1 terminal geometry and input sentinel delta zero");
   ok &= expect(dtn_surface_detach_from_host(surface) == DTN_STATUS_OK &&

@@ -8,6 +8,10 @@ _Static_assert(sizeof(DtnSurfaceSnapshotV1) == 160u,
                "snapshot ABI layout changed");
 _Static_assert(sizeof(DtnPresentationSnapshotV1) == 232u,
                "presentation snapshot ABI layout changed");
+_Static_assert(sizeof(DtnSurfaceIntentV1) == 112u,
+               "intent ABI layout changed");
+_Static_assert(sizeof(DtnSurfaceResultV1) == 88u,
+               "result ABI layout changed");
 
 int main(void) {
   DtnSurface* surface = (DtnSurface*)0;

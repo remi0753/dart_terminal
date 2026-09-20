@@ -18,6 +18,15 @@ part of the ABI. Collapsed packets never contain card bodies. Native apply is
 atomic: malformed, unsupported, cross-surface, or stale packets leave the last
 accepted projection intact.
 
+The same ABI version includes a fixed semantic intent/result boundary. An
+intent carries only surface/projection/event/draft generations, an ephemeral
+card token, the expected store revision, a fixed kind, and a bounded payload.
+Only Save and explicit Copy can carry body bytes; only Save and Change Color
+can carry a six-color key. Each surface admits one outstanding intent, delivers
+it once, and rejects mismatched or duplicate results without mutating the last
+projection. Results contain only a fixed disposition and new revision/
+generation values; they never echo body content or persistent identity.
+
 Application capability registration and Dart Terminal model adaptation are
 intentionally deferred to product composition. Package tests load the code
 asset directly, so this package can be verified before manifest registration.

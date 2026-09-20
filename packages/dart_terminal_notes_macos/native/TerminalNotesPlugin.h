@@ -9,6 +9,8 @@
 #define DTN_SNAPSHOT_VERSION 1u
 #define DTN_LAYOUT_VERSION 1u
 #define DTN_PRESENTATION_SNAPSHOT_VERSION 1u
+#define DTN_INTENT_VERSION 1u
+#define DTN_RESULT_VERSION 1u
 #define DTN_PROJECTION_MAGIC 0x31504e44u
 #define DTN_PROJECTION_HEADER_BYTES 128u
 #define DTN_CARD_RECORD_BYTES 32u
@@ -17,6 +19,8 @@
 #define DTN_MAX_CARD_BODY_BYTES 4096u
 #define DTN_MAX_BODY_BYTES (256u * 1024u)
 #define DTN_MAX_CONTEXT_NOTES 128u
+#define DTN_MAX_INTENT_PAYLOAD_BYTES 4096u
+#define DTN_NO_COLOR 0xffffffffu
 #define DTN_MAX_PACKET_BYTES \
   (DTN_PROJECTION_HEADER_BYTES + DTN_MAX_CARDS * DTN_CARD_RECORD_BYTES + \
    DTN_MAX_BODY_BYTES)
@@ -29,6 +33,7 @@ typedef enum DtnStatus {
   DTN_STATUS_INTERNAL = 4,
   DTN_STATUS_WRONG_THREAD = 5,
   DTN_STATUS_NOT_FOUND = 6,
+  DTN_STATUS_BUSY = 7,
 } DtnStatus;
 
 typedef enum DtnVisibility {
@@ -74,6 +79,28 @@ typedef enum DtnMessageKey {
   DTN_MESSAGE_RECOVERY_REQUIRED = 5,
 } DtnMessageKey;
 
+typedef enum DtnIntentKind {
+  DTN_INTENT_SAVE = 0,
+  DTN_INTENT_CANCEL = 1,
+  DTN_INTENT_CHANGE_COLOR = 2,
+  DTN_INTENT_MOVE_EARLIER = 3,
+  DTN_INTENT_MOVE_LATER = 4,
+  DTN_INTENT_RESOLVE = 5,
+  DTN_INTENT_REOPEN = 6,
+  DTN_INTENT_DELETE = 7,
+  DTN_INTENT_REATTACH = 8,
+  DTN_INTENT_EXPORT = 9,
+  DTN_INTENT_COPY = 10,
+} DtnIntentKind;
+
+typedef enum DtnResultDisposition {
+  DTN_RESULT_ACCEPTED = 0,
+  DTN_RESULT_CONFLICT = 1,
+  DTN_RESULT_REJECTED = 2,
+  DTN_RESULT_BUSY = 3,
+  DTN_RESULT_UNAVAILABLE = 4,
+} DtnResultDisposition;
+
 typedef struct DtnSurface DtnSurface;
 
 typedef struct DtnSurfaceSnapshotV1 {
@@ -86,6 +113,7 @@ typedef struct DtnSurfaceSnapshotV1 {
   uint64_t store_revision_high;
   uint64_t accepted_projection_count;
   uint64_t rejected_projection_count;
+  uint64_t draft_generation;
   uint32_t active_count;
   uint32_t due_count;
   uint32_t projected_card_count;
@@ -103,8 +131,41 @@ typedef struct DtnSurfaceSnapshotV1 {
   uint32_t page_start;
   uint32_t total_count;
   uint32_t body_font_millipoints;
-  uint32_t reserved[7];
+  uint32_t outstanding_intent;
+  uint32_t emitted_intent_count;
+  uint32_t applied_result_count;
+  uint32_t reserved[2];
 } DtnSurfaceSnapshotV1;
+
+typedef struct DtnSurfaceIntentV1 {
+  uint32_t struct_size;
+  uint32_t version;
+  uint64_t surface_generation;
+  uint64_t projection_generation;
+  uint64_t event_generation;
+  uint64_t draft_generation;
+  uint64_t card_token;
+  uint64_t expected_store_revision;
+  uint32_t kind;
+  uint32_t payload_bytes;
+  uint32_t color;
+  uint32_t reserved0;
+  uint32_t reserved[10];
+} DtnSurfaceIntentV1;
+
+typedef struct DtnSurfaceResultV1 {
+  uint32_t struct_size;
+  uint32_t version;
+  uint64_t surface_generation;
+  uint64_t projection_generation;
+  uint64_t event_generation;
+  uint64_t draft_generation;
+  uint64_t new_store_revision;
+  uint64_t new_projection_generation;
+  uint32_t disposition;
+  uint32_t reserved0;
+  uint32_t reserved[6];
+} DtnSurfaceResultV1;
 
 enum {
   DTN_PRESENTATION_BADGE_VISIBLE = 1u << 0,
@@ -188,6 +249,19 @@ __attribute__((visibility("default"))) int32_t dtn_surface_update_layout(
 __attribute__((visibility("default"))) int32_t
 dtn_surface_presentation_snapshot(
     DtnSurface* surface, DtnPresentationSnapshotV1* snapshot);
+
+// Native interaction entry point. Product UI code and native acceptance use
+// this boundary; Dart consumes only take/apply below.
+__attribute__((visibility("default"))) int32_t dtn_surface_request_intent(
+    DtnSurface* surface, const DtnSurfaceIntentV1* intent,
+    const uint8_t* payload);
+
+__attribute__((visibility("default"))) int32_t dtn_surface_take_intent(
+    DtnSurface* surface, DtnSurfaceIntentV1* intent, uint8_t* payload,
+    size_t payload_capacity);
+
+__attribute__((visibility("default"))) int32_t dtn_surface_apply_result(
+    DtnSurface* surface, const DtnSurfaceResultV1* result);
 
 // Native-to-native composition seam. The returned view is unretained and must
 // never cross Dart FFI. attach consumes neither object.

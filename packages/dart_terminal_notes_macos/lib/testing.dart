@@ -6,4 +6,6 @@ export 'src/native_backend.dart'
         TerminalNotesNativeBindings,
         TerminalNotesNativeFfiBindings,
         TerminalNotesNativePresentationRawSnapshot,
+        TerminalNotesNativeRawIntent,
+        TerminalNotesNativeRawResult,
         TerminalNotesNativeRawSnapshot;

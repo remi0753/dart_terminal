@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'native_backend.dart';
@@ -12,6 +13,80 @@ enum TerminalNotesApplyDisposition {
 }
 
 enum TerminalNotesCapabilityAvailability { available, nativeUnavailable }
+
+enum TerminalNotesIntentKind {
+  save,
+  cancel,
+  changeColor,
+  moveEarlier,
+  moveLater,
+  resolve,
+  reopen,
+  delete,
+  reattach,
+  export,
+  copy,
+}
+
+enum TerminalNotesResultDisposition {
+  accepted,
+  conflict,
+  rejected,
+  busy,
+  unavailable,
+}
+
+enum TerminalNotesResultApplyDisposition {
+  accepted,
+  rejectedInvalid,
+  rejectedStale,
+  failed,
+}
+
+final class TerminalNotesNativeIntent {
+  const TerminalNotesNativeIntent({
+    required this.surfaceGeneration,
+    required this.projectionGeneration,
+    required this.eventGeneration,
+    required this.draftGeneration,
+    required this.cardToken,
+    required this.expectedStoreRevision,
+    required this.kind,
+    required this.color,
+    required this.body,
+  });
+
+  final int surfaceGeneration;
+  final int projectionGeneration;
+  final int eventGeneration;
+  final int draftGeneration;
+  final int? cardToken;
+  final BigInt expectedStoreRevision;
+  final TerminalNotesIntentKind kind;
+  final TerminalNotesColor? color;
+  final String? body;
+}
+
+final class TerminalNotesNativeResult {
+  TerminalNotesNativeResult({
+    required this.intent,
+    required this.disposition,
+    required this.newStoreRevision,
+    required this.newProjectionGeneration,
+  }) {
+    if (newStoreRevision < BigInt.zero ||
+        newStoreRevision > TerminalNotesLimits.maximumUnsigned64 ||
+        newProjectionGeneration <= 0 ||
+        newProjectionGeneration > TerminalNotesLimits.maximumSignedGeneration) {
+      throw ArgumentError('invalid native Note result generation');
+    }
+  }
+
+  final TerminalNotesNativeIntent intent;
+  final TerminalNotesResultDisposition disposition;
+  final BigInt newStoreRevision;
+  final int newProjectionGeneration;
+}
 
 final class TerminalNotesNativeOpenResult {
   const TerminalNotesNativeOpenResult._({
@@ -55,6 +130,7 @@ final class TerminalNotesNativeSnapshot {
     required this.storeRevision,
     required this.acceptedProjectionCount,
     required this.rejectedProjectionCount,
+    required this.draftGeneration,
     required this.activeCount,
     required this.dueCount,
     required this.projectedCardCount,
@@ -77,6 +153,9 @@ final class TerminalNotesNativeSnapshot {
     required this.pageStart,
     required this.totalCount,
     required this.bodyFontMilliPoints,
+    required this.outstandingIntent,
+    required this.emittedIntentCount,
+    required this.appliedResultCount,
   });
 
   final int paneId;
@@ -85,6 +164,7 @@ final class TerminalNotesNativeSnapshot {
   final BigInt storeRevision;
   final int acceptedProjectionCount;
   final int rejectedProjectionCount;
+  final int draftGeneration;
   final int activeCount;
   final int dueCount;
   final int projectedCardCount;
@@ -107,6 +187,9 @@ final class TerminalNotesNativeSnapshot {
   final int pageStart;
   final int totalCount;
   final int bodyFontMilliPoints;
+  final bool outstandingIntent;
+  final int emittedIntentCount;
+  final int appliedResultCount;
 }
 
 final class TerminalNotesRect {
@@ -253,6 +336,7 @@ final class TerminalNotesNativeSurface {
       storeRevision: raw.storeRevision,
       acceptedProjectionCount: raw.acceptedProjectionCount,
       rejectedProjectionCount: raw.rejectedProjectionCount,
+      draftGeneration: raw.draftGeneration,
       activeCount: raw.activeCount,
       dueCount: raw.dueCount,
       projectedCardCount: raw.projectedCardCount,
@@ -275,6 +359,9 @@ final class TerminalNotesNativeSurface {
       pageStart: raw.pageStart,
       totalCount: raw.totalCount,
       bodyFontMilliPoints: raw.bodyFontMilliPoints,
+      outstandingIntent: raw.outstandingIntent,
+      emittedIntentCount: raw.emittedIntentCount,
+      appliedResultCount: raw.appliedResultCount,
     );
   }
 
@@ -329,6 +416,66 @@ final class TerminalNotesNativeSurface {
     );
   }
 
+  TerminalNotesNativeIntent? takeIntent() {
+    final TerminalNotesNativeRawIntent? raw = _bindings.takeIntent(
+      _requireHandle(),
+    );
+    if (raw == null) return null;
+    if (raw.kind >= TerminalNotesIntentKind.values.length ||
+        (raw.color != TerminalNotesLimits.maximumUnsigned32 &&
+            raw.color >= TerminalNotesColor.values.length)) {
+      throw const TerminalNotesNativeException('takeIntent.enum', -1);
+    }
+    final TerminalNotesIntentKind kind =
+        TerminalNotesIntentKind.values[raw.kind];
+    final bool payloadKind =
+        kind == TerminalNotesIntentKind.save ||
+        kind == TerminalNotesIntentKind.copy;
+    if (payloadKind != raw.payload.isNotEmpty) {
+      throw const TerminalNotesNativeException('takeIntent.payload', -1);
+    }
+    return TerminalNotesNativeIntent(
+      surfaceGeneration: raw.surfaceGeneration,
+      projectionGeneration: raw.projectionGeneration,
+      eventGeneration: raw.eventGeneration,
+      draftGeneration: raw.draftGeneration,
+      cardToken: raw.cardToken == 0 ? null : raw.cardToken,
+      expectedStoreRevision: _unsigned64(raw.expectedStoreRevision),
+      kind: kind,
+      color: raw.color == TerminalNotesLimits.maximumUnsigned32
+          ? null
+          : TerminalNotesColor.values[raw.color],
+      body: payloadKind
+          ? utf8.decode(raw.payload, allowMalformed: false)
+          : null,
+    );
+  }
+
+  TerminalNotesResultApplyDisposition applyResult(
+    TerminalNotesNativeResult result,
+  ) {
+    final TerminalNotesNativeIntent intent = result.intent;
+    final int status = _bindings.applyResult(
+      _requireHandle(),
+      TerminalNotesNativeRawResult(
+        surfaceGeneration: intent.surfaceGeneration,
+        projectionGeneration: intent.projectionGeneration,
+        eventGeneration: intent.eventGeneration,
+        draftGeneration: intent.draftGeneration,
+        newStoreRevision: result.newStoreRevision.toInt(),
+        newProjectionGeneration: result.newProjectionGeneration,
+        disposition: result.disposition.index,
+      ),
+    );
+    return switch (status) {
+      nativeStatusOk => TerminalNotesResultApplyDisposition.accepted,
+      nativeStatusInvalidArgument =>
+        TerminalNotesResultApplyDisposition.rejectedInvalid,
+      nativeStatusStale => TerminalNotesResultApplyDisposition.rejectedStale,
+      _ => TerminalNotesResultApplyDisposition.failed,
+    };
+  }
+
   void dispose() {
     final Object? handle = _handle;
     if (handle == null) return;
@@ -341,4 +488,7 @@ final class TerminalNotesNativeSurface {
     if (handle == null) throw StateError('native Note surface is disposed');
     return handle;
   }
+
+  static BigInt _unsigned64(int value) =>
+      value >= 0 ? BigInt.from(value) : BigInt.from(value) + (BigInt.one << 64);
 }

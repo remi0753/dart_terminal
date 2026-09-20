@@ -101,6 +101,11 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
   - [x] badge、rail、card、appearance、read-only accessibilityを実装する
   - [x] manifest-independent native acceptanceとfallbackを完了する
 - [ ] CM-09 native Note editor、intent、accessibility interactionを実装する
+  （[`cm-09-native-note-editor-intent-accessibility.md`](docs/contextual-memory/cm-09-native-note-editor-intent-accessibility.md)
+  を参照して実施する）
+  - [x] semantic intent/result ABIとone-outstanding stateを実装する
+  - [ ] native multiline editor、draft admission、actionsを実装する
+  - [ ] input isolation、focus/accessibility、teardown acceptanceを完了する
 - [ ] CM-10 S1 Basic memoryをproductへ統合する
 - [ ] CM-11 S2 On Returnをproductへ統合する
 - [ ] CM-12 R0 hidden qualificationを完了する

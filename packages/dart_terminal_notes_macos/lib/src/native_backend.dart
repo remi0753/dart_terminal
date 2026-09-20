@@ -11,6 +11,8 @@ const int nativeStatusInvalidArgument = 1;
 const int nativeStatusUnsupportedVersion = 2;
 const int nativeStatusStale = 3;
 const int nativeStatusInternal = 4;
+const int nativeStatusNotFound = 6;
+const int nativeStatusBusy = 7;
 
 final class TerminalNotesNativeRawSnapshot {
   const TerminalNotesNativeRawSnapshot({
@@ -20,6 +22,7 @@ final class TerminalNotesNativeRawSnapshot {
     required this.storeRevision,
     required this.acceptedProjectionCount,
     required this.rejectedProjectionCount,
+    required this.draftGeneration,
     required this.activeCount,
     required this.dueCount,
     required this.projectedCardCount,
@@ -42,6 +45,9 @@ final class TerminalNotesNativeRawSnapshot {
     required this.pageStart,
     required this.totalCount,
     required this.bodyFontMilliPoints,
+    required this.outstandingIntent,
+    required this.emittedIntentCount,
+    required this.appliedResultCount,
   });
 
   final int paneId;
@@ -50,6 +56,7 @@ final class TerminalNotesNativeRawSnapshot {
   final BigInt storeRevision;
   final int acceptedProjectionCount;
   final int rejectedProjectionCount;
+  final int draftGeneration;
   final int activeCount;
   final int dueCount;
   final int projectedCardCount;
@@ -72,6 +79,53 @@ final class TerminalNotesNativeRawSnapshot {
   final int pageStart;
   final int totalCount;
   final int bodyFontMilliPoints;
+  final bool outstandingIntent;
+  final int emittedIntentCount;
+  final int appliedResultCount;
+}
+
+final class TerminalNotesNativeRawIntent {
+  const TerminalNotesNativeRawIntent({
+    required this.surfaceGeneration,
+    required this.projectionGeneration,
+    required this.eventGeneration,
+    required this.draftGeneration,
+    required this.cardToken,
+    required this.expectedStoreRevision,
+    required this.kind,
+    required this.color,
+    required this.payload,
+  });
+
+  final int surfaceGeneration;
+  final int projectionGeneration;
+  final int eventGeneration;
+  final int draftGeneration;
+  final int cardToken;
+  final int expectedStoreRevision;
+  final int kind;
+  final int color;
+  final Uint8List payload;
+}
+
+final class TerminalNotesNativeRawResult {
+  const TerminalNotesNativeRawResult({
+    required this.surfaceGeneration,
+    required this.projectionGeneration,
+    required this.eventGeneration,
+    required this.draftGeneration,
+    required this.newStoreRevision,
+    required this.newProjectionGeneration,
+    required this.disposition,
+  });
+
+  final int surfaceGeneration;
+  final int projectionGeneration;
+  final int eventGeneration;
+  final int draftGeneration;
+  final int newStoreRevision;
+  final int newProjectionGeneration;
+  final int disposition;
 }
 
 final class TerminalNotesNativePresentationRawSnapshot {
@@ -135,6 +189,10 @@ abstract interface class TerminalNotesNativeBindings {
     Object handle,
   );
 
+  TerminalNotesNativeRawIntent? takeIntent(Object handle);
+
+  int applyResult(Object handle, TerminalNotesNativeRawResult result);
+
   void destroySurface(Object handle);
 
   int get liveSurfaceCount;
@@ -150,6 +208,63 @@ final class TerminalNotesNativeFfiBindings
     final Pointer<Void> handle = _surfaceCreate();
     if (handle == nullptr) throw StateError('native Note surface unavailable');
     return handle;
+  }
+
+  @override
+  TerminalNotesNativeRawIntent? takeIntent(Object handle) {
+    final Pointer<_DtnSurfaceIntentV1> intent = calloc<_DtnSurfaceIntentV1>();
+    final Pointer<Uint8> payload = calloc<Uint8>(4096);
+    try {
+      intent.ref
+        ..structSize = sizeOf<_DtnSurfaceIntentV1>()
+        ..version = 1;
+      final int status = _surfaceTakeIntent(
+        _handle(handle),
+        intent,
+        payload,
+        4096,
+      );
+      if (status == nativeStatusNotFound) return null;
+      if (status != nativeStatusOk) {
+        throw StateError('native Note intent take failed: $status');
+      }
+      return TerminalNotesNativeRawIntent(
+        surfaceGeneration: intent.ref.surfaceGeneration,
+        projectionGeneration: intent.ref.projectionGeneration,
+        eventGeneration: intent.ref.eventGeneration,
+        draftGeneration: intent.ref.draftGeneration,
+        cardToken: intent.ref.cardToken,
+        expectedStoreRevision: intent.ref.expectedStoreRevision,
+        kind: intent.ref.kind,
+        color: intent.ref.color,
+        payload: Uint8List.fromList(
+          payload.asTypedList(intent.ref.payloadBytes),
+        ),
+      );
+    } finally {
+      calloc.free(payload);
+      calloc.free(intent);
+    }
+  }
+
+  @override
+  int applyResult(Object handle, TerminalNotesNativeRawResult result) {
+    final Pointer<_DtnSurfaceResultV1> native = calloc<_DtnSurfaceResultV1>();
+    try {
+      native.ref
+        ..structSize = sizeOf<_DtnSurfaceResultV1>()
+        ..version = 1
+        ..surfaceGeneration = result.surfaceGeneration
+        ..projectionGeneration = result.projectionGeneration
+        ..eventGeneration = result.eventGeneration
+        ..draftGeneration = result.draftGeneration
+        ..newStoreRevision = result.newStoreRevision
+        ..newProjectionGeneration = result.newProjectionGeneration
+        ..disposition = result.disposition;
+      return _surfaceApplyResult(_handle(handle), native);
+    } finally {
+      calloc.free(native);
+    }
   }
 
   @override
@@ -186,6 +301,7 @@ final class TerminalNotesNativeFfiBindings
             _unsigned64(snapshot.ref.storeRevisionLow),
         acceptedProjectionCount: snapshot.ref.acceptedProjectionCount,
         rejectedProjectionCount: snapshot.ref.rejectedProjectionCount,
+        draftGeneration: snapshot.ref.draftGeneration,
         activeCount: snapshot.ref.activeCount,
         dueCount: snapshot.ref.dueCount,
         projectedCardCount: snapshot.ref.projectedCardCount,
@@ -208,6 +324,9 @@ final class TerminalNotesNativeFfiBindings
         pageStart: snapshot.ref.pageStart,
         totalCount: snapshot.ref.totalCount,
         bodyFontMilliPoints: snapshot.ref.bodyFontMilliPoints,
+        outstandingIntent: snapshot.ref.outstandingIntent != 0,
+        emittedIntentCount: snapshot.ref.emittedIntentCount,
+        appliedResultCount: snapshot.ref.appliedResultCount,
       );
     } finally {
       calloc.free(snapshot);
@@ -345,6 +464,9 @@ final class _DtnSurfaceSnapshotV1 extends Struct {
   @Uint64()
   external int rejectedProjectionCount;
 
+  @Uint64()
+  external int draftGeneration;
+
   @Uint32()
   external int activeCount;
 
@@ -396,7 +518,16 @@ final class _DtnSurfaceSnapshotV1 extends Struct {
   @Uint32()
   external int bodyFontMilliPoints;
 
-  @Array<Uint32>(7)
+  @Uint32()
+  external int outstandingIntent;
+
+  @Uint32()
+  external int emittedIntentCount;
+
+  @Uint32()
+  external int appliedResultCount;
+
+  @Array<Uint32>(2)
   external Array<Uint32> reserved;
 }
 
@@ -521,6 +652,82 @@ final class _DtnPresentationSnapshotV1 extends Struct {
   external Array<Uint32> reserved;
 }
 
+final class _DtnSurfaceIntentV1 extends Struct {
+  @Uint32()
+  external int structSize;
+
+  @Uint32()
+  external int version;
+
+  @Uint64()
+  external int surfaceGeneration;
+
+  @Uint64()
+  external int projectionGeneration;
+
+  @Uint64()
+  external int eventGeneration;
+
+  @Uint64()
+  external int draftGeneration;
+
+  @Uint64()
+  external int cardToken;
+
+  @Uint64()
+  external int expectedStoreRevision;
+
+  @Uint32()
+  external int kind;
+
+  @Uint32()
+  external int payloadBytes;
+
+  @Uint32()
+  external int color;
+
+  @Uint32()
+  external int reserved0;
+
+  @Array<Uint32>(10)
+  external Array<Uint32> reserved;
+}
+
+final class _DtnSurfaceResultV1 extends Struct {
+  @Uint32()
+  external int structSize;
+
+  @Uint32()
+  external int version;
+
+  @Uint64()
+  external int surfaceGeneration;
+
+  @Uint64()
+  external int projectionGeneration;
+
+  @Uint64()
+  external int eventGeneration;
+
+  @Uint64()
+  external int draftGeneration;
+
+  @Uint64()
+  external int newStoreRevision;
+
+  @Uint64()
+  external int newProjectionGeneration;
+
+  @Uint32()
+  external int disposition;
+
+  @Uint32()
+  external int reserved0;
+
+  @Array<Uint32>(6)
+  external Array<Uint32> reserved;
+}
+
 @Native<Uint32 Function()>(symbol: 'dtn_abi_version', assetId: _assetId)
 external int _abiVersion();
 
@@ -565,6 +772,30 @@ external int _surfaceUpdateLayout(
 external int _surfacePresentationSnapshot(
   Pointer<Void> surface,
   Pointer<_DtnPresentationSnapshotV1> snapshot,
+);
+
+@Native<
+  Int32 Function(
+    Pointer<Void>,
+    Pointer<_DtnSurfaceIntentV1>,
+    Pointer<Uint8>,
+    Size,
+  )
+>(symbol: 'dtn_surface_take_intent', assetId: _assetId)
+external int _surfaceTakeIntent(
+  Pointer<Void> surface,
+  Pointer<_DtnSurfaceIntentV1> intent,
+  Pointer<Uint8> payload,
+  int payloadCapacity,
+);
+
+@Native<Int32 Function(Pointer<Void>, Pointer<_DtnSurfaceResultV1>)>(
+  symbol: 'dtn_surface_apply_result',
+  assetId: _assetId,
+)
+external int _surfaceApplyResult(
+  Pointer<Void> surface,
+  Pointer<_DtnSurfaceResultV1> result,
 );
 
 @Native<Void Function(Pointer<Void>)>(

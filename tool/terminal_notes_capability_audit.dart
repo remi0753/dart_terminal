@@ -87,13 +87,16 @@ Future<void> main(List<String> arguments) async {
     '_dtn_abi_version',
     '_dtn_debug_live_surfaces',
     '_dtn_surface_apply_projection',
+    '_dtn_surface_apply_result',
     '_dtn_surface_attach_to_host',
     '_dtn_surface_create',
     '_dtn_surface_destroy',
     '_dtn_surface_detach_from_host',
     '_dtn_surface_native_view',
     '_dtn_surface_presentation_snapshot',
+    '_dtn_surface_request_intent',
     '_dtn_surface_snapshot',
+    '_dtn_surface_take_intent',
     '_dtn_surface_update_layout',
   };
   _expect(

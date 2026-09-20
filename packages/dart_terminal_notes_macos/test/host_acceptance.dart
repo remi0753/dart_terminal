@@ -131,6 +131,14 @@ final class _MissingBindings implements TerminalNotesNativeBindings {
   ) => throw UnsupportedError('unreachable');
 
   @override
+  TerminalNotesNativeRawIntent? takeIntent(Object handle) =>
+      throw UnsupportedError('unreachable');
+
+  @override
+  int applyResult(Object handle, TerminalNotesNativeRawResult result) =>
+      throw UnsupportedError('unreachable');
+
+  @override
   void destroySurface(Object handle) => throw UnsupportedError('unreachable');
 
   @override

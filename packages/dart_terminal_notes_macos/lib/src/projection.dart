@@ -214,6 +214,7 @@ final class TerminalNotesProjection {
     this.reduceMotion = false,
     this.systemBadgeVisible = false,
     this.locale = TerminalNotesLocale.english,
+    this.draftGeneration = 0,
     this.bodyFontMilliPoints = 15000,
   }) : cards = List<TerminalNotesCard>.unmodifiable(cards) {
     final Set<int> tokens = this.cards
@@ -248,6 +249,14 @@ final class TerminalNotesProjection {
         pageStart + this.cards.length > totalCount ||
         bodyFontMilliPoints < 12000 ||
         bodyFontMilliPoints > 24000 ||
+        draftGeneration < 0 ||
+        draftGeneration > TerminalNotesLimits.maximumSignedGeneration ||
+        ((editorMode == TerminalNotesEditorMode.inactive) !=
+            (draftGeneration == 0)) ||
+        (editorMode == TerminalNotesEditorMode.creating &&
+            selectedToken != null) ||
+        (editorMode == TerminalNotesEditorMode.editing &&
+            selectedToken == null) ||
         (selectedToken != null && !tokens.contains(selectedToken)) ||
         (featureState != TerminalNotesFeatureState.available &&
             this.cards.isNotEmpty) ||
@@ -281,6 +290,7 @@ final class TerminalNotesProjection {
   final bool reduceMotion;
   final bool systemBadgeVisible;
   final TerminalNotesLocale locale;
+  final int draftGeneration;
   final int bodyFontMilliPoints;
 
   int get aggregateBodyUtf8Bytes => cards.fold<int>(
@@ -350,6 +360,7 @@ abstract final class TerminalNotesProjectionCodec {
     _setUint32(data, 92, projection.cards.length);
     _setUint32(data, 96, projection.totalCount);
     _setUint32(data, 104, projection.bodyFontMilliPoints);
+    _setUint64(data, 108, projection.draftGeneration);
 
     var runningBodyOffset = 0;
     for (var index = 0; index < projection.cards.length; index++) {
@@ -435,6 +446,7 @@ abstract final class TerminalNotesProjectionCodec {
     final int pageLength = _uint32(data, 92);
     final int totalCount = _uint32(data, 96);
     final int bodyFontMilliPoints = _uint32(data, 104);
+    final int draftGeneration = _uint64(data, 108);
     if (featureState >= TerminalNotesFeatureState.values.length ||
         surfaceState >= TerminalNotesSurfaceState.values.length ||
         section >= TerminalNotesCollectionSection.values.length ||
@@ -442,8 +454,6 @@ abstract final class TerminalNotesProjectionCodec {
         messageKey >= TerminalNotesMessageKey.values.length ||
         locale >= TerminalNotesLocale.values.length ||
         _uint32(data, 100) != 0 ||
-        _uint32(data, 108) != 0 ||
-        _uint32(data, 112) != 0 ||
         _uint32(data, 116) != 0 ||
         _uint32(data, 120) != 0 ||
         _uint32(data, 124) != 0 ||
@@ -543,6 +553,7 @@ abstract final class TerminalNotesProjectionCodec {
       editorMode: TerminalNotesEditorMode.values[editorMode],
       messageKey: TerminalNotesMessageKey.values[messageKey],
       locale: TerminalNotesLocale.values[locale],
+      draftGeneration: draftGeneration,
       cards: cards,
       darkAppearance: flags & _flagDarkAppearance != 0,
       increaseContrast: flags & _flagIncreaseContrast != 0,

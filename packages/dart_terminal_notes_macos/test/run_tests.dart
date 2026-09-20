@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -112,6 +113,34 @@ void _testCanonicalRoundTrip() {
     _bytesEqual(encoded, TerminalNotesProjectionCodec.encode(decoded)),
     'canonical re-encode',
   );
+  final TerminalNotesProjection editing = TerminalNotesProjection(
+    paneId: source.paneId,
+    surfaceGeneration: source.surfaceGeneration,
+    projectionGeneration: source.projectionGeneration + 1,
+    storeRevision: source.storeRevision,
+    visibility: source.visibility,
+    presentationEligible: source.presentationEligible,
+    activeCount: source.activeCount,
+    dueCount: source.dueCount,
+    featureState: source.featureState,
+    surfaceState: source.surfaceState,
+    readyCue: source.readyCue,
+    section: source.section,
+    pageStart: source.pageStart,
+    totalCount: source.totalCount,
+    selectedToken: 2,
+    editorMode: TerminalNotesEditorMode.editing,
+    messageKey: source.messageKey,
+    cards: source.cards,
+    draftGeneration: 9,
+  );
+  _expect(
+    TerminalNotesProjectionCodec.decode(
+          TerminalNotesProjectionCodec.encode(editing),
+        ).draftGeneration ==
+        9,
+    'draft generation round-trip',
+  );
 }
 
 void _testCollapsedProjection() {
@@ -186,6 +215,30 @@ void _testBounds() {
     ),
     'trigger kind/phase mismatch',
   );
+  _expectThrows<TerminalNotesProjectionException>(
+    () => TerminalNotesProjection(
+      paneId: 1,
+      surfaceGeneration: 1,
+      projectionGeneration: 1,
+      storeRevision: BigInt.zero,
+      visibility: TerminalNotesVisibility.expanded,
+      presentationEligible: true,
+      activeCount: 1,
+      dueCount: 0,
+      featureState: TerminalNotesFeatureState.available,
+      surfaceState: TerminalNotesSurfaceState.ready,
+      readyCue: false,
+      section: TerminalNotesCollectionSection.current,
+      pageStart: 0,
+      totalCount: 1,
+      selectedToken: 1,
+      editorMode: TerminalNotesEditorMode.editing,
+      messageKey: TerminalNotesMessageKey.none,
+      cards: <TerminalNotesCard>[_card()],
+      draftGeneration: 0,
+    ),
+    'active editor requires draft generation',
+  );
 }
 
 void _testMalformedPackets() {
@@ -209,7 +262,7 @@ void _testMalformedPackets() {
   rejected('non-canonical body offset', (Uint8List bytes) => bytes[136] = 1);
   rejected('unknown feature state', (Uint8List bytes) => bytes[80] = 0xff);
   rejected('unknown locale', (Uint8List bytes) => bytes[86] = 2);
-  rejected('reserved header field', (Uint8List bytes) => bytes[108] = 1);
+  rejected('inactive editor draft', (Uint8List bytes) => bytes[108] = 1);
   rejected(
     'invalid UTF-8',
     (Uint8List bytes) => bytes[bytes.length - 1] = 0xff,
@@ -282,6 +335,37 @@ void _testSurfaceFacade() {
         presentation.badgeDisplayCount == 2,
     'content-free presentation state',
   );
+  bindings.intent = TerminalNotesNativeRawIntent(
+    surfaceGeneration: 7,
+    projectionGeneration: 3,
+    eventGeneration: 9,
+    draftGeneration: 4,
+    cardToken: 2,
+    expectedStoreRevision: 8,
+    kind: TerminalNotesIntentKind.save.index,
+    color: TerminalNotesColor.blue.index,
+    payload: Uint8List.fromList(utf8.encode('保存する')),
+  );
+  final TerminalNotesNativeIntent intent = surface.takeIntent()!;
+  _expect(
+    intent.kind == TerminalNotesIntentKind.save &&
+        intent.body == '保存する' &&
+        intent.color == TerminalNotesColor.blue &&
+        surface.takeIntent() == null,
+    'typed semantic intent',
+  );
+  _expect(
+    surface.applyResult(
+          TerminalNotesNativeResult(
+            intent: intent,
+            disposition: TerminalNotesResultDisposition.accepted,
+            newStoreRevision: BigInt.from(9),
+            newProjectionGeneration: 4,
+          ),
+        ) ==
+        TerminalNotesResultApplyDisposition.accepted,
+    'typed semantic result',
+  );
   surface.dispose();
   surface.dispose();
   _expect(surface.isDisposed && bindings.destroyCount == 1, 'typed disposal');
@@ -310,6 +394,7 @@ class _FakeBindings implements TerminalNotesNativeBindings {
   final Object handle = Object();
   (double, double, double, double)? layout;
   int destroyCount = 0;
+  TerminalNotesNativeRawIntent? intent;
 
   @override
   int get abiVersion => 1;
@@ -336,6 +421,7 @@ class _FakeBindings implements TerminalNotesNativeBindings {
         storeRevision: BigInt.one,
         acceptedProjectionCount: 1,
         rejectedProjectionCount: 0,
+        draftGeneration: 0,
         activeCount: 2,
         dueCount: 1,
         projectedCardCount: 2,
@@ -358,6 +444,9 @@ class _FakeBindings implements TerminalNotesNativeBindings {
         pageStart: 0,
         totalCount: 2,
         bodyFontMilliPoints: 15000,
+        outstandingIntent: intent != null,
+        emittedIntentCount: intent == null ? 0 : 1,
+        appliedResultCount: 0,
       );
 
   @override
@@ -394,6 +483,19 @@ class _FakeBindings implements TerminalNotesNativeBindings {
     bodyFontMilliPoints: 15000,
     badgeDisplayCount: 2,
   );
+
+  @override
+  TerminalNotesNativeRawIntent? takeIntent(Object handle) {
+    final TerminalNotesNativeRawIntent? value = intent;
+    intent = null;
+    return value;
+  }
+
+  @override
+  int applyResult(Object handle, TerminalNotesNativeRawResult result) {
+    _expect(result.eventGeneration == 9, 'fake result event generation');
+    return 0;
+  }
 
   @override
   void destroySurface(Object handle) {
