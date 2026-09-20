@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dart_terminal/dart_terminal.dart';
@@ -7,6 +8,8 @@ Future<void> main() => runTerminalWindowInteractionTests();
 Future<void> runTerminalWindowInteractionTests() async {
   await _testRequestConfirmCancelAndPriority();
   await _testHierarchyStaleFallbackAndWindowLifecycle();
+  await _testContextDockUsesSharedAuthorityProjection();
+  await _testInputFamilyRoutingAndGestureNoReplay();
   await _testBoundedDeterministicOwnerSequence();
 }
 
@@ -337,6 +340,281 @@ Future<void> _testBoundedDeterministicOwnerSequence() async {
   await application.shutdown();
 }
 
+Future<void> _testInputFamilyRoutingAndGestureNoReplay() async {
+  final List<_InteractionFakeSession> sessions = <_InteractionFakeSession>[];
+  final TerminalApplicationState application = TerminalApplicationState();
+  final TerminalWindowState window = await application.createWindow(
+    _configuration(sessions),
+  );
+  final PaneId paneId = window.selectedTab.focusedPaneId;
+  final TerminalWindowInteractionAuthority authority =
+      TerminalWindowInteractionAuthority(application);
+  final TerminalWindowInteractionRouter router =
+      TerminalWindowInteractionRouter(authority);
+
+  TerminalWindowInteractionRouteTarget route(
+    TerminalWindowInteractionInputFamily family, {
+    int? generation,
+  }) => router
+      .route(
+        windowId: window.id,
+        paneId: paneId,
+        family: family,
+        expectedAuthorityGeneration: generation,
+      )
+      .target;
+
+  void transfer(TerminalWindowInteractionOwner owner) {
+    final TerminalWindowInteractionTransferResult requested = authority
+        .requestOwner(owner);
+    _expect(
+      requested.disposition ==
+          TerminalWindowInteractionTransferDisposition.requested,
+      'routing fixture owner request is admitted',
+    );
+    _expect(
+      authority.confirm(requested.request!).disposition ==
+          TerminalWindowInteractionTransferDisposition.confirmed,
+      'routing fixture owner request is confirmed',
+    );
+  }
+
+  for (final TerminalWindowInteractionInputFamily family
+      in TerminalWindowInteractionInputFamily.values) {
+    _expect(
+      route(family) ==
+          (family == TerminalWindowInteractionInputFamily.menuKeyEquivalent
+              ? TerminalWindowInteractionRouteTarget.applicationAction
+              : TerminalWindowInteractionRouteTarget.terminal),
+      'terminal owner preserves each existing input family route',
+    );
+  }
+
+  transfer(
+    TerminalWindowInteractionOwner.contextDock(
+      windowId: window.id,
+      paneId: paneId,
+    ),
+  );
+  for (final TerminalWindowInteractionInputFamily family
+      in TerminalWindowInteractionInputFamily.values) {
+    final TerminalWindowInteractionRouteTarget expected = switch (family) {
+      TerminalWindowInteractionInputFamily.menuKeyEquivalent =>
+        TerminalWindowInteractionRouteTarget.applicationAction,
+      TerminalWindowInteractionInputFamily.automationWrite =>
+        TerminalWindowInteractionRouteTarget.terminal,
+      _ => TerminalWindowInteractionRouteTarget.contextDock,
+    };
+    _expect(route(family) == expected, 'Context Dock route matrix is exact');
+  }
+
+  transfer(
+    TerminalWindowInteractionOwner.noteRail(
+      windowId: window.id,
+      paneId: paneId,
+      surfaceGeneration: 5,
+    ),
+  );
+  for (final TerminalWindowInteractionInputFamily family
+      in TerminalWindowInteractionInputFamily.values) {
+    final TerminalWindowInteractionRouteTarget expected = switch (family) {
+      TerminalWindowInteractionInputFamily.menuKeyEquivalent =>
+        TerminalWindowInteractionRouteTarget.applicationAction,
+      TerminalWindowInteractionInputFamily.automationWrite =>
+        TerminalWindowInteractionRouteTarget.interactionBusy,
+      TerminalWindowInteractionInputFamily.ime ||
+      TerminalWindowInteractionInputFamily.cutPasteSelectAll ||
+      TerminalWindowInteractionInputFamily.servicesText ||
+      TerminalWindowInteractionInputFamily.plainTextDrop ||
+      TerminalWindowInteractionInputFamily.richOrFileDrop =>
+        TerminalWindowInteractionRouteTarget.consumed,
+      _ => TerminalWindowInteractionRouteTarget.noteRail,
+    };
+    _expect(
+      route(family) == expected,
+      'future Note rail route matrix is exact',
+    );
+  }
+  final TerminalWindowConsumedGestureResult began = router.beginNoteGesture(
+    windowId: window.id,
+    paneId: paneId,
+    surfaceGeneration: 5,
+    eventSequence: 10,
+  );
+  final TerminalWindowConsumedGestureIdentity gesture = began.identity!;
+  _expect(
+    began.disposition == TerminalWindowConsumedGestureDisposition.started &&
+        router
+                .consumeGesture(
+                  gesture,
+                  TerminalWindowConsumedGesturePhase.drag,
+                )
+                .disposition ==
+            TerminalWindowConsumedGestureDisposition.consumedCurrent,
+    'Note pointer down and drag stay in one consumed gesture identity',
+  );
+
+  transfer(
+    TerminalWindowInteractionOwner.noteEditor(
+      windowId: window.id,
+      paneId: paneId,
+      surfaceGeneration: 5,
+      draftGeneration: 8,
+    ),
+  );
+  for (final TerminalWindowInteractionInputFamily family
+      in TerminalWindowInteractionInputFamily.values) {
+    final TerminalWindowInteractionRouteTarget expected = switch (family) {
+      TerminalWindowInteractionInputFamily.menuKeyEquivalent =>
+        TerminalWindowInteractionRouteTarget.applicationAction,
+      TerminalWindowInteractionInputFamily.automationWrite =>
+        TerminalWindowInteractionRouteTarget.interactionBusy,
+      _ => TerminalWindowInteractionRouteTarget.noteEditor,
+    };
+    _expect(
+      route(family) == expected,
+      'future Note editor route matrix is exact',
+    );
+  }
+  _expect(
+    router
+                .consumeGesture(
+                  gesture,
+                  TerminalWindowConsumedGesturePhase.momentum,
+                )
+                .disposition ==
+            TerminalWindowConsumedGestureDisposition.consumedStale &&
+        router
+                .consumeGesture(gesture, TerminalWindowConsumedGesturePhase.up)
+                .disposition ==
+            TerminalWindowConsumedGestureDisposition.consumedStale &&
+        !router
+            .consumeGesture(gesture, TerminalWindowConsumedGesturePhase.up)
+            .forwardsToTerminal &&
+        router.activeConsumedGestureCount == 0,
+    'owner change, momentum, up, and duplicate up never replay to terminal',
+  );
+
+  transfer(
+    TerminalWindowInteractionOwner.systemSurface(
+      windowId: window.id,
+      surfaceGeneration: 11,
+    ),
+  );
+  for (final TerminalWindowInteractionInputFamily family
+      in TerminalWindowInteractionInputFamily.values) {
+    _expect(
+      route(family) == TerminalWindowInteractionRouteTarget.systemSurface,
+      'system surface owns every local input family while presented',
+    );
+  }
+  final TerminalWindowInteractionTransferRequest terminal = authority
+      .requestTerminal(window.id)
+      .request!;
+  final int pendingGeneration = authority
+      .snapshotForWindow(window.id)!
+      .generation;
+  _expect(
+    route(TerminalWindowInteractionInputFamily.rawKey) ==
+            TerminalWindowInteractionRouteTarget.consumed &&
+        route(
+              TerminalWindowInteractionInputFamily.rawKey,
+              generation: pendingGeneration - 1,
+            ) ==
+            TerminalWindowInteractionRouteTarget.stale,
+    'input is consumed during native transfer and stale generations fail closed',
+  );
+  authority.confirm(terminal);
+
+  sessions.single.shutdownBarrier = Completer<void>();
+  final Future<TerminalPaneRemovalResult> removing = application.removePane(
+    paneId,
+  );
+  _expect(
+    application.mutationInProgress &&
+        route(TerminalWindowInteractionInputFamily.rawKey) ==
+            TerminalWindowInteractionRouteTarget.consumed,
+    'hierarchy mutation consumes input without queue or replay',
+  );
+  sessions.single.shutdownBarrier!.complete();
+  await removing;
+  authority.synchronize();
+  router.synchronizeGestures();
+  _expect(
+    route(TerminalWindowInteractionInputFamily.rawKey) ==
+            TerminalWindowInteractionRouteTarget.stale &&
+        router.activeConsumedGestureCount == 0,
+    'removed window rejects late input and releases gesture state',
+  );
+  router.dispose();
+  authority.dispose();
+  await application.shutdown();
+}
+
+Future<void> _testContextDockUsesSharedAuthorityProjection() async {
+  final List<_InteractionFakeSession> sessions = <_InteractionFakeSession>[];
+  final TerminalApplicationState application = TerminalApplicationState();
+  final TerminalWindowState window = await application.createWindow(
+    _configuration(sessions),
+  );
+  final PaneId paneId = window.selectedTab.focusedPaneId;
+  final TerminalWindowInteractionAuthority authority =
+      TerminalWindowInteractionAuthority(application);
+  final TerminalContextDockState dock = TerminalContextDockState(
+    interactionAuthority: authority,
+  )..synchronize(application);
+  dock.setNavigatorMode(window.id, TerminalContextDockNavigatorMode.search);
+  dock.setQuery(window.id, 'retained query');
+  final TerminalContextDockFocusRequest focus = dock.requestSearchFocus(
+    window.id,
+    paneId,
+  );
+  _expect(
+    !dock.snapshotForWindow(window.id)!.navigatorOwnsInput &&
+        authority.snapshotForWindow(window.id)!.transferPending &&
+        dock.confirmNavigatorInput(focus) &&
+        dock.snapshotForWindow(window.id)!.navigatorOwnsInput &&
+        authority.snapshotForWindow(window.id)!.owner.kind ==
+            TerminalWindowInteractionOwnerKind.contextDock,
+    'Context Dock request and confirmation commit through the shared authority',
+  );
+  final TerminalWindowInteractionTransferRequest rail = authority
+      .requestOwner(
+        TerminalWindowInteractionOwner.noteRail(
+          windowId: window.id,
+          paneId: paneId,
+          surfaceGeneration: 4,
+        ),
+      )
+      .request!;
+  authority.confirm(rail);
+  final TerminalContextDockWindowSnapshot retained = dock.snapshotForWindow(
+    window.id,
+  )!;
+  _expect(
+    retained.inputOwner == TerminalContextDockInputOwner.other &&
+        retained.pane.searchQuery == 'retained query' &&
+        !retained.navigatorOwnsInput,
+    'Dock query is retained while another shared window owner is active',
+  );
+  final TerminalWindowInteractionTransferRequest terminal = authority
+      .requestTerminal(window.id)
+      .request!;
+  authority.confirm(terminal);
+  _expect(
+    dock.snapshotForWindow(window.id)!.inputOwner ==
+        TerminalContextDockInputOwner.terminal,
+    'shared terminal transfer projects back into Context Dock state',
+  );
+  dock.dispose();
+  _expect(
+    !authority.isDisposed,
+    'disposing a shared Dock does not dispose the application authority',
+  );
+  authority.dispose();
+  await application.shutdown();
+}
+
 TerminalPaneConfiguration _configuration(
   List<_InteractionFakeSession> sessions,
 ) => TerminalPaneConfiguration(
@@ -360,6 +638,7 @@ final class _InteractionFakeSession implements TerminalPaneSession {
   @override
   final TerminalSessionId id;
   var _live = false;
+  Completer<void>? shutdownBarrier;
 
   @override
   bool get isLive => _live;
@@ -428,6 +707,7 @@ final class _InteractionFakeSession implements TerminalPaneSession {
   void showCloseConfirmation() {}
   @override
   Future<TerminalPaneSessionShutdownResult> shutdown() async {
+    await shutdownBarrier?.future;
     _live = false;
     return TerminalPaneSessionShutdownResult(
       sessionId: id,

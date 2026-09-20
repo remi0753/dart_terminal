@@ -133,3 +133,55 @@ owner終了eventをterminalへreplayしない。
   Context Dock snapshot/action/presenterをauthority projectionへ移し、このbooleanを削除する。
 - Pure authorityはnative focusを操作しない。次サブタスクでowner-aware routing coordinatorを追加し、全input familyと
   consumed pointer gestureをfail closedにした後、product compositionへ一つだけ注入する。
+
+## 2026-09-21: 第2サブタスク完了
+
+### 現在地と設計確認
+
+- 着手前にROADMAPを再確認し、先頭未完了がCM-07第2サブタスクであることを確認した。Native responderの実アプリ両runtime
+  acceptanceは第3サブタスクへ残し、本項ではlogical owner統合とrouting decisionを対象にした。
+- Existing Context Dockのpublic snapshot/action/presenter contractは多数のproduct acceptanceが参照するため、互換projectionを維持する。
+  ただしprivate window stateから`inputOwner`を削除し、snapshot値は共通authority ownerから毎回導出する設計を採用した。
+- Note surfaceはまだ存在しないため、Note routeはowner identityとtest double gestureだけを扱い、body/card/editor実装を追加しない。
+
+### 実装結果
+
+- `TerminalContextDockState`がshared `TerminalWindowInteractionAuthority`を受け取るようにした。Standalone unit testでは初回
+  `synchronize`時に同じproduct authorityを内部生成できるが、owner storageは常にauthority一箇所だけである。
+- Navigator focusはDock state更新→authority transfer request→native focus→Dock generation再検証→authority confirmの順になった。
+  Stale/cancel/failureではpending tokenをcancelしてterminal ownerを維持する。Terminal focusもnative focus後にauthority transferを
+  confirmし、Dock query/mode/result stateとは独立にownerだけを戻す。
+- Private `_TerminalContextDockWindowState.inputOwner`を削除した。Public `TerminalContextDockInputOwner`はterminal/navigator/otherの
+  compatibility projectionで、future Note/system owner中は`other`となり、Dock queryを保持したままinputを所有しない。
+- Product composition rootがapplication-wide authority/routerを一つ生成し、Context Dockへ注入し、Dock→router→authorityの順で
+  deterministicにdisposeするようにした。Quick Terminalも同じauthorityの別window stateを使用する。
+- `TerminalWindowInteractionRouter`を追加し、raw key、IME、native menu key equivalent、copy、cut/paste/select-all、Services text、
+  plain/rich/file drop、mouse、scroll、accessibility、automation writeをowner別の固定targetへ分類する。Transition/hierarchy mutation/
+  generation mismatchはconsumeまたはstaleでfail closedとし、event queue/replayを作らない。
+- Note railはIMEとmutation contentをconsume/rejectし、Note editorだけがdraft input targetになる。Automation writeはNote owner中
+  `interactionBusy`、Context Dock中は既存explicit terminal targetを維持し、system surface中は全local familyをsystem ownerへ送る。
+- Note childが開始したpointer/scroll sequence用にopaque consumed gesture identityを追加した。最大64件、authority/surface generationを
+  固定し、owner変更後のdrag/up/momentum、duplicate up、window close後eventも`consumedStale`でterminalへ0 replayとした。
+
+### 検証結果
+
+- `dart format`: 変更Dart source/testをformat済み。
+- `dart analyze`: repository全体 issue 0。
+- `terminal_window_interaction_test.dart`: shared Dock request/confirm、query retention、terminal/other projection、12 input family×5 owner、
+  transition/stale/hierarchy mutation、Note gesture owner-change/momentum/up/duplicate no-replayをpass。
+- `terminal_context_dock_test.dart`、`terminal_native_hierarchy_test.dart`: 既存query/navigation/native responder contractをpass。
+- Text input、action menu、native content（clipboard/Services/drop）、mouse、scroll、accessibility presentation、system automationの
+  focused suites: すべてpass。
+- `dart test/run_tests.dart`: pass。Note store acceptanceはcommit p95 146,204 us、primitive p95 19,902 us、
+  contention/recovery/privacyすべてpass。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: pass。369 filesのformat変更0、全analyze/test/native capability/
+  privacy/security/compatibility/release gate pass。Note store 20 runsはcommit p95 144,485 us、primitive p95 18,104 us。
+- Phase 7 acceptance、Ghostty gap inventory、release-candidate daily-use matrixはsource fingerprintを再生成し、behavior/evidence数は不変。
+- `git diff --check`: pass。新router/gestureにNote ID/body/path/time/checkpoint field 0。隣接`dart_appkit`は着手前からの
+  3変更ファイル以外に差分0で、本サブタスクからの変更0。
+
+### 第3サブタスクへの引き継ぎ
+
+- Product rootはshared authorityを所有するが、system presenterのpresent/dismissとterminal raw/IME callbackでのroute assertionは
+  まだreal runtime acceptanceへ固定していない。次はfocused product scenarioを追加し、native first responder、DEC 1004、Secure Input、
+  Quick Terminal、close/reopenをDeveloper JIT/Release AOTで確認する。

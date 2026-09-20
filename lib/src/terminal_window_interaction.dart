@@ -200,6 +200,294 @@ final class TerminalWindowInteractionSnapshot {
       noteEditorPhase == TerminalWindowNoteEditorPhase.confirmDiscard;
 }
 
+enum TerminalWindowInteractionInputFamily {
+  rawKey,
+  ime,
+  menuKeyEquivalent,
+  copy,
+  cutPasteSelectAll,
+  servicesText,
+  plainTextDrop,
+  richOrFileDrop,
+  mouse,
+  scroll,
+  accessibility,
+  automationWrite,
+}
+
+enum TerminalWindowInteractionRouteTarget {
+  terminal,
+  contextDock,
+  noteRail,
+  noteEditor,
+  systemSurface,
+  applicationAction,
+  consumed,
+  interactionBusy,
+  stale,
+}
+
+final class TerminalWindowInteractionRouteResult {
+  const TerminalWindowInteractionRouteResult({
+    required this.target,
+    required this.authorityGeneration,
+  });
+
+  final TerminalWindowInteractionRouteTarget target;
+  final int authorityGeneration;
+
+  bool get forwardsToTerminal =>
+      target == TerminalWindowInteractionRouteTarget.terminal;
+
+  @override
+  String toString() => 'TerminalWindowInteractionRouteResult(${target.name})';
+}
+
+enum TerminalWindowConsumedGesturePhase {
+  down,
+  drag,
+  up,
+  scroll,
+  momentum,
+  cancel,
+}
+
+enum TerminalWindowConsumedGestureDisposition {
+  started,
+  consumedCurrent,
+  consumedStale,
+  rejected,
+  busy,
+}
+
+/// Opaque identity proving that one Note child consumed a pointer sequence.
+final class TerminalWindowConsumedGestureIdentity {
+  const TerminalWindowConsumedGestureIdentity._({
+    required this.windowId,
+    required this.paneId,
+    required this.surfaceGeneration,
+    required this.authorityGeneration,
+    required this.gestureGeneration,
+  });
+
+  final TerminalWindowId windowId;
+  final PaneId paneId;
+  final int surfaceGeneration;
+  final int authorityGeneration;
+  final int gestureGeneration;
+
+  @override
+  String toString() => 'TerminalWindowConsumedGestureIdentity(<redacted>)';
+}
+
+final class TerminalWindowConsumedGestureResult {
+  const TerminalWindowConsumedGestureResult(this.disposition, {this.identity});
+
+  final TerminalWindowConsumedGestureDisposition disposition;
+  final TerminalWindowConsumedGestureIdentity? identity;
+
+  bool get forwardsToTerminal => false;
+}
+
+/// Owner-aware, side-effect-free routing decisions plus bounded Note gesture
+/// identities. Native adapters remain responsible for the actual operation.
+final class TerminalWindowInteractionRouter {
+  TerminalWindowInteractionRouter(this.authority);
+
+  static const int maximumConsumedGestures = 64;
+
+  final TerminalWindowInteractionAuthority authority;
+  final Map<int, TerminalWindowConsumedGestureIdentity> _gestures =
+      <int, TerminalWindowConsumedGestureIdentity>{};
+  var _nextGestureGeneration = 1;
+  var _isDisposed = false;
+
+  int get activeConsumedGestureCount => _gestures.length;
+  bool get isDisposed => _isDisposed;
+
+  TerminalWindowInteractionRouteResult route({
+    required TerminalWindowId windowId,
+    required PaneId paneId,
+    required TerminalWindowInteractionInputFamily family,
+    int? expectedAuthorityGeneration,
+  }) {
+    _ensureAlive();
+    final TerminalWindowInteractionSnapshot? snapshot = authority
+        .snapshotForWindow(windowId);
+    if (snapshot == null ||
+        (expectedAuthorityGeneration != null &&
+            expectedAuthorityGeneration != snapshot.generation)) {
+      return TerminalWindowInteractionRouteResult(
+        target: TerminalWindowInteractionRouteTarget.stale,
+        authorityGeneration: snapshot?.generation ?? 0,
+      );
+    }
+    if (authority.applicationState.mutationInProgress ||
+        snapshot.transferPending) {
+      return TerminalWindowInteractionRouteResult(
+        target: TerminalWindowInteractionRouteTarget.consumed,
+        authorityGeneration: snapshot.generation,
+      );
+    }
+    final TerminalWindowInteractionOwner owner = snapshot.owner;
+    if (owner.paneId != null && owner.paneId != paneId) {
+      return TerminalWindowInteractionRouteResult(
+        target: TerminalWindowInteractionRouteTarget.stale,
+        authorityGeneration: snapshot.generation,
+      );
+    }
+    final TerminalWindowInteractionRouteTarget target = switch (owner.kind) {
+      TerminalWindowInteractionOwnerKind.terminal =>
+        family == TerminalWindowInteractionInputFamily.menuKeyEquivalent
+            ? TerminalWindowInteractionRouteTarget.applicationAction
+            : TerminalWindowInteractionRouteTarget.terminal,
+      TerminalWindowInteractionOwnerKind.contextDock => switch (family) {
+        TerminalWindowInteractionInputFamily.menuKeyEquivalent =>
+          TerminalWindowInteractionRouteTarget.applicationAction,
+        TerminalWindowInteractionInputFamily.automationWrite =>
+          TerminalWindowInteractionRouteTarget.terminal,
+        _ => TerminalWindowInteractionRouteTarget.contextDock,
+      },
+      TerminalWindowInteractionOwnerKind.noteRail => switch (family) {
+        TerminalWindowInteractionInputFamily.menuKeyEquivalent =>
+          TerminalWindowInteractionRouteTarget.applicationAction,
+        TerminalWindowInteractionInputFamily.automationWrite =>
+          TerminalWindowInteractionRouteTarget.interactionBusy,
+        TerminalWindowInteractionInputFamily.ime ||
+        TerminalWindowInteractionInputFamily.cutPasteSelectAll ||
+        TerminalWindowInteractionInputFamily.servicesText ||
+        TerminalWindowInteractionInputFamily.plainTextDrop ||
+        TerminalWindowInteractionInputFamily.richOrFileDrop =>
+          TerminalWindowInteractionRouteTarget.consumed,
+        _ => TerminalWindowInteractionRouteTarget.noteRail,
+      },
+      TerminalWindowInteractionOwnerKind.noteEditor => switch (family) {
+        TerminalWindowInteractionInputFamily.menuKeyEquivalent =>
+          TerminalWindowInteractionRouteTarget.applicationAction,
+        TerminalWindowInteractionInputFamily.automationWrite =>
+          TerminalWindowInteractionRouteTarget.interactionBusy,
+        _ => TerminalWindowInteractionRouteTarget.noteEditor,
+      },
+      TerminalWindowInteractionOwnerKind.systemSurface =>
+        TerminalWindowInteractionRouteTarget.systemSurface,
+    };
+    return TerminalWindowInteractionRouteResult(
+      target: target,
+      authorityGeneration: snapshot.generation,
+    );
+  }
+
+  TerminalWindowConsumedGestureResult beginNoteGesture({
+    required TerminalWindowId windowId,
+    required PaneId paneId,
+    required int surfaceGeneration,
+    required int eventSequence,
+  }) {
+    _ensureAlive();
+    if (!_validGeneration(surfaceGeneration) ||
+        !_validGeneration(eventSequence)) {
+      return const TerminalWindowConsumedGestureResult(
+        TerminalWindowConsumedGestureDisposition.rejected,
+      );
+    }
+    if (_gestures.length >= maximumConsumedGestures) {
+      return const TerminalWindowConsumedGestureResult(
+        TerminalWindowConsumedGestureDisposition.busy,
+      );
+    }
+    final TerminalWindowInteractionSnapshot? snapshot = authority
+        .snapshotForWindow(windowId);
+    final TerminalWindowInteractionOwner? owner = snapshot?.owner;
+    if (snapshot == null ||
+        snapshot.transferPending ||
+        authority.applicationState.mutationInProgress ||
+        owner == null ||
+        !owner.isNoteOwner ||
+        owner.paneId != paneId ||
+        owner.surfaceGeneration != surfaceGeneration) {
+      return const TerminalWindowConsumedGestureResult(
+        TerminalWindowConsumedGestureDisposition.rejected,
+      );
+    }
+    final int generation = _takeGestureGeneration();
+    final TerminalWindowConsumedGestureIdentity identity =
+        TerminalWindowConsumedGestureIdentity._(
+          windowId: windowId,
+          paneId: paneId,
+          surfaceGeneration: surfaceGeneration,
+          authorityGeneration: snapshot.generation,
+          gestureGeneration: generation,
+        );
+    _gestures[generation] = identity;
+    return TerminalWindowConsumedGestureResult(
+      TerminalWindowConsumedGestureDisposition.started,
+      identity: identity,
+    );
+  }
+
+  TerminalWindowConsumedGestureResult consumeGesture(
+    TerminalWindowConsumedGestureIdentity identity,
+    TerminalWindowConsumedGesturePhase phase,
+  ) {
+    _ensureAlive();
+    final bool wasActive = identical(
+      _gestures[identity.gestureGeneration],
+      identity,
+    );
+    if (phase == TerminalWindowConsumedGesturePhase.up ||
+        phase == TerminalWindowConsumedGesturePhase.cancel) {
+      _gestures.remove(identity.gestureGeneration);
+    }
+    if (!wasActive) {
+      return const TerminalWindowConsumedGestureResult(
+        TerminalWindowConsumedGestureDisposition.consumedStale,
+      );
+    }
+    final TerminalWindowInteractionSnapshot? snapshot = authority
+        .snapshotForWindow(identity.windowId);
+    final TerminalWindowInteractionOwner? owner = snapshot?.owner;
+    final bool current =
+        snapshot != null &&
+        !snapshot.transferPending &&
+        snapshot.generation == identity.authorityGeneration &&
+        owner != null &&
+        owner.isNoteOwner &&
+        owner.paneId == identity.paneId &&
+        owner.surfaceGeneration == identity.surfaceGeneration;
+    return TerminalWindowConsumedGestureResult(
+      current
+          ? TerminalWindowConsumedGestureDisposition.consumedCurrent
+          : TerminalWindowConsumedGestureDisposition.consumedStale,
+    );
+  }
+
+  void synchronizeGestures() {
+    _ensureAlive();
+    _gestures.removeWhere(
+      (_, TerminalWindowConsumedGestureIdentity identity) =>
+          authority.snapshotForWindow(identity.windowId) == null,
+    );
+  }
+
+  void dispose() {
+    if (_isDisposed) return;
+    _isDisposed = true;
+    _gestures.clear();
+  }
+
+  int _takeGestureGeneration() {
+    if (_nextGestureGeneration >
+        TerminalWindowInteractionLimits.maximumGeneration) {
+      throw StateError('window consumed gesture generation exhausted');
+    }
+    return _nextGestureGeneration++;
+  }
+
+  void _ensureAlive() {
+    if (_isDisposed) throw StateError('window interaction router is disposed');
+  }
+}
+
 /// Sole product authority for logical input ownership in every native window.
 ///
 /// This class does not move native focus. Callers request a transfer, acquire

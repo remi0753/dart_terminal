@@ -99,6 +99,7 @@ import 'terminal_update_controller.dart';
 import 'terminal_update_feed.dart';
 import 'terminal_view_badge_projection.dart';
 import 'terminal_window_event_coordinator.dart';
+import 'terminal_window_interaction.dart';
 import 'terminal_working_directory.dart';
 
 final String terminalUsage = TerminalConfigurationReference().generateUsage();
@@ -2810,6 +2811,8 @@ final class TerminalApplication {
     }
     TerminalNativeHierarchyAdapter? hierarchy;
     TerminalContextDockState? contextDockState;
+    TerminalWindowInteractionAuthority? windowInteractionAuthority;
+    TerminalWindowInteractionRouter? windowInteractionRouter;
     TerminalContextDockProcessController? contextDockProcessController;
     final Set<PaneId> directoryObservableProcessPaneIds = <PaneId>{};
     TerminalContextDockDirectoryController? contextDockDirectoryController;
@@ -4315,6 +4318,10 @@ final class TerminalApplication {
       contextDockPresenter = null;
       contextDockState?.dispose();
       contextDockState = null;
+      windowInteractionRouter?.dispose();
+      windowInteractionRouter = null;
+      windowInteractionAuthority?.dispose();
+      windowInteractionAuthority = null;
       for (final _TerminalHierarchyProductPane owner in owners.values) {
         if (!owner.adaptersDisposed) owner.disposeAdapters();
       }
@@ -4589,6 +4596,12 @@ final class TerminalApplication {
       final TerminalPane initialPane = state.paneForId(
         initialWindow.selectedTab.focusedPaneId,
       )!;
+      final TerminalWindowInteractionAuthority createdInteractionAuthority =
+          TerminalWindowInteractionAuthority(state);
+      windowInteractionAuthority = createdInteractionAuthority;
+      windowInteractionRouter = TerminalWindowInteractionRouter(
+        createdInteractionAuthority,
+      );
 
       final TerminalContextDockState createdContextDockState =
           TerminalContextDockState(
@@ -4597,6 +4610,7 @@ final class TerminalApplication {
                 .contextDockVisible,
             initialWidth:
                 configurationAuthority.newSessionConfiguration.contextDockWidth,
+            interactionAuthority: createdInteractionAuthority,
           )..synchronize(state);
       contextDockState = createdContextDockState;
       final TerminalContextDockProcessController

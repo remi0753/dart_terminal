@@ -6,6 +6,7 @@ import 'terminal_input/terminal_appkit_key_adapter.dart';
 import 'terminal_input/terminal_key_binding.dart';
 import 'terminal_input/terminal_key_event.dart';
 import 'terminal_pane.dart';
+import 'terminal_window_interaction.dart';
 
 abstract final class TerminalContextDockLimits {
   static const int maximumQueryUnits = 256;
@@ -33,7 +34,7 @@ final class TerminalContextDockLimitException implements Exception {
       '$maximum';
 }
 
-enum TerminalContextDockInputOwner { terminal, navigator }
+enum TerminalContextDockInputOwner { terminal, navigator, other }
 
 enum TerminalContextDockNavigatorMode { search, goTo, move }
 
@@ -120,19 +121,29 @@ final class TerminalContextDockState {
   TerminalContextDockState({
     bool initiallyVisible = false,
     double initialWidth = TerminalContextDockLimits.defaultWidth,
+    TerminalWindowInteractionAuthority? interactionAuthority,
   }) : _initiallyVisible = initiallyVisible,
-       _initialWidth = initialWidth {
+       _initialWidth = initialWidth,
+       _interactionAuthority = interactionAuthority,
+       _ownsInteractionAuthority = false {
     _validateWidth(initialWidth);
   }
 
   bool _initiallyVisible;
   double _initialWidth;
+  TerminalWindowInteractionAuthority? _interactionAuthority;
+  bool _ownsInteractionAuthority;
   final Map<TerminalWindowId, _TerminalContextDockWindowState> _windows =
       <TerminalWindowId, _TerminalContextDockWindowState>{};
+  final Map<TerminalWindowId, TerminalWindowInteractionTransferRequest>
+  _pendingInteractionRequests =
+      <TerminalWindowId, TerminalWindowInteractionTransferRequest>{};
   bool _isDisposed = false;
 
   bool get isDisposed => _isDisposed;
   int get windowCount => _windows.length;
+  TerminalWindowInteractionAuthority? get interactionAuthority =>
+      _interactionAuthority;
 
   /// Updates future window defaults without undoing manual visibility choices.
   /// A changed configured width also supersedes window-owned keyboard widths.
@@ -175,9 +186,13 @@ final class TerminalContextDockState {
   /// Reconciles retained state with standard application windows and panes.
   bool synchronize(TerminalApplicationState applicationState) {
     _ensureAlive();
+    final TerminalWindowInteractionAuthority authority =
+        _bindInteractionAuthority(applicationState);
+    authority.synchronize();
     if (applicationState.isDisposed) {
       final bool changed = _windows.isNotEmpty;
       _windows.clear();
+      _pendingInteractionRequests.clear();
       return changed;
     }
     final List<TerminalWindowState> applicationWindows = applicationState
@@ -196,6 +211,7 @@ final class TerminalContextDockState {
             .where((TerminalWindowId id) => !retainedWindowIds.contains(id))
             .toList(growable: false)) {
       _windows.remove(stale);
+      _pendingInteractionRequests.remove(stale);
       changed = true;
     }
     for (final TerminalWindowState applicationWindow in applicationWindows) {
@@ -261,6 +277,21 @@ final class TerminalContextDockState {
     window.isVisible = true;
     _setNavigatorMode(pane, mode);
     window.generation++;
+    final TerminalWindowInteractionTransferResult transfer =
+        _requireInteractionAuthority().requestOwner(
+          TerminalWindowInteractionOwner.contextDock(
+            windowId: windowId,
+            paneId: paneId,
+          ),
+        );
+    switch (transfer.disposition) {
+      case TerminalWindowInteractionTransferDisposition.requested:
+        _pendingInteractionRequests[windowId] = transfer.request!;
+      case TerminalWindowInteractionTransferDisposition.noChange:
+        _pendingInteractionRequests.remove(windowId);
+      default:
+        throw StateError('Context Dock interaction transfer is unavailable');
+    }
     _validate();
     return TerminalContextDockFocusRequest(
       windowId: windowId,
@@ -286,7 +317,7 @@ final class TerminalContextDockState {
     bool requireNavigatorInput = false,
   }) {
     final _TerminalContextDockWindowState window = _requireWindow(windowId);
-    if (requireNavigatorInput && !window.navigatorOwnsInput) {
+    if (requireNavigatorInput && !_navigatorOwnsInput(window)) {
       throw StateError('Context Dock navigator does not own input');
     }
     if (!_setNavigatorMode(window.targetPane, mode)) return;
@@ -305,12 +336,20 @@ final class TerminalContextDockState {
         window.panes[request.paneId]?.querySelectionGeneration !=
             request.querySelectionGeneration ||
         !window.isVisible) {
+      _cancelPendingInteraction(request.windowId);
       return false;
     }
-    if (window.inputOwner != TerminalContextDockInputOwner.navigator) {
-      window.inputOwner = TerminalContextDockInputOwner.navigator;
-      window.generation++;
+    final TerminalWindowInteractionAuthority authority =
+        _requireInteractionAuthority();
+    final TerminalWindowInteractionTransferRequest? pending =
+        _pendingInteractionRequests.remove(request.windowId);
+    if (pending != null &&
+        authority.confirm(pending).disposition !=
+            TerminalWindowInteractionTransferDisposition.confirmed) {
+      return false;
     }
+    if (!_navigatorOwnsInput(window)) return false;
+    window.generation++;
     _validate();
     return true;
   }
@@ -320,9 +359,26 @@ final class TerminalContextDockState {
       windowId,
       paneId,
     );
-    if (window.inputOwner == TerminalContextDockInputOwner.terminal) return;
-    window.inputOwner = TerminalContextDockInputOwner.terminal;
-    window.generation++;
+    final bool changed =
+        _navigatorOwnsInput(window) ||
+        _pendingInteractionRequests.containsKey(windowId);
+    _cancelPendingInteraction(windowId);
+    final TerminalWindowInteractionAuthority authority =
+        _requireInteractionAuthority();
+    final TerminalWindowInteractionTransferResult transfer = authority
+        .requestTerminal(windowId);
+    switch (transfer.disposition) {
+      case TerminalWindowInteractionTransferDisposition.requested:
+        if (authority.confirm(transfer.request!).disposition !=
+            TerminalWindowInteractionTransferDisposition.confirmed) {
+          throw StateError('terminal interaction transfer became stale');
+        }
+      case TerminalWindowInteractionTransferDisposition.noChange:
+        break;
+      default:
+        throw StateError('terminal interaction transfer is unavailable');
+    }
+    if (changed) window.generation++;
     _validate();
   }
 
@@ -331,7 +387,7 @@ final class TerminalContextDockState {
       windowId,
       paneId,
     );
-    if (window.navigatorOwnsInput) {
+    if (_navigatorOwnsInput(window)) {
       throw StateError('terminal must own input before hiding Context Dock');
     }
     window.isVisible = !window.isVisible;
@@ -369,7 +425,7 @@ final class TerminalContextDockState {
     bool requireNavigatorInput = false,
   }) {
     final _TerminalContextDockWindowState window = _requireWindow(windowId);
-    if (requireNavigatorInput && !window.navigatorOwnsInput) {
+    if (requireNavigatorInput && !_navigatorOwnsInput(window)) {
       throw StateError('Context Dock navigator does not own input');
     }
     _validateQuery(value);
@@ -475,13 +531,19 @@ final class TerminalContextDockState {
 
   void dispose() {
     if (_isDisposed) return;
+    for (final TerminalWindowInteractionTransferRequest request
+        in _pendingInteractionRequests.values) {
+      _interactionAuthority?.cancel(request);
+    }
+    _pendingInteractionRequests.clear();
+    if (_ownsInteractionAuthority) _interactionAuthority?.dispose();
     _isDisposed = true;
     _windows.clear();
   }
 
   _TerminalContextDockWindowState _requireNavigator(TerminalWindowId windowId) {
     final _TerminalContextDockWindowState window = _requireWindow(windowId);
-    if (!window.navigatorOwnsInput) {
+    if (!_navigatorOwnsInput(window)) {
       throw StateError('Context Dock navigator does not own input');
     }
     return window;
@@ -513,7 +575,7 @@ final class TerminalContextDockState {
       targetPaneId: window.targetPaneId,
       isVisible: window.isVisible,
       width: window.width,
-      inputOwner: window.inputOwner,
+      inputOwner: _inputOwner(window),
       generation: window.generation,
       pane: TerminalContextDockPaneSnapshot(
         paneId: pane.paneId,
@@ -563,7 +625,7 @@ final class TerminalContextDockState {
       if (!window.panes.containsKey(window.targetPaneId)) {
         throw StateError('Context Dock target pane is not retained');
       }
-      if (window.navigatorOwnsInput && !window.isVisible) {
+      if (_navigatorOwnsInput(window) && !window.isVisible) {
         throw StateError('hidden Context Dock cannot own input');
       }
       if (!window.width.isFinite ||
@@ -592,6 +654,52 @@ final class TerminalContextDockState {
   void _ensureAlive() {
     if (_isDisposed) throw StateError('Context Dock state is disposed');
   }
+
+  TerminalWindowInteractionAuthority _bindInteractionAuthority(
+    TerminalApplicationState applicationState,
+  ) {
+    final TerminalWindowInteractionAuthority? existing = _interactionAuthority;
+    if (existing != null) {
+      if (!identical(existing.applicationState, applicationState)) {
+        throw StateError('Context Dock interaction authority state mismatch');
+      }
+      return existing;
+    }
+    final TerminalWindowInteractionAuthority created =
+        TerminalWindowInteractionAuthority(applicationState);
+    _interactionAuthority = created;
+    _ownsInteractionAuthority = true;
+    return created;
+  }
+
+  TerminalWindowInteractionAuthority _requireInteractionAuthority() =>
+      _interactionAuthority ??
+      (throw StateError('Context Dock is not synchronized'));
+
+  TerminalContextDockInputOwner _inputOwner(
+    _TerminalContextDockWindowState window,
+  ) {
+    final TerminalWindowInteractionOwnerKind? kind = _interactionAuthority
+        ?.snapshotForWindow(window.windowId)
+        ?.owner
+        .kind;
+    return switch (kind) {
+      TerminalWindowInteractionOwnerKind.contextDock =>
+        TerminalContextDockInputOwner.navigator,
+      TerminalWindowInteractionOwnerKind.terminal =>
+        TerminalContextDockInputOwner.terminal,
+      _ => TerminalContextDockInputOwner.other,
+    };
+  }
+
+  bool _navigatorOwnsInput(_TerminalContextDockWindowState window) =>
+      _inputOwner(window) == TerminalContextDockInputOwner.navigator;
+
+  void _cancelPendingInteraction(TerminalWindowId windowId) {
+    final TerminalWindowInteractionTransferRequest? pending =
+        _pendingInteractionRequests.remove(windowId);
+    if (pending != null) _interactionAuthority?.cancel(pending);
+  }
 }
 
 final class _TerminalContextDockWindowState {
@@ -611,12 +719,7 @@ final class _TerminalContextDockWindowState {
   PaneId targetPaneId;
   bool isVisible;
   double width;
-  TerminalContextDockInputOwner inputOwner =
-      TerminalContextDockInputOwner.terminal;
   int generation = 1;
-
-  bool get navigatorOwnsInput =>
-      inputOwner == TerminalContextDockInputOwner.navigator;
   _TerminalContextDockPaneState get targetPane => panes[targetPaneId]!;
 }
 

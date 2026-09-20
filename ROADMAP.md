@@ -92,7 +92,7 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
   （[`cm-07-unified-window-interaction-authority.md`](docs/contextual-memory/cm-07-unified-window-interaction-authority.md)
   を参照して実施する）
   - [x] generation-bound pure authorityとfuture Note owner contractを実装する
-  - [ ] Context Dock、system surface、input family routingをauthorityへ統合する
+  - [x] Context Dock、system surface、input family routingをauthorityへ統合する
   - [ ] responder、focus report、両runtime受け入れを完了する
 - [ ] CM-08 native Note presentation capabilityを実装する
 - [ ] CM-09 native Note editor、intent、accessibility interactionを実装する
