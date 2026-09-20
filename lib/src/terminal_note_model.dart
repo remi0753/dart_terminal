@@ -12,6 +12,7 @@ abstract final class TerminalNoteLimits {
   static const int maximumBodyLines = 64;
   static const int maximumAggregateBodyUtf8Bytes = 8 * 1024 * 1024;
   static const int maximumPromptEventsPerBatch = 32;
+  static const int maximumCoalescedFocusEdges = 2;
   static final BigInt maximumUnsigned64 = (BigInt.one << 64) - BigInt.one;
 }
 
@@ -1512,18 +1513,30 @@ final class TerminalNoteSnapshot {
     required TerminalNoteContextId contextId,
     required BigInt expectedStoreRevision,
     bool? isEligible,
+    Iterable<bool> eligibleFocusEdges = const <bool>[],
     NoteTriggerRuntimeBinding? promptBinding,
     Iterable<TerminalNotePromptEvent> promptEvents =
         const <TerminalNotePromptEvent>[],
+    bool promptEventOverflow = false,
   }) {
     final TerminalNoteMutationResult? conflict = _checkStoreRevision(
       expectedStoreRevision,
     );
     if (conflict != null) return conflict;
-    if (isEligible == null && promptBinding == null) return _noChange;
-    if (promptBinding == null && promptEvents.isNotEmpty) {
+    final List<bool> focusEdges = List<bool>.of(eligibleFocusEdges);
+    if (isEligible != null) {
+      if (focusEdges.isNotEmpty) {
+        return _reject(TerminalNoteMutationFailure.invalidInput);
+      }
+      focusEdges.add(isEligible);
+    }
+    if (focusEdges.length > TerminalNoteLimits.maximumCoalescedFocusEdges ||
+        (promptBinding == null &&
+            (promptEvents.isNotEmpty || promptEventOverflow)) ||
+        (promptEventOverflow && promptEvents.isNotEmpty)) {
       return _reject(TerminalNoteMutationFailure.invalidInput);
     }
+    if (focusEdges.isEmpty && promptBinding == null) return _noChange;
     TerminalNoteSnapshot working = this;
     var persistentChanged = false;
     var runtimeChanged = false;
@@ -1553,11 +1566,11 @@ final class TerminalNoteSnapshot {
       return result;
     }
 
-    if (isEligible != null) {
+    for (final bool eligible in focusEdges) {
       final TerminalNoteMutationResult result = apply(
         working.observeEligibleFocus(
           contextId: contextId,
-          isEligible: isEligible,
+          isEligible: eligible,
           expectedStoreRevision: storeRevision,
         ),
       );
@@ -1571,12 +1584,19 @@ final class TerminalNoteSnapshot {
     }
     if (promptBinding != null) {
       final TerminalNoteMutationResult result = apply(
-        working.observePromptEvents(
-          contextId: contextId,
-          binding: promptBinding,
-          events: promptEvents,
-          expectedStoreRevision: storeRevision,
-        ),
+        promptEventOverflow
+            ? working.suspendAtNextPrompt(
+                contextId: contextId,
+                reason: NoteTriggerSuspendReason.eventOverflow,
+                expectedStoreRevision: storeRevision,
+                matchingBinding: promptBinding,
+              )
+            : working.observePromptEvents(
+                contextId: contextId,
+                binding: promptBinding,
+                events: promptEvents,
+                expectedStoreRevision: storeRevision,
+              ),
       );
       if (result.disposition == TerminalNoteMutationDisposition.rejected) {
         return TerminalNoteMutationResult._(

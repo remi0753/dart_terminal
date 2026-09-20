@@ -131,3 +131,81 @@ Workerのdurable success後だけ新snapshotとUI-visible resultを公開し、f
 - 第2サブタスクは、このauthorityのFIFO mutation入口へcontent-free topology/focus/prompt adapterを接続する。Pane/context/sessionの
   structural lifecycleを先に検証し、projection/ackやnative objectは第3サブタスクまで追加しない。
 - Source generationを終了したadapterは`releaseIntentSource`を呼び、64-source high-watermark boundを回収する。
+
+## 2026-09-21: bounded topology、focus、prompt ingress着手
+
+### 目的と範囲の再確認
+
+- ROADMAPの先頭未完了がCM-05第2サブタスクであることを再確認した。第1サブタスクのstore/serial authorityを拡張し、
+  topology/focus/session/promptだけを扱う。Projection、native ack、application shutdown persistenceは第3サブタスクまで実装しない。
+- `TerminalApplicationState`は最大64 paneのtopology sole owner、`TerminalPaneOwner`は`TerminalSessionId` sole ownerのまま維持する。
+  既存classへNote fieldを埋め込まず、composition rootが内容を持たないeventをauthorityへ注入する。
+- `dart_appkit`は変更しない。Terminal固有のcontext、pane、session、prompt semanticsはすべて`dart_terminal`側に置く。
+
+### 採用する内部構造
+
+- Authority startup時のCM-04 bindingsからlive pane/context表を初期化し、新規standard paneはsecure ID generatorを注入してcontextを作る。
+  Quick Terminalは既存singleton contextを再利用し、hideをdetachとして扱わない。
+- Focusはcontextごとにconsecutive duplicateをdropし、未処理のaway/return edgeを各1件、最大2 edgeまでcoalesceする。
+  Modelのlifecycle batchを最大2 edge対応にして、away→returnを一つのdurable candidateへ畳みつつ順序を保持する。
+- Promptはcurrent `TerminalSessionId`、instance、semantic generationへbindし、sessionごと32 event、全live session 64に制限する。
+  Duplicate/out-of-order/wrong generationはmodelへ渡さず、33件目でそのsessionだけを`eventOverflow`へsuspendする。
+- 最初のfocus/prompt event到着時にcontext単位の内部drain placeholderをserial queueへ一つだけ置く。後続eventはそのplaceholderへ
+  coalesceし、transition開始後に到着したeventは完了後の新placeholderへ送る。これにより別user mutationとのarrival orderと
+  一件in-flightを維持し、lifecycle ingressを32 user-intent上限へ誤算入しない。
+- Pane close/session replacementは未実行placeholderのeventをstructurally supersedeする。Pane close後のeventはstale rejectし、
+  session replacementではold bindingだけを`instanceChanged`へsuspendしてS1/S2と別sessionを保持する。
+
+### 完了条件と検証方針
+
+- 64 pane/context/session境界、focus away→return、duplicate focus、prompt 32/33、別session isolation、O-04、O-05、
+  old generation/instance/out-of-order、pane close中late event、structural supersedeをdeterministic fake storeで検証する。
+- focused format/analyze/test、compatibility freshness、`make test`、privacy/source/diff auditをpassしてからROADMAPを更新しcommitする。
+
+### 実装結果
+
+- Startup reconciliationのstandard pane bindingsからauthority-owned live pane表を初期化し、`bindPane`/`closePane`を追加した。
+  Standard pane createは注入されたsecure context ID generatorで新contextを作ってdurable success後だけCM-04 bindingsへ公開する。
+  Close admissionはruntime bindingとevent ingressを即時invalidateし、standard context detachをserial durable queueへ送る。
+- Quick Terminal bindは既存singleton contextだけを再利用し、同時に二paneへbindしない。Close/hide相当ではcontextをdetachせず、
+  standard restoration pane listへ混入させない。
+- Live pane/contextとprompt sessionをそれぞれ64件へ制限した。Dynamic context create、session start/replacement/end、focus/prompt eventは
+  すべてcallerが採番したauthority sequenceを消費し、old authority、old pane/session/instance/semantic generationをstore call前にrejectする。
+- Focus ingressはconsecutive duplicateをdropし、未実行placeholder内にaway/return各1 edge、最大2件を保持する。
+  away→return→awayの3件目は最初のcycleを失わず、drain後にfinal awayを次batchへ送る。Pure modelのlifecycle batchも最大2 edgeを
+  一store revisionへcoalesceするよう拡張した。
+- Prompt ingressはsessionごと最大32 eventを保持する。33件目はringを破棄してoverflow markerだけを残し、そのsessionのmatching
+  at-next-prompt triggerを`eventOverflow`へdurable suspendする。False deliveryは作らず、別sessionのring/deliveryは継続する。
+- Session/instance replacementはold ringをstructurally supersedeし、old runtime bindingだけを`instanceChanged`へsuspendする。
+  Session endは`sessionEnded`、pane closeはcontext detachでtrigger/runtime bindingを閉じ、late eventをstale rejectする。
+- Lifecycle placeholderは最初のeventのarrival位置でuser/structural mutationと共通queueへ入るが、32件のuser-intent上限には算入しない。
+  Transition開始後に到着したeventは完了後の次placeholderへ送られ、常に一件in-flightとFIFOを維持する。
+- Public lifecycle result、publication、mutation resultは固定enumと件数だけで、body、persistent ID、path、cwd、title、時刻、色、hashを含まない。
+
+### 失敗した試行と修正
+
+- 最初のO-05 testでは33件目を`overflowed`へ固定してringを消去したが、durable drain用の`overflowPending` markerを立てていなかった。
+  そのためtriggerは`atNextPromptWaitingCommand`のまま変化しなかった。Sessionの恒久的overflow状態と一回だけ消費するpending markerを
+  分離し、33件目で両方を設定するよう修正した。修正後はoverflow sessionだけがsuspendedとなり、別sessionは同じqueue内でdueへ進んだ。
+- Queue内でfocus edgeが2件に達した後のthird edgeを単純dropすると最終eligible stateを失うため、`lastObservedEligibility`と
+  `lastDrainedEligibility`を比較して次batchへ一件だけ補う方式を採用した。これによりhard boundを増やさずedge orderと最終状態を保つ。
+
+### 検証結果
+
+- `dart format`（model、authority、authority test）: 変更後format済み。
+- `dart analyze`: repository全体 issue 0。Focused source/test解析もissue 0。
+- `dart test/terminal_note_model_test.dart`、`dart test/terminal_note_authority_test.dart`、`dart test/run_tests.dart`: pass。
+  Focus away/return/third-edge、dynamic bind/detach、late focus、prompt 32/33、duplicate/out-of-order、O-04、O-05、別session isolation、
+  old instance、64 pane/session exact boundと65件目拒否を検証した。
+- `make phase7-appkit-acceptance release-candidate-daily-use-matrix`: pass。生成差分0。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: pass。363 files format変更0、全analyze/test/privacy/security/
+  compatibility/release gate pass。Note store 20 runsはcommit p95 137,532 us、primitive p95 14,640 us、
+  contention/recovery/privacyすべてpass。
+- `git diff --check`: pass。隣接`dart_appkit`は開始前からの3ファイル以外に差分0で、Note authority/lifecycle symbol追加0。
+
+### 第3サブタスクへの引き継ぎ
+
+- Pane closeのsurface invalidation、projection/ack、application freeze/drain/ordered persistence/store stopは未実装であり、次サブタスクで
+  既存live pane/session registryとserial queueへ接続する。
+- `contextForPane`と`promptBindingForSession`はapplication-root integration用であり、persistent context IDやshell instance IDを
+  native projectionへ渡してはならない。

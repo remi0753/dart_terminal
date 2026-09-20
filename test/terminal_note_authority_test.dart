@@ -7,6 +7,9 @@ Future<void> main() => runTerminalNoteAuthorityTests();
 Future<void> runTerminalNoteAuthorityTests() async {
   await _testStartupAndSerialDurablePublication();
   await _testDuplicateRevisionAndAdmissionBounds();
+  await _testBoundedTopologyAndFocusIngress();
+  await _testPromptOverflowAndSessionReplacement();
+  await _testSixtyFourPaneAndSessionBound();
   await _testCommitFailurePreservesPublishedDocument();
   await _testStartupFailureStates();
 }
@@ -284,6 +287,419 @@ Future<void> _testDuplicateRevisionAndAdmissionBounds() async {
   await authority.stop();
 }
 
+Future<void> _testBoundedTopologyAndFocusIngress() async {
+  final _FakeAuthorityStore store = _FakeAuthorityStore();
+  final TerminalNoteAuthority authority = await _startAuthority(store);
+  final TerminalNoteContextId contextId = authority.contextForPane(
+    const PaneId(1),
+  )!;
+  var event = 1;
+  await _mutate(
+    authority,
+    source: 41,
+    event: event++,
+    transition: _createNote(
+      contextId: contextId,
+      noteId: _noteId(41),
+      body: 'focus-note',
+      timestamp: 60,
+    ),
+  );
+  await _mutate(
+    authority,
+    source: 41,
+    event: event++,
+    transition: (TerminalNoteSnapshot snapshot) {
+      final NoteRecord note = snapshot.noteFor(_noteId(41))!;
+      return TerminalNoteAuthorityMutationPlan(
+        mutation: snapshot.armOnReturn(
+          noteId: note.id,
+          isEligible: true,
+          expectedStoreRevision: snapshot.storeRevision,
+          expectedNoteRevision: note.revision,
+        ),
+      );
+    },
+  );
+
+  final Completer<void> gate = store.blockNextCommit();
+  final Future<TerminalNoteAuthorityMutationResult> head = _mutate(
+    authority,
+    source: 41,
+    event: event++,
+    transition: _createNote(
+      contextId: contextId,
+      noteId: _noteId(42),
+      body: 'queue-head',
+      timestamp: 61,
+    ),
+  );
+  final TerminalNoteLifecycleResult away = authority.observeEligibleFocus(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    isEligible: false,
+  );
+  final TerminalNoteLifecycleResult returned = authority.observeEligibleFocus(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    isEligible: true,
+  );
+  final TerminalNoteLifecycleResult awayAgain = authority.observeEligibleFocus(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    isEligible: false,
+  );
+  final TerminalNoteLifecycleResult duplicate = authority.observeEligibleFocus(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    isEligible: false,
+  );
+  _expect(
+    away.disposition == TerminalNoteLifecycleDisposition.accepted &&
+        returned.disposition == TerminalNoteLifecycleDisposition.accepted &&
+        awayAgain.disposition == TerminalNoteLifecycleDisposition.coalesced &&
+        duplicate.disposition == TerminalNoteLifecycleDisposition.duplicate &&
+        authority.pendingFocusEdgeCount == 2,
+    'focus ingress keeps one ordered away and return edge and drops a '
+    'consecutive duplicate',
+  );
+  gate.complete();
+  await head;
+  await authority.whenIdle();
+  _expect(
+    authority.document.snapshot.triggerFor(_noteId(41))!.phase ==
+            NoteTriggerPhase.due &&
+        authority.document.snapshot.deliveryFor(_noteId(41)) != null &&
+        authority.pendingFocusEdgeCount == 0,
+    'coalesced away then return becomes one durable due candidate',
+  );
+
+  final TerminalNoteAuthorityMutationResult bound = await authority.bindPane(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(2),
+  );
+  final TerminalNoteContextId secondContext = authority.contextForPane(
+    const PaneId(2),
+  )!;
+  _expect(
+    bound.disposition == TerminalNoteAuthorityMutationDisposition.committed &&
+        authority.livePaneCount == 2 &&
+        authority.bindings.contextForPane(const PaneId(2)) == secondContext,
+    'a new standard pane receives a durable context and runtime binding',
+  );
+  final TerminalNoteAuthorityMutationResult closed = await authority.closePane(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(2),
+    updatedAtUtcMicros: 62,
+  );
+  final TerminalNoteLifecycleResult lateFocus = authority.observeEligibleFocus(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(2),
+    isEligible: true,
+  );
+  _expect(
+    closed.disposition == TerminalNoteAuthorityMutationDisposition.committed &&
+        authority.contextForPane(const PaneId(2)) == null &&
+        authority.document.snapshot.contextFor(secondContext)!.state ==
+            TerminalNoteContextState.detached &&
+        lateFocus.disposition == TerminalNoteLifecycleDisposition.stale,
+    'pane close supersedes ingress, removes its binding, and rejects late '
+    'focus',
+  );
+  await authority.stop();
+}
+
+Future<void> _testPromptOverflowAndSessionReplacement() async {
+  final _FakeAuthorityStore store = _FakeAuthorityStore();
+  final TerminalNoteAuthority authority = await _startAuthority(store);
+  final TerminalNoteAuthorityMutationResult secondBound = await authority
+      .bindPane(sequence: authority.nextSequence(), paneId: const PaneId(2));
+  _expect(
+    secondBound.disposition ==
+        TerminalNoteAuthorityMutationDisposition.committed,
+    'second prompt context is bound',
+  );
+  const TerminalSessionId firstSession = TerminalSessionId(
+    paneId: PaneId(1),
+    generation: 1,
+  );
+  const TerminalSessionId secondSession = TerminalSessionId(
+    paneId: PaneId(2),
+    generation: 1,
+  );
+  final ShellIntegrationInstanceId firstInstance = _instanceId(1);
+  final ShellIntegrationInstanceId secondInstance = _instanceId(2);
+  await authority.startPromptSession(
+    sequence: authority.nextSequence(),
+    sessionId: firstSession,
+    instanceId: firstInstance,
+    semanticGeneration: BigInt.one,
+  );
+  await authority.startPromptSession(
+    sequence: authority.nextSequence(),
+    sessionId: secondSession,
+    instanceId: secondInstance,
+    semanticGeneration: BigInt.one,
+  );
+  var userEvent = 1;
+  await _createAndArmPromptNote(
+    authority,
+    paneId: const PaneId(1),
+    sessionId: firstSession,
+    noteId: _noteId(51),
+    source: 51,
+    firstEvent: userEvent,
+    timestamp: 70,
+  );
+  userEvent += 2;
+  await _createAndArmPromptNote(
+    authority,
+    paneId: const PaneId(2),
+    sessionId: secondSession,
+    noteId: _noteId(52),
+    source: 51,
+    firstEvent: userEvent,
+    timestamp: 71,
+  );
+  userEvent += 2;
+
+  final Completer<void> gate = store.blockNextCommit();
+  final Future<TerminalNoteAuthorityMutationResult> head = _mutate(
+    authority,
+    source: 51,
+    event: userEvent++,
+    transition: _createNote(
+      contextId: authority.contextForPane(const PaneId(1))!,
+      noteId: _noteId(53),
+      body: 'prompt-head',
+      timestamp: 72,
+    ),
+  );
+  TerminalNoteLifecycleResult firstResult = const TerminalNoteLifecycleResult(
+    TerminalNoteLifecycleDisposition.accepted,
+    pendingFocusEdgeCount: 0,
+    pendingPromptEventCount: 0,
+  );
+  for (
+    var index = 1;
+    index <= TerminalNoteAuthorityLimits.maximumPromptEventsPerSession + 1;
+    index++
+  ) {
+    firstResult = authority.observePromptEvent(
+      sequence: authority.nextSequence(),
+      sessionId: firstSession,
+      instanceId: firstInstance,
+      semanticGeneration: BigInt.one,
+      eventSequence: BigInt.from(index),
+      action: TerminalNotePromptAction.commandOutputBegins,
+    );
+  }
+  final List<TerminalNotePromptAction> dueCycle = <TerminalNotePromptAction>[
+    TerminalNotePromptAction.commandOutputBegins,
+    TerminalNotePromptAction.commandEnds,
+    TerminalNotePromptAction.promptBegins,
+    TerminalNotePromptAction.primaryInputReady,
+  ];
+  for (var index = 0; index < dueCycle.length; index++) {
+    authority.observePromptEvent(
+      sequence: authority.nextSequence(),
+      sessionId: secondSession,
+      instanceId: secondInstance,
+      semanticGeneration: BigInt.one,
+      eventSequence: BigInt.from(index + 1),
+      action: dueCycle[index],
+    );
+  }
+  _expect(
+    firstResult.disposition == TerminalNoteLifecycleDisposition.overflowed &&
+        authority.pendingPromptEventCount == dueCycle.length,
+    'O-05 event 33 suspends only the overflowing ring and preserves the '
+    'other session ring',
+  );
+  final TerminalNoteLifecycleResult duplicatePrompt = authority
+      .observePromptEvent(
+        sequence: authority.nextSequence(),
+        sessionId: firstSession,
+        instanceId: firstInstance,
+        semanticGeneration: BigInt.one,
+        eventSequence: BigInt.from(33),
+        action: TerminalNotePromptAction.commandOutputBegins,
+      );
+  final TerminalNoteLifecycleResult outOfOrderPrompt = authority
+      .observePromptEvent(
+        sequence: authority.nextSequence(),
+        sessionId: firstSession,
+        instanceId: firstInstance,
+        semanticGeneration: BigInt.one,
+        eventSequence: BigInt.from(32),
+        action: TerminalNotePromptAction.commandEnds,
+      );
+  _expect(
+    duplicatePrompt.disposition == TerminalNoteLifecycleDisposition.duplicate &&
+        outOfOrderPrompt.disposition == TerminalNoteLifecycleDisposition.stale,
+    'duplicate and out-of-order prompt events are dropped before model input',
+  );
+  final TerminalNoteMutationResult overflowProbe = authority.document.snapshot
+      .observeLifecycleBatch(
+        contextId: authority.contextForPane(const PaneId(1))!,
+        expectedStoreRevision: authority.document.snapshot.storeRevision,
+        promptBinding: authority.promptBindingForSession(firstSession),
+        promptEventOverflow: true,
+      );
+  _expect(
+    overflowProbe.disposition == TerminalNoteMutationDisposition.accepted,
+    'the coalesced overflow candidate matches the armed runtime binding '
+    '(disposition=${overflowProbe.disposition.name})',
+  );
+  gate.complete();
+  await head;
+  await authority.whenIdle();
+  final NoteTriggerRecord overflowedTrigger = authority.document.snapshot
+      .triggerFor(_noteId(51))!;
+  _expect(
+    overflowedTrigger.phase == NoteTriggerPhase.suspended &&
+        overflowedTrigger.suspendReason ==
+            NoteTriggerSuspendReason.eventOverflow &&
+        authority.document.snapshot.deliveryFor(_noteId(51)) == null,
+    'O-05 overflow suspends its trigger without a false delivery '
+    '(phase=${overflowedTrigger.phase.name}, '
+    'reason=${overflowedTrigger.suspendReason?.name}, '
+    'delivery=${authority.document.snapshot.deliveryFor(_noteId(51)) != null})',
+  );
+  _expect(
+    authority.document.snapshot.triggerFor(_noteId(52))!.phase ==
+            NoteTriggerPhase.due &&
+        authority.document.snapshot.deliveryFor(_noteId(52)) != null,
+    'O-05 overflow does not affect another session reaching due',
+  );
+
+  await _createAndArmPromptNote(
+    authority,
+    paneId: const PaneId(2),
+    sessionId: secondSession,
+    noteId: _noteId(54),
+    source: 51,
+    firstEvent: userEvent,
+    timestamp: 73,
+  );
+  userEvent += 2;
+  final Completer<void> restartGate = store.blockNextCommit();
+  final Future<TerminalNoteAuthorityMutationResult> restartHead = _mutate(
+    authority,
+    source: 51,
+    event: userEvent,
+    transition: _createNote(
+      contextId: authority.contextForPane(const PaneId(2))!,
+      noteId: _noteId(55),
+      body: 'restart-head',
+      timestamp: 74,
+    ),
+  );
+  authority.observePromptEvent(
+    sequence: authority.nextSequence(),
+    sessionId: secondSession,
+    instanceId: secondInstance,
+    semanticGeneration: BigInt.one,
+    eventSequence: BigInt.from(5),
+    action: TerminalNotePromptAction.commandOutputBegins,
+  );
+  final ShellIntegrationInstanceId replacementInstance = _instanceId(3);
+  final Future<TerminalNoteAuthorityMutationResult> replaced = authority
+      .startPromptSession(
+        sequence: authority.nextSequence(),
+        sessionId: secondSession,
+        instanceId: replacementInstance,
+        semanticGeneration: BigInt.two,
+      );
+  restartGate.complete();
+  await restartHead;
+  await replaced;
+  await authority.whenIdle();
+  final TerminalNoteLifecycleResult lateOld = authority.observePromptEvent(
+    sequence: authority.nextSequence(),
+    sessionId: secondSession,
+    instanceId: secondInstance,
+    semanticGeneration: BigInt.one,
+    eventSequence: BigInt.from(6),
+    action: TerminalNotePromptAction.commandEnds,
+  );
+  _expect(
+    authority.document.snapshot.triggerFor(_noteId(54))!.phase ==
+            NoteTriggerPhase.suspended &&
+        authority.document.snapshot.triggerFor(_noteId(54))!.suspendReason ==
+            NoteTriggerSuspendReason.instanceChanged &&
+        authority.document.snapshot.deliveryFor(_noteId(54)) == null &&
+        lateOld.disposition == TerminalNoteLifecycleDisposition.stale,
+    'O-04 session replacement supersedes queued old events, suspends only '
+    'the old binding, and rejects late events',
+  );
+  await authority.stop();
+}
+
+Future<void> _testSixtyFourPaneAndSessionBound() async {
+  final _FakeAuthorityStore store = _FakeAuthorityStore();
+  final TerminalNoteAuthority authority = await _startAuthority(
+    store,
+    authorityGeneration: 20,
+  );
+  for (
+    var pane = 2;
+    pane <= TerminalNoteAuthorityLimits.maximumLiveContexts;
+    pane++
+  ) {
+    final TerminalNoteAuthorityMutationResult result = await authority.bindPane(
+      sequence: authority.nextSequence(),
+      paneId: PaneId(pane),
+    );
+    _expect(
+      result.disposition == TerminalNoteAuthorityMutationDisposition.committed,
+      'every pane through the hard context bound is admitted',
+    );
+  }
+  final TerminalNoteAuthorityMutationResult extraPane = await authority
+      .bindPane(sequence: authority.nextSequence(), paneId: const PaneId(65));
+  for (
+    var pane = 1;
+    pane <= TerminalNoteAuthorityLimits.maximumLiveSessions;
+    pane++
+  ) {
+    await authority.startPromptSession(
+      sequence: authority.nextSequence(),
+      sessionId: TerminalSessionId(paneId: PaneId(pane), generation: 1),
+      instanceId: _instanceId(pane),
+      semanticGeneration: BigInt.one,
+    );
+  }
+  _expect(
+    authority.livePaneCount == 64 &&
+        authority.liveSessionCount == 64 &&
+        extraPane.disposition == TerminalNoteAuthorityMutationDisposition.busy,
+    'topology and prompt session ownership stop exactly at 64',
+  );
+  final TerminalNoteAuthorityMutationResult closed = await authority.closePane(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(64),
+    updatedAtUtcMicros: 80,
+  );
+  final TerminalNoteLifecycleResult late = authority.observePromptEvent(
+    sequence: authority.nextSequence(),
+    sessionId: const TerminalSessionId(paneId: PaneId(64), generation: 1),
+    instanceId: _instanceId(64),
+    semanticGeneration: BigInt.one,
+    eventSequence: BigInt.one,
+    action: TerminalNotePromptAction.commandOutputBegins,
+  );
+  _expect(
+    closed.disposition == TerminalNoteAuthorityMutationDisposition.committed &&
+        authority.livePaneCount == 63 &&
+        authority.liveSessionCount == 63 &&
+        late.disposition == TerminalNoteLifecycleDisposition.stale,
+    'structural close releases both hard-bound registries and rejects late '
+    'session input',
+  );
+  await authority.stop();
+}
+
 Future<void> _testCommitFailurePreservesPublishedDocument() async {
   final _FakeAuthorityStore store = _FakeAuthorityStore();
   final List<TerminalNoteAuthorityPublication> publications =
@@ -416,6 +832,64 @@ Future<TerminalNoteAuthority> _startAuthority(
   onPublished: onPublished,
 );
 
+Future<TerminalNoteAuthorityMutationResult> _mutate(
+  TerminalNoteAuthority authority, {
+  required int source,
+  required int event,
+  required TerminalNoteAuthorityTransition transition,
+}) => authority.submitMutation(
+  sequence: authority.nextSequence(),
+  token: _token(authority, source: source, event: event),
+  bodyUtf8Bytes: 0,
+  transition: transition,
+);
+
+Future<void> _createAndArmPromptNote(
+  TerminalNoteAuthority authority, {
+  required PaneId paneId,
+  required TerminalSessionId sessionId,
+  required NoteId noteId,
+  required int source,
+  required int firstEvent,
+  required int timestamp,
+}) async {
+  final TerminalNoteContextId contextId = authority.contextForPane(paneId)!;
+  final TerminalNoteAuthorityMutationResult created = await _mutate(
+    authority,
+    source: source,
+    event: firstEvent,
+    transition: _createNote(
+      contextId: contextId,
+      noteId: noteId,
+      body: 'prompt-note',
+      timestamp: timestamp,
+    ),
+  );
+  final TerminalNoteAuthorityMutationResult armed = await _mutate(
+    authority,
+    source: source,
+    event: firstEvent + 1,
+    transition: (TerminalNoteSnapshot snapshot) {
+      final NoteRecord note = snapshot.noteFor(noteId)!;
+      return TerminalNoteAuthorityMutationPlan(
+        mutation: snapshot.armAtNextPrompt(
+          noteId: note.id,
+          capability: TerminalNotePromptCapability.available,
+          currentSemanticState: TerminalNoteSemanticState.unknown,
+          binding: authority.promptBindingForSession(sessionId)!,
+          expectedStoreRevision: snapshot.storeRevision,
+          expectedNoteRevision: note.revision,
+        ),
+      );
+    },
+  );
+  _expect(
+    created.disposition == TerminalNoteAuthorityMutationDisposition.committed &&
+        armed.disposition == TerminalNoteAuthorityMutationDisposition.committed,
+    'prompt fixture creates and arms a note durably',
+  );
+}
+
 TerminalNoteAuthorityTransition _createNote({
   required TerminalNoteContextId contextId,
   required NoteId noteId,
@@ -497,6 +971,11 @@ TerminalRestorationSnapshot _onePaneRestoration() =>
 
 NoteId _noteId(int value) =>
     NoteId.fromHex(value.toRadixString(16).padLeft(32, '0'));
+
+ShellIntegrationInstanceId _instanceId(int value) =>
+    ShellIntegrationInstanceId.fromHex(
+      value.toRadixString(16).padLeft(32, '0'),
+    );
 
 TerminalNoteStoreResult _failureLoad(TerminalNoteStoreFailure failure) =>
     TerminalNoteStoreResult(

@@ -12,6 +12,9 @@ abstract final class TerminalNoteAuthorityLimits {
   static const int maximumPendingIntents = 32;
   static const int maximumPendingBodyBytes = 128 * 1024;
   static const int maximumIntentSources = 64;
+  static const int maximumLiveContexts = 64;
+  static const int maximumLiveSessions = 64;
+  static const int maximumPromptEventsPerSession = 32;
   static const int maximumSequence = 0x7fffffffffffffff;
 }
 
@@ -157,6 +160,39 @@ enum TerminalNoteAuthorityMutationDisposition {
   failed,
 }
 
+enum TerminalNoteLifecycleDisposition {
+  accepted,
+  coalesced,
+  duplicate,
+  overflowed,
+  stale,
+  busy,
+  unavailable,
+}
+
+/// Immediate, content-free admission result for one lifecycle observation.
+final class TerminalNoteLifecycleResult {
+  const TerminalNoteLifecycleResult(
+    this.disposition, {
+    required this.pendingFocusEdgeCount,
+    required this.pendingPromptEventCount,
+  });
+
+  final TerminalNoteLifecycleDisposition disposition;
+  final int pendingFocusEdgeCount;
+  final int pendingPromptEventCount;
+
+  bool get isAccepted => switch (disposition) {
+    TerminalNoteLifecycleDisposition.accepted ||
+    TerminalNoteLifecycleDisposition.coalesced ||
+    TerminalNoteLifecycleDisposition.overflowed => true,
+    _ => false,
+  };
+
+  @override
+  String toString() => 'TerminalNoteLifecycleResult(${disposition.name})';
+}
+
 /// Content-free result returned to one mutation producer.
 final class TerminalNoteAuthorityMutationResult {
   const TerminalNoteAuthorityMutationResult({
@@ -194,13 +230,15 @@ final class TerminalNoteAuthority {
     required TerminalNoteAuthorityFailure? failure,
     required TerminalNoteStoreFailure? storeFailure,
     required TerminalNoteAuthorityPublicationObserver? onPublished,
+    required TerminalNoteContextIdGenerator contextIdGenerator,
   }) : _store = store,
        _document = document,
        _bindings = bindings,
        _capability = capability,
        _failure = failure,
        _storeFailure = storeFailure,
-       _onPublished = onPublished;
+       _onPublished = onPublished,
+       _contextIdGenerator = contextIdGenerator;
 
   static Future<TerminalNoteAuthority> startWorker({
     required TerminalNoteStoreLocation location,
@@ -260,6 +298,8 @@ final class TerminalNoteAuthority {
     final TerminalNoteStoreDocument loaded =
         loadResult.document ??
         TerminalNoteStoreDocument(snapshot: TerminalNoteSnapshot.empty());
+    final TerminalNoteContextIdGenerator contextIdGenerator =
+        idGenerator ?? TerminalNoteContextIdGenerator.secure();
     final TerminalNoteAuthority authority = TerminalNoteAuthority._(
       authorityGeneration: authorityGeneration,
       store: store,
@@ -272,6 +312,7 @@ final class TerminalNoteAuthority {
       failure: null,
       storeFailure: loadResult.failure,
       onPublished: onPublished,
+      contextIdGenerator: contextIdGenerator,
     );
     if (loadResult.disposition ==
             TerminalNoteStoreDisposition.recoveryPreview ||
@@ -302,16 +343,13 @@ final class TerminalNoteAuthority {
     }
     TerminalNoteContextReconciliationResult reconciled;
     try {
-      reconciled =
-          TerminalNoteContextReconciler(
-            idGenerator ?? TerminalNoteContextIdGenerator.secure(),
-          ).reconcile(
-            stored: loaded,
-            restoration: restoration,
-            paneIdsInTraversalOrder: paneIdsInTraversalOrder,
-            ensureQuickTerminalContext: ensureQuickTerminalContext,
-            updatedAtUtcMicros: updatedAtUtcMicros,
-          );
+      reconciled = TerminalNoteContextReconciler(contextIdGenerator).reconcile(
+        stored: loaded,
+        restoration: restoration,
+        paneIdsInTraversalOrder: paneIdsInTraversalOrder,
+        ensureQuickTerminalContext: ensureQuickTerminalContext,
+        updatedAtUtcMicros: updatedAtUtcMicros,
+      );
     } on Object {
       authority._markUnavailable(
         TerminalNoteAuthorityFailure.reconciliationRejected,
@@ -343,6 +381,7 @@ final class TerminalNoteAuthority {
     authority._capability = TerminalNoteAuthorityCapability.ready;
     authority._failure = null;
     authority._storeFailure = null;
+    authority._initializeLiveBindings();
     authority._publish(TerminalNoteAuthorityPublicationKind.startup);
     return authority;
   }
@@ -350,9 +389,13 @@ final class TerminalNoteAuthority {
   final int authorityGeneration;
   final TerminalNoteAuthorityStorePort? _store;
   final TerminalNoteAuthorityPublicationObserver? _onPublished;
+  final TerminalNoteContextIdGenerator _contextIdGenerator;
   final Queue<_PendingAuthorityMutation> _pending =
       Queue<_PendingAuthorityMutation>();
   final Map<int, int> _sourceEventHighWatermarks = <int, int>{};
+  final Map<PaneId, _LiveNotePane> _livePanes = <PaneId, _LiveNotePane>{};
+  final Map<TerminalSessionId, _LivePromptSession> _liveSessions =
+      <TerminalSessionId, _LivePromptSession>{};
   TerminalNoteStoreDocument _document;
   TerminalNoteContextBindings _bindings;
   TerminalNoteAuthorityCapability _capability;
@@ -362,6 +405,7 @@ final class TerminalNoteAuthority {
   Completer<void>? _idleCompleter;
   Future<TerminalNoteStoreResult>? _stopFuture;
   TerminalNoteStoreResult? _stopResult;
+  var _pendingUserIntentCount = 0;
   var _pendingBodyBytes = 0;
   var _nextAuthoritySequence = 1;
   var _lastIngressSequence = 0;
@@ -371,11 +415,33 @@ final class TerminalNoteAuthority {
   TerminalNoteStoreFailure? get storeFailure => _storeFailure;
   TerminalNoteStoreDocument get document => _document;
   TerminalNoteContextBindings get bindings => _bindings;
-  int get pendingIntentCount => _pending.length;
+  int get pendingIntentCount => _pendingUserIntentCount;
   int get outstandingIntentCount =>
-      _pending.length + (_inFlight == null ? 0 : 1);
+      _pendingUserIntentCount +
+      (_inFlight?.countsTowardUserIntentLimit ?? false ? 1 : 0);
   int get pendingBodyBytes => _pendingBodyBytes;
   bool get hasInFlightMutation => _inFlight != null;
+  int get livePaneCount => _livePanes.length;
+  int get liveSessionCount => _liveSessions.length;
+  int get pendingFocusEdgeCount => _livePanes.values.fold<int>(
+    0,
+    (int total, _LiveNotePane pane) => total + pane.focusEdges.length,
+  );
+  int get pendingPromptEventCount => _liveSessions.values.fold<int>(
+    0,
+    (int total, _LivePromptSession session) =>
+        total + session.promptEvents.length,
+  );
+
+  TerminalNoteContextId? contextForPane(PaneId paneId) =>
+      _livePanes[paneId]?.contextId;
+
+  NoteTriggerRuntimeBinding? promptBindingForSession(
+    TerminalSessionId sessionId,
+  ) {
+    final _LivePromptSession? session = _liveSessions[sessionId];
+    return session?.runtimeBinding;
+  }
 
   TerminalNoteAuthoritySequence nextSequence() {
     if (_nextAuthoritySequence > TerminalNoteAuthorityLimits.maximumSequence) {
@@ -394,7 +460,7 @@ final class TerminalNoteAuthority {
     required TerminalNoteAuthorityTransition transition,
   }) {
     final TerminalNoteAuthorityMutationResult? ingressFailure =
-        _validateIngress(sequence, token, bodyUtf8Bytes);
+        _validateIngress(sequence, token);
     if (ingressFailure != null) {
       return Future<TerminalNoteAuthorityMutationResult>.value(ingressFailure);
     }
@@ -427,9 +493,8 @@ final class TerminalNoteAuthority {
         ),
       );
     }
-    if ((_inFlight != null &&
-            _pending.length >=
-                TerminalNoteAuthorityLimits.maximumPendingIntents) ||
+    if (_pendingUserIntentCount >=
+            TerminalNoteAuthorityLimits.maximumPendingIntents ||
         _pendingBodyBytes + bodyUtf8Bytes >
             TerminalNoteAuthorityLimits.maximumPendingBodyBytes) {
       return Future<TerminalNoteAuthorityMutationResult>.value(
@@ -439,12 +504,327 @@ final class TerminalNoteAuthority {
     final _PendingAuthorityMutation pending = _PendingAuthorityMutation(
       transition: transition,
       bodyUtf8Bytes: bodyUtf8Bytes,
+      countsTowardUserIntentLimit: true,
     );
-    _pending.add(pending);
+    _pendingUserIntentCount++;
     _pendingBodyBytes += bodyUtf8Bytes;
-    _idleCompleter ??= Completer<void>();
-    _pump();
+    _enqueue(pending);
     return pending.completer.future;
+  }
+
+  Future<TerminalNoteAuthorityMutationResult> bindPane({
+    required TerminalNoteAuthoritySequence sequence,
+    required PaneId paneId,
+    TerminalNoteContextKind kind = TerminalNoteContextKind.standard,
+  }) {
+    final TerminalNoteAuthorityMutationResult? ingressFailure =
+        _acceptStructuralSequence(sequence);
+    if (ingressFailure != null) {
+      return Future<TerminalNoteAuthorityMutationResult>.value(ingressFailure);
+    }
+    if (_livePanes.containsKey(paneId)) {
+      return Future<TerminalNoteAuthorityMutationResult>.value(
+        _result(TerminalNoteAuthorityMutationDisposition.duplicate),
+      );
+    }
+    if (_livePanes.length >= TerminalNoteAuthorityLimits.maximumLiveContexts) {
+      return Future<TerminalNoteAuthorityMutationResult>.value(
+        _result(TerminalNoteAuthorityMutationDisposition.busy),
+      );
+    }
+    final TerminalNoteContextId? quickContext =
+        _bindings.quickTerminalContextId;
+    if (kind == TerminalNoteContextKind.quickTerminal &&
+        (quickContext == null ||
+            _livePanes.values.any(
+              (_LiveNotePane pane) => pane.contextId == quickContext,
+            ))) {
+      return Future<TerminalNoteAuthorityMutationResult>.value(
+        _result(
+          TerminalNoteAuthorityMutationDisposition.rejected,
+          mutationFailure: TerminalNoteMutationFailure.invalidState,
+        ),
+      );
+    }
+    final TerminalNoteContextId contextId =
+        kind == TerminalNoteContextKind.quickTerminal
+        ? quickContext!
+        : _contextIdGenerator.next(
+            excluding: <TerminalNoteContextId>{
+              ..._document.snapshot.contexts.keys,
+              ..._livePanes.values.map((_LiveNotePane pane) => pane.contextId),
+            },
+          );
+    final _LiveNotePane pane = _LiveNotePane(
+      paneId: paneId,
+      contextId: contextId,
+      kind: kind,
+    );
+    _livePanes[paneId] = pane;
+    if (kind == TerminalNoteContextKind.quickTerminal) {
+      return Future<TerminalNoteAuthorityMutationResult>.value(
+        _result(TerminalNoteAuthorityMutationDisposition.noChange),
+      );
+    }
+    return _enqueueStructuralMutation(
+      transition: (TerminalNoteSnapshot snapshot) =>
+          TerminalNoteAuthorityMutationPlan(
+            mutation: snapshot.createContext(
+              id: contextId,
+              kind: TerminalNoteContextKind.standard,
+              expectedStoreRevision: snapshot.storeRevision,
+            ),
+          ),
+      onResult: (TerminalNoteAuthorityMutationResult result) {
+        if (result.disposition ==
+                TerminalNoteAuthorityMutationDisposition.committed &&
+            identical(_livePanes[paneId], pane) &&
+            !pane.retired) {
+          _replaceStandardBinding(paneId, contextId);
+        } else if (!result.isAccepted && identical(_livePanes[paneId], pane)) {
+          _livePanes.remove(paneId);
+        }
+      },
+    );
+  }
+
+  Future<TerminalNoteAuthorityMutationResult> closePane({
+    required TerminalNoteAuthoritySequence sequence,
+    required PaneId paneId,
+    required int updatedAtUtcMicros,
+  }) {
+    final TerminalNoteAuthorityMutationResult? ingressFailure =
+        _acceptStructuralSequence(sequence);
+    if (ingressFailure != null) {
+      return Future<TerminalNoteAuthorityMutationResult>.value(ingressFailure);
+    }
+    final _LiveNotePane? pane = _livePanes.remove(paneId);
+    if (pane == null) {
+      return Future<TerminalNoteAuthorityMutationResult>.value(
+        _result(TerminalNoteAuthorityMutationDisposition.stale),
+      );
+    }
+    pane
+      ..retired = true
+      ..focusEdges.clear();
+    final _LivePromptSession? session = pane.promptSession;
+    if (session != null) {
+      session
+        ..retired = true
+        ..promptEvents.clear();
+      _liveSessions.remove(session.sessionId);
+      pane.promptSession = null;
+    }
+    if (pane.kind == TerminalNoteContextKind.quickTerminal) {
+      return Future<TerminalNoteAuthorityMutationResult>.value(
+        _result(TerminalNoteAuthorityMutationDisposition.noChange),
+      );
+    }
+    _removeStandardBinding(paneId);
+    return _enqueueStructuralMutation(
+      transition: (TerminalNoteSnapshot snapshot) {
+        final NoteContextRecord? context = snapshot.contextFor(pane.contextId);
+        return TerminalNoteAuthorityMutationPlan(
+          mutation: context == null
+              ? snapshot.observeEligibleFocus(
+                  contextId: pane.contextId,
+                  isEligible: false,
+                  expectedStoreRevision: snapshot.storeRevision,
+                )
+              : snapshot.detachContext(
+                  contextId: pane.contextId,
+                  reason: TerminalNoteDetachReason.contextUnavailable,
+                  updatedAtUtcMicros: updatedAtUtcMicros,
+                  expectedStoreRevision: snapshot.storeRevision,
+                  expectedContextRevision: context.revision,
+                ),
+        );
+      },
+    );
+  }
+
+  Future<TerminalNoteAuthorityMutationResult> startPromptSession({
+    required TerminalNoteAuthoritySequence sequence,
+    required TerminalSessionId sessionId,
+    required ShellIntegrationInstanceId instanceId,
+    required BigInt semanticGeneration,
+  }) {
+    final TerminalNoteAuthorityMutationResult? ingressFailure =
+        _acceptStructuralSequence(sequence);
+    if (ingressFailure != null) {
+      return Future<TerminalNoteAuthorityMutationResult>.value(ingressFailure);
+    }
+    final _LiveNotePane? pane = _livePanes[sessionId.paneId];
+    if (pane == null ||
+        pane.retired ||
+        !_isPositiveSequence(sessionId.generation) ||
+        semanticGeneration <= BigInt.zero ||
+        semanticGeneration > TerminalNoteLimits.maximumUnsigned64) {
+      return Future<TerminalNoteAuthorityMutationResult>.value(
+        _result(TerminalNoteAuthorityMutationDisposition.stale),
+      );
+    }
+    final _LivePromptSession? previous = pane.promptSession;
+    if (previous != null) {
+      if (sessionId.generation < previous.sessionId.generation) {
+        return Future<TerminalNoteAuthorityMutationResult>.value(
+          _result(TerminalNoteAuthorityMutationDisposition.stale),
+        );
+      }
+      if (sessionId == previous.sessionId &&
+          instanceId == previous.instanceId &&
+          semanticGeneration == previous.semanticGeneration) {
+        return Future<TerminalNoteAuthorityMutationResult>.value(
+          _result(TerminalNoteAuthorityMutationDisposition.duplicate),
+        );
+      }
+    } else if (_liveSessions.length >=
+        TerminalNoteAuthorityLimits.maximumLiveSessions) {
+      return Future<TerminalNoteAuthorityMutationResult>.value(
+        _result(TerminalNoteAuthorityMutationDisposition.busy),
+      );
+    }
+    final NoteTriggerRuntimeBinding? previousBinding = previous?.runtimeBinding;
+    if (previous != null) {
+      previous
+        ..retired = true
+        ..promptEvents.clear();
+      _liveSessions.remove(previous.sessionId);
+    }
+    final _LivePromptSession next = _LivePromptSession(
+      sessionId: sessionId,
+      instanceId: instanceId,
+      semanticGeneration: semanticGeneration,
+    );
+    pane.promptSession = next;
+    _liveSessions[sessionId] = next;
+    if (previousBinding == null) {
+      return Future<TerminalNoteAuthorityMutationResult>.value(
+        _result(TerminalNoteAuthorityMutationDisposition.noChange),
+      );
+    }
+    return _enqueueStructuralMutation(
+      transition: (TerminalNoteSnapshot snapshot) =>
+          TerminalNoteAuthorityMutationPlan(
+            mutation: snapshot.suspendAtNextPrompt(
+              contextId: pane.contextId,
+              reason: NoteTriggerSuspendReason.instanceChanged,
+              expectedStoreRevision: snapshot.storeRevision,
+              matchingBinding: previousBinding,
+            ),
+          ),
+    );
+  }
+
+  Future<TerminalNoteAuthorityMutationResult> endPromptSession({
+    required TerminalNoteAuthoritySequence sequence,
+    required TerminalSessionId sessionId,
+  }) {
+    final TerminalNoteAuthorityMutationResult? ingressFailure =
+        _acceptStructuralSequence(sequence);
+    if (ingressFailure != null) {
+      return Future<TerminalNoteAuthorityMutationResult>.value(ingressFailure);
+    }
+    final _LivePromptSession? session = _liveSessions[sessionId];
+    final _LiveNotePane? pane = _livePanes[sessionId.paneId];
+    if (session == null || pane?.promptSession != session) {
+      return Future<TerminalNoteAuthorityMutationResult>.value(
+        _result(TerminalNoteAuthorityMutationDisposition.stale),
+      );
+    }
+    final NoteTriggerRuntimeBinding binding = session.runtimeBinding;
+    session
+      ..retired = true
+      ..promptEvents.clear();
+    _liveSessions.remove(sessionId);
+    pane!.promptSession = null;
+    return _enqueueStructuralMutation(
+      transition: (TerminalNoteSnapshot snapshot) =>
+          TerminalNoteAuthorityMutationPlan(
+            mutation: snapshot.suspendAtNextPrompt(
+              contextId: pane.contextId,
+              reason: NoteTriggerSuspendReason.sessionEnded,
+              expectedStoreRevision: snapshot.storeRevision,
+              matchingBinding: binding,
+            ),
+          ),
+    );
+  }
+
+  TerminalNoteLifecycleResult observeEligibleFocus({
+    required TerminalNoteAuthoritySequence sequence,
+    required PaneId paneId,
+    required bool isEligible,
+  }) {
+    final TerminalNoteAuthorityMutationResult? ingressFailure =
+        _acceptStructuralSequence(sequence);
+    if (ingressFailure != null) return _lifecycleFailure(ingressFailure);
+    final _LiveNotePane? pane = _livePanes[paneId];
+    if (pane == null || pane.retired) {
+      return _lifecycleResult(TerminalNoteLifecycleDisposition.stale);
+    }
+    if (pane.lastObservedEligibility == isEligible) {
+      return _lifecycleResult(TerminalNoteLifecycleDisposition.duplicate);
+    }
+    pane.lastObservedEligibility = isEligible;
+    final bool atEdgeLimit =
+        pane.focusEdges.length >= TerminalNoteLimits.maximumCoalescedFocusEdges;
+    if (!atEdgeLimit) pane.focusEdges.add(isEligible);
+    _ensureLifecyclePlaceholder(pane);
+    return _lifecycleResult(
+      atEdgeLimit
+          ? TerminalNoteLifecycleDisposition.coalesced
+          : TerminalNoteLifecycleDisposition.accepted,
+    );
+  }
+
+  TerminalNoteLifecycleResult observePromptEvent({
+    required TerminalNoteAuthoritySequence sequence,
+    required TerminalSessionId sessionId,
+    required ShellIntegrationInstanceId instanceId,
+    required BigInt semanticGeneration,
+    required BigInt eventSequence,
+    required TerminalNotePromptAction action,
+  }) {
+    final TerminalNoteAuthorityMutationResult? ingressFailure =
+        _acceptStructuralSequence(sequence);
+    if (ingressFailure != null) return _lifecycleFailure(ingressFailure);
+    final _LivePromptSession? session = _liveSessions[sessionId];
+    final _LiveNotePane? pane = _livePanes[sessionId.paneId];
+    if (session == null ||
+        pane?.promptSession != session ||
+        session.retired ||
+        instanceId != session.instanceId ||
+        semanticGeneration != session.semanticGeneration ||
+        eventSequence <= BigInt.zero ||
+        eventSequence > TerminalNoteLimits.maximumUnsigned64) {
+      return _lifecycleResult(TerminalNoteLifecycleDisposition.stale);
+    }
+    if (eventSequence <= session.lastObservedEventSequence) {
+      return _lifecycleResult(
+        eventSequence == session.lastObservedEventSequence
+            ? TerminalNoteLifecycleDisposition.duplicate
+            : TerminalNoteLifecycleDisposition.stale,
+      );
+    }
+    session.lastObservedEventSequence = eventSequence;
+    if (session.overflowed) {
+      return _lifecycleResult(TerminalNoteLifecycleDisposition.unavailable);
+    }
+    if (session.promptEvents.length >=
+        TerminalNoteAuthorityLimits.maximumPromptEventsPerSession) {
+      session
+        ..overflowed = true
+        ..overflowPending = true
+        ..promptEvents.clear();
+      _ensureLifecyclePlaceholder(pane!);
+      return _lifecycleResult(TerminalNoteLifecycleDisposition.overflowed);
+    }
+    session.promptEvents.add(
+      TerminalNotePromptEvent(sequence: eventSequence, action: action),
+    );
+    _ensureLifecyclePlaceholder(pane!);
+    return _lifecycleResult(TerminalNoteLifecycleDisposition.accepted);
   }
 
   Future<void> whenIdle() => _idleCompleter?.future ?? Future<void>.value();
@@ -455,16 +835,173 @@ final class TerminalNoteAuthority {
     _sourceEventHighWatermarks.remove(sourceGeneration);
   }
 
+  void _initializeLiveBindings() {
+    _livePanes.clear();
+    for (final MapEntry<PaneId, TerminalNoteContextId> entry
+        in _bindings.standardPaneContexts.entries) {
+      _livePanes[entry.key] = _LiveNotePane(
+        paneId: entry.key,
+        contextId: entry.value,
+        kind: TerminalNoteContextKind.standard,
+      );
+    }
+  }
+
+  void _replaceStandardBinding(PaneId paneId, TerminalNoteContextId contextId) {
+    _bindings = TerminalNoteContextBindings(
+      standardPaneContexts: <PaneId, TerminalNoteContextId>{
+        ..._bindings.standardPaneContexts,
+        paneId: contextId,
+      },
+      quickTerminalContextId: _bindings.quickTerminalContextId,
+    );
+  }
+
+  void _removeStandardBinding(PaneId paneId) {
+    final Map<PaneId, TerminalNoteContextId> standard =
+        Map<PaneId, TerminalNoteContextId>.of(_bindings.standardPaneContexts)
+          ..remove(paneId);
+    _bindings = TerminalNoteContextBindings(
+      standardPaneContexts: standard,
+      quickTerminalContextId: _bindings.quickTerminalContextId,
+    );
+  }
+
+  Future<TerminalNoteAuthorityMutationResult> _enqueueStructuralMutation({
+    required TerminalNoteAuthorityTransition transition,
+    void Function(TerminalNoteAuthorityMutationResult result)? onResult,
+  }) {
+    final _PendingAuthorityMutation pending = _PendingAuthorityMutation(
+      transition: transition,
+      bodyUtf8Bytes: 0,
+      countsTowardUserIntentLimit: false,
+      onResult: onResult,
+    );
+    _enqueue(pending);
+    return pending.completer.future;
+  }
+
+  void _ensureLifecyclePlaceholder(_LiveNotePane pane) {
+    if (pane.retired || pane.lifecycleQueued) return;
+    pane.lifecycleQueued = true;
+    final _PendingAuthorityMutation pending = _PendingAuthorityMutation(
+      transition: (TerminalNoteSnapshot snapshot) =>
+          _captureLifecyclePlan(pane, snapshot),
+      bodyUtf8Bytes: 0,
+      countsTowardUserIntentLimit: false,
+      onFinished: () {
+        pane.lifecycleQueued = false;
+        if (pane.retired ||
+            _capability != TerminalNoteAuthorityCapability.ready) {
+          return;
+        }
+        final bool? observed = pane.lastObservedEligibility;
+        if (pane.focusEdges.isEmpty &&
+            observed != null &&
+            observed != pane.lastDrainedEligibility) {
+          pane.focusEdges.add(observed);
+        }
+        final _LivePromptSession? session = pane.promptSession;
+        if (pane.focusEdges.isNotEmpty ||
+            (session != null &&
+                (session.promptEvents.isNotEmpty || session.overflowPending))) {
+          _ensureLifecyclePlaceholder(pane);
+        }
+      },
+    );
+    _enqueue(pending);
+  }
+
+  TerminalNoteAuthorityMutationPlan _captureLifecyclePlan(
+    _LiveNotePane pane,
+    TerminalNoteSnapshot snapshot,
+  ) {
+    if (pane.retired) {
+      return TerminalNoteAuthorityMutationPlan(
+        mutation: snapshot.observeLifecycleBatch(
+          contextId: pane.contextId,
+          expectedStoreRevision: snapshot.storeRevision,
+        ),
+      );
+    }
+    final List<bool> focusEdges = List<bool>.of(pane.focusEdges);
+    pane.focusEdges.clear();
+    if (focusEdges.isNotEmpty) {
+      pane.lastDrainedEligibility = focusEdges.last;
+    }
+    final _LivePromptSession? session = pane.promptSession;
+    final List<TerminalNotePromptEvent> promptEvents = session == null
+        ? const <TerminalNotePromptEvent>[]
+        : List<TerminalNotePromptEvent>.of(session.promptEvents);
+    session?.promptEvents.clear();
+    final bool promptOverflow = session?.overflowPending ?? false;
+    if (session != null) session.overflowPending = false;
+    return TerminalNoteAuthorityMutationPlan(
+      mutation: snapshot.observeLifecycleBatch(
+        contextId: pane.contextId,
+        expectedStoreRevision: snapshot.storeRevision,
+        eligibleFocusEdges: focusEdges,
+        promptBinding: session?.runtimeBinding,
+        promptEvents: promptEvents,
+        promptEventOverflow: promptOverflow,
+      ),
+    );
+  }
+
+  void _enqueue(_PendingAuthorityMutation pending) {
+    _pending.add(pending);
+    _idleCompleter ??= Completer<void>();
+    _pump();
+  }
+
+  TerminalNoteLifecycleResult _lifecycleResult(
+    TerminalNoteLifecycleDisposition disposition,
+  ) => TerminalNoteLifecycleResult(
+    disposition,
+    pendingFocusEdgeCount: pendingFocusEdgeCount,
+    pendingPromptEventCount: pendingPromptEventCount,
+  );
+
+  TerminalNoteLifecycleResult _lifecycleFailure(
+    TerminalNoteAuthorityMutationResult failure,
+  ) => _lifecycleResult(switch (failure.disposition) {
+    TerminalNoteAuthorityMutationDisposition.unavailable =>
+      TerminalNoteLifecycleDisposition.unavailable,
+    TerminalNoteAuthorityMutationDisposition.busy =>
+      TerminalNoteLifecycleDisposition.busy,
+    _ => TerminalNoteLifecycleDisposition.stale,
+  });
+
+  TerminalNoteAuthorityMutationResult? _acceptStructuralSequence(
+    TerminalNoteAuthoritySequence sequence,
+  ) {
+    final TerminalNoteAuthorityMutationResult? failure = _validateSequence(
+      sequence,
+    );
+    if (failure == null) _lastIngressSequence = sequence.value;
+    return failure;
+  }
+
   TerminalNoteAuthorityMutationResult? _validateIngress(
     TerminalNoteAuthoritySequence sequence,
     TerminalNoteAuthorityIntentToken token,
-    int bodyUtf8Bytes,
+  ) {
+    final TerminalNoteAuthorityMutationResult? sequenceFailure =
+        _validateSequence(sequence);
+    if (sequenceFailure != null) return sequenceFailure;
+    if (token.authorityGeneration != authorityGeneration) {
+      return _result(TerminalNoteAuthorityMutationDisposition.stale);
+    }
+    return null;
+  }
+
+  TerminalNoteAuthorityMutationResult? _validateSequence(
+    TerminalNoteAuthoritySequence sequence,
   ) {
     if (_capability != TerminalNoteAuthorityCapability.ready) {
       return _result(TerminalNoteAuthorityMutationDisposition.unavailable);
     }
     if (sequence.authorityGeneration != authorityGeneration ||
-        token.authorityGeneration != authorityGeneration ||
         sequence.value <= _lastIngressSequence ||
         sequence.value >= _nextAuthoritySequence) {
       return _result(TerminalNoteAuthorityMutationDisposition.stale);
@@ -475,10 +1012,14 @@ final class TerminalNoteAuthority {
   void _pump() {
     if (_inFlight != null || _pending.isEmpty) return;
     final _PendingAuthorityMutation pending = _pending.removeFirst();
+    if (pending.countsTowardUserIntentLimit) {
+      _pendingUserIntentCount--;
+    }
     _inFlight = pending;
     unawaited(
       _runMutation(pending).whenComplete(() {
         _pendingBodyBytes -= pending.bodyUtf8Bytes;
+        pending.finish();
         _inFlight = null;
         if (_capability == TerminalNoteAuthorityCapability.ready) {
           _pump();
@@ -605,10 +1146,14 @@ final class TerminalNoteAuthority {
   void _failPending() {
     while (_pending.isNotEmpty) {
       final _PendingAuthorityMutation pending = _pending.removeFirst();
+      if (pending.countsTowardUserIntentLimit) {
+        _pendingUserIntentCount--;
+      }
       _pendingBodyBytes -= pending.bodyUtf8Bytes;
       pending.complete(
         _result(TerminalNoteAuthorityMutationDisposition.unavailable),
       );
+      pending.finish();
     }
   }
 
@@ -676,16 +1221,74 @@ final class _PendingAuthorityMutation {
   _PendingAuthorityMutation({
     required this.transition,
     required this.bodyUtf8Bytes,
+    required this.countsTowardUserIntentLimit,
+    this.onResult,
+    this.onFinished,
   });
 
   final TerminalNoteAuthorityTransition transition;
   final int bodyUtf8Bytes;
+  final bool countsTowardUserIntentLimit;
+  final void Function(TerminalNoteAuthorityMutationResult result)? onResult;
+  final void Function()? onFinished;
   final Completer<TerminalNoteAuthorityMutationResult> completer =
       Completer<TerminalNoteAuthorityMutationResult>();
+  var _finished = false;
 
   void complete(TerminalNoteAuthorityMutationResult result) {
-    if (!completer.isCompleted) completer.complete(result);
+    if (completer.isCompleted) return;
+    onResult?.call(result);
+    completer.complete(result);
   }
+
+  void finish() {
+    if (_finished) return;
+    _finished = true;
+    onFinished?.call();
+  }
+}
+
+final class _LiveNotePane {
+  _LiveNotePane({
+    required this.paneId,
+    required this.contextId,
+    required this.kind,
+  });
+
+  final PaneId paneId;
+  final TerminalNoteContextId contextId;
+  final TerminalNoteContextKind kind;
+  final List<bool> focusEdges = <bool>[];
+  _LivePromptSession? promptSession;
+  bool? lastObservedEligibility;
+  bool? lastDrainedEligibility;
+  var lifecycleQueued = false;
+  var retired = false;
+}
+
+final class _LivePromptSession {
+  _LivePromptSession({
+    required this.sessionId,
+    required this.instanceId,
+    required this.semanticGeneration,
+  });
+
+  final TerminalSessionId sessionId;
+  final ShellIntegrationInstanceId instanceId;
+  final BigInt semanticGeneration;
+  final List<TerminalNotePromptEvent> promptEvents =
+      <TerminalNotePromptEvent>[];
+  var lastObservedEventSequence = BigInt.zero;
+  var overflowPending = false;
+  var overflowed = false;
+  var retired = false;
+
+  NoteTriggerRuntimeBinding get runtimeBinding => NoteTriggerRuntimeBinding(
+    sessionGeneration: BigInt.from(sessionId.generation),
+    instanceId: instanceId,
+    semanticGeneration: semanticGeneration,
+    lastEventSequence: lastObservedEventSequence,
+  );
 }
 
 bool _isPositiveSequence(int value) =>
