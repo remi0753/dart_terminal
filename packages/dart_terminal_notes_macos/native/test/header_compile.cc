@@ -1,0 +1,9 @@
+#include "TerminalNotesPlugin.h"
+
+#include <type_traits>
+
+static_assert(DTN_ABI_VERSION == 1u);
+static_assert(sizeof(DtnSurfaceSnapshotV1) == 160u);
+static_assert(std::is_standard_layout_v<DtnSurfaceSnapshotV1>);
+
+int main() { return dtn_abi_version() == 1u ? 0 : 1; }

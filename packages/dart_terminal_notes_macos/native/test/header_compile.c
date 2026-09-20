@@ -1,0 +1,13 @@
+#include "TerminalNotesPlugin.h"
+
+_Static_assert(DTN_ABI_VERSION == 1u, "ABI version changed");
+_Static_assert(DTN_PROJECTION_HEADER_BYTES == 128u, "header layout changed");
+_Static_assert(DTN_CARD_RECORD_BYTES == 32u, "card layout changed");
+_Static_assert(DTN_MAX_CARDS == 64u, "projection card bound changed");
+_Static_assert(sizeof(DtnSurfaceSnapshotV1) == 160u,
+               "snapshot ABI layout changed");
+
+int main(void) {
+  DtnSurface* surface = (DtnSurface*)0;
+  return surface == (DtnSurface*)0 ? 0 : 1;
+}

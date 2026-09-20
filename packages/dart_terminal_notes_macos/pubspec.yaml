@@ -1,0 +1,13 @@
+name: dart_terminal_notes_macos
+description: Product-owned bounded native Note presentation for Dart Terminal.
+version: 0.1.0-dev.1
+publish_to: none
+
+environment:
+  sdk: '>=3.13.2 <3.14.0'
+
+dependencies:
+  code_assets: any
+  ffi: any
+  hooks: any
+  native_toolchain_c: any

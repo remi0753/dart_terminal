@@ -70,6 +70,10 @@ override TERMINAL_APP_INTENTS_PERFORM_TEST_BINARY := \
 	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/terminal_app_intents_perform_tests
 override TERMINAL_APP_INTENTS_MODULE_CACHE := \
 	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/terminal_app_intents_module_cache
+override TERMINAL_NOTES_PLUGIN_LIBRARY := \
+	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/libdart_terminal_notes_macos.dylib
+override TERMINAL_NOTES_TEST_BINARY := \
+	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/terminal_notes_capability_tests
 
 override APPLICATION_MANIFEST := $(PROJECT_ROOT)/macos_application.json
 override DEVELOPER_JIT_BUILD_DIR := \
@@ -140,6 +144,8 @@ override PRODUCT_PERFORMANCE_AGGREGATE_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)
 	terminal-applescript-dart-test \
 	terminal-app-intents-contract-check terminal-app-intents-native-test \
 	terminal-app-intents-dart-test \
+	terminal-notes-contract-check terminal-notes-native-test \
+	terminal-notes-dart-test \
 	compatibility-inventory compatibility-inventory-check \
 	compatibility-manifest compatibility-manifest-check terminal-differential-contract-check \
 	terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check \
@@ -198,6 +204,8 @@ help:
 	@echo "  make terminal-applescript-dart-test  Test its Dart facade and build-hook asset"
 	@echo "  make terminal-app-intents-native-test  Test the product App Intents capability"
 	@echo "  make terminal-app-intents-dart-test  Test its Dart facade and metadata"
+	@echo "  make terminal-notes-native-test      Test the product Note projection ABI"
+	@echo "  make terminal-notes-dart-test        Test its strict codec and code asset"
 	@echo "  make product-parser-corpus        Replay reviewed product parser fixtures"
 	@echo "  make product-parser-properties    Run deterministic property and fuzz cases"
 	@echo "  make phase9-protocol-properties   Run deterministic modern-protocol properties"
@@ -510,6 +518,49 @@ terminal-app-intents-dart-test: $(TERMINAL_APP_INTENTS_LIBRARY)
 	@cd $(PROJECT_ROOT)/packages/dart_terminal_app_intents_macos && \
 		$(DART) run test/run_tests.dart $(TERMINAL_APP_INTENTS_LIBRARY)
 
+terminal-notes-contract-check:
+	@$(CLANG) $(PRODUCT_NATIVE_FLAGS) -std=c11 \
+		-I$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native \
+		-fsyntax-only \
+		$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native/test/header_compile.c
+	@$(CLANGXX) $(PRODUCT_NATIVE_FLAGS) -std=c++20 \
+		-I$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native \
+		-fsyntax-only \
+		$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native/test/header_compile.cc
+
+$(TERMINAL_NOTES_PLUGIN_LIBRARY): \
+		$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native/TerminalNotesPlugin.h \
+		$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native/TerminalNotesPlugin.m
+	@mkdir -p $(PRODUCT_NATIVE_TEST_BUILD_DIR)
+	$(CLANG) $(PRODUCT_NATIVE_FLAGS) -fobjc-arc -fblocks -dynamiclib \
+		-I$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native \
+		$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native/TerminalNotesPlugin.m \
+		-framework AppKit -framework Foundation \
+		-Wl,-install_name,@rpath/libdart_terminal_notes_macos.dylib -o $@
+
+$(TERMINAL_NOTES_TEST_BINARY): $(TERMINAL_NOTES_PLUGIN_LIBRARY) \
+		$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native/test/TerminalNotesCapabilityTests.mm
+	@mkdir -p $(PRODUCT_NATIVE_TEST_BUILD_DIR)
+	$(CLANGXX) $(PRODUCT_NATIVE_FLAGS) -std=c++20 \
+		-I$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native \
+		$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native/test/TerminalNotesCapabilityTests.mm \
+		$(TERMINAL_NOTES_PLUGIN_LIBRARY) \
+		-Wl,-rpath,$(PRODUCT_NATIVE_TEST_BUILD_DIR) -o $@
+
+terminal-notes-native-test: terminal-notes-contract-check \
+		$(TERMINAL_NOTES_PLUGIN_LIBRARY) $(TERMINAL_NOTES_TEST_BINARY)
+	@$(TERMINAL_NOTES_TEST_BINARY)
+
+terminal-notes-dart-test:
+	@cd $(PROJECT_ROOT)/packages/dart_terminal_notes_macos && $(DART) pub get
+	@cd $(PROJECT_ROOT)/packages/dart_terminal_notes_macos && \
+		$(DART) format --output=none --set-exit-if-changed hook lib test
+	@cd $(PROJECT_ROOT)/packages/dart_terminal_notes_macos && $(DART) analyze
+	@cd $(PROJECT_ROOT)/packages/dart_terminal_notes_macos && \
+		$(DART) run test/run_tests.dart
+	@cd $(PROJECT_ROOT)/packages/dart_terminal_notes_macos && \
+		$(DART) run test/native_asset_test.dart
+
 runtime-architecture-check:
 	@if [[ "$(RUNTIME_ARCH)" != "arm64" && "$(RUNTIME_ARCH)" != "x86_64" ]]; then \
 		echo "RUNTIME_ARCH must be arm64 or x86_64" >&2; exit 64; \
@@ -655,7 +706,7 @@ durable-file-dart-test:
 	@cd $(PROJECT_ROOT)/packages/dart_durable_file_macos && \
 		$(DART) run test/run_tests.dart
 
-test: dependencies process-resource-dart-test durable-file-dart-test dpty-native-test dpty-dart-test terminal-renderer-native-test terminal-renderer-dart-test terminal-applescript-native-test terminal-applescript-dart-test terminal-app-intents-native-test terminal-app-intents-dart-test vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check terminal-localization-check terminal-diagnostics-privacy-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check ghostty-p0-p1-gap-inventory-check release-candidate-daily-use-matrix-check terminal-distribution-policy-test
+test: dependencies process-resource-dart-test durable-file-dart-test dpty-native-test dpty-dart-test terminal-renderer-native-test terminal-renderer-dart-test terminal-applescript-native-test terminal-applescript-dart-test terminal-app-intents-native-test terminal-app-intents-dart-test terminal-notes-native-test terminal-notes-dart-test vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check terminal-localization-check terminal-diagnostics-privacy-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check ghostty-p0-p1-gap-inventory-check release-candidate-daily-use-matrix-check terminal-distribution-policy-test
 	@cd $(PROJECT_ROOT) && $(DART) format --output=none --set-exit-if-changed bin lib test tool
 	@cd $(PROJECT_ROOT) && $(DART) analyze
 	@cd $(PROJECT_ROOT) && $(DART) run test/run_tests.dart
