@@ -18,6 +18,7 @@ Future<void> runTerminalContextDockTests() async {
   await _testDirectoryTreeFollowsPaneAndCancelsHiddenWork();
   await _testDirectoryRevealRejectsExpansionCap();
   await _testProcessCoordinatorRefreshPrivacyAndCancellation();
+  await _testProcessFocusReactivationRetainsDirectoryToggle();
   await _testProcessArgumentVisibility();
   _testPrivacyPolicyDistinguishesIdleLineEditing();
   await _testPathHandoffPolicyAndExactPayload();
@@ -961,6 +962,146 @@ Future<void> _testProcessCoordinatorRefreshPrivacyAndCancellation() async {
   richRequests[5].complete(null);
   await Future<void>.delayed(Duration.zero);
   _expect(changedCount > 0, 'content transitions notify their presenter');
+  dock.dispose();
+  await harness.state.shutdown();
+}
+
+Future<void> _testProcessFocusReactivationRetainsDirectoryToggle() async {
+  final _Harness harness = _Harness();
+  final TerminalWindowState window = await harness.createWindow();
+  final PaneId paneId = window.selectedTab.focusedPaneId;
+  final TerminalSessionId sessionId = TerminalSessionId(
+    paneId: paneId,
+    generation: 1,
+  );
+  final TerminalContextDockState dock = TerminalContextDockState()
+    ..synchronize(harness.state)
+    ..toggleVisibility(window.id, paneId);
+  final _ProcessScheduler scheduler = _ProcessScheduler();
+  var foregroundGroup = paneId.value;
+  var canPresent = true;
+  var retainUnpresented = true;
+  var retainedDirectoryAvailable = true;
+  var invalidationCount = 0;
+  final List<Completer<PtyForegroundJobSnapshot?>> requests =
+      <Completer<PtyForegroundJobSnapshot?>>[];
+  final TerminalContextDockProcessController controller =
+      TerminalContextDockProcessController(
+        applicationState: harness.state,
+        dockState: dock,
+        resolveProcessSnapshot: (_) => TerminalPaneProcessSnapshot.available(
+          sessionId: sessionId,
+          childProcessId: paneId.value,
+          owningProcessGroup: paneId.value,
+          foregroundProcessGroup: foregroundGroup,
+          terminalEchoEnabled: false,
+        ),
+        resolveForegroundJob: (_, _) {
+          final Completer<PtyForegroundJobSnapshot?> request =
+              Completer<PtyForegroundJobSnapshot?>();
+          requests.add(request);
+          return request.future;
+        },
+        canPresentWindow: (_) => canPresent,
+        canObserveDirectory: (_) => foregroundGroup == paneId.value,
+        canDisplayDirectory: (_) => retainedDirectoryAvailable,
+        canRetainDirectoryWhileUnpresented: (_) => retainUnpresented,
+        invalidateRetainedDirectory: (_) {
+          invalidationCount++;
+          retainedDirectoryAvailable = false;
+        },
+        scheduleTask: scheduler.schedule,
+        monotonicMicros: () => scheduler.nowMicros,
+      );
+  final TerminalActionRegistration contentToggle = controller
+      .registrations()
+      .singleWhere(
+        (TerminalActionRegistration registration) =>
+            registration.id == TerminalActionId.toggleContextDockContent,
+      );
+
+  controller.synchronize();
+  _expect(
+    controller.canObserveDirectoryPane(paneId),
+    'idle shell establishes Directory retention authority before the job',
+  );
+  foregroundGroup = paneId.value + 10;
+  controller.synchronize();
+  scheduler.elapse(TerminalContextDockProcessLimits.foregroundActivationDelay);
+  _expect(
+    requests.length == 1 && controller.canRetainDirectoryPane(paneId),
+    'foreground job retains the pre-command Directory authority',
+  );
+  requests[0].complete(
+    _foregroundJobFixture(
+      sessionId: sessionId,
+      foregroundProcessGroup: foregroundGroup,
+      memberCount: 1,
+      elapsedMicroseconds: 1000,
+    ),
+  );
+  await Future<void>.delayed(Duration.zero);
+
+  canPresent = false;
+  controller.synchronize();
+  final TerminalContextDockContentSnapshot suspended = controller
+      .snapshotForWindow(window.id)!;
+  _expect(
+    suspended.mode == TerminalContextDockContentMode.unavailable &&
+        suspended.process == null &&
+        controller.canRetainDirectoryPane(paneId) &&
+        controller.activeOperationCount == 0 &&
+        controller.activeTimerCount == 0 &&
+        !contentToggle.isAvailable() &&
+        invalidationCount == 0,
+    'application focus loss clears process content and polling while retaining only Directory display authority',
+  );
+
+  canPresent = true;
+  controller.synchronize();
+  scheduler.elapse(TerminalContextDockProcessLimits.foregroundActivationDelay);
+  _expect(
+    requests.length == 2 &&
+        controller.snapshotForWindow(window.id)!.mode ==
+            TerminalContextDockContentMode.foregroundJob &&
+        controller.canRetainDirectoryPane(paneId) &&
+        contentToggle.isAvailable() &&
+        invalidationCount == 0,
+    'same-session same-PGID reactivation restores Process Inspector and the retained Directory toggle',
+  );
+  requests[1].complete(
+    _foregroundJobFixture(
+      sessionId: sessionId,
+      foregroundProcessGroup: foregroundGroup,
+      memberCount: 1,
+      elapsedMicroseconds: 2000,
+    ),
+  );
+  await Future<void>.delayed(Duration.zero);
+  contentToggle.handler();
+  _expect(
+    controller.snapshotForWindow(window.id)!.mode ==
+        TerminalContextDockContentMode.directoryNavigator,
+    'reactivated content action projects the retained Directory snapshot',
+  );
+  contentToggle.handler();
+
+  canPresent = false;
+  controller.synchronize();
+  foregroundGroup = paneId.value + 20;
+  canPresent = true;
+  controller.synchronize();
+  scheduler.elapse(TerminalContextDockProcessLimits.foregroundActivationDelay);
+  _expect(
+    invalidationCount == 1 &&
+        !retainedDirectoryAvailable &&
+        !controller.canRetainDirectoryPane(paneId) &&
+        !contentToggle.isAvailable(),
+    'PGID replacement during focus loss invalidates the old Directory snapshot before the action can return',
+  );
+
+  retainUnpresented = false;
+  controller.dispose();
   dock.dispose();
   await harness.state.shutdown();
 }

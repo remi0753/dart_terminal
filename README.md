@@ -115,8 +115,10 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   terminalが入力を所有したままなのでinteractive commandを操作でき、Shift-Command-F/G/MはPTYへ送らず消費する。
   75 ms未満の短いcommandは表示を切り替えず、silent commandも250 ms以内に検出し、詳細情報の再取得は最大1秒に
   1回とする。shell builtinは推測したargvを出さず実行中statusだけを示す。ECHO-offやmanual／automatic
-  Secure Keyboard Entry中もprocess情報を表示し、入力保護とは独立させる。Dock非表示、app非active、
-  focus変更では保持したpath／argvを即時破棄する。終了後はfreshな
+  Secure Keyboard Entry中もprocess情報を表示し、入力保護とは独立させる。app非active時はprocessの
+  path／argvとpollを即時破棄するが、同じvisible window／pane／session／PGIDへ戻るfocus round tripに限り、
+  command前のDirectory snapshotを非投影のまま凍結保持する。Dock非表示、別windowへのfocus変更、
+  pane／session／PGID変更では保持snapshotも破棄する。終了後はfreshな
   Directory Navigatorへ戻る。実行中もControl-Shift-Command-NでDirectory Navigatorへ表示だけを切り替え、
   同じ操作で同一jobのProcess Inspectorへ戻せる。切替はterminal inputを維持し、job／pane／privacy境界を
   越えて保持しない。ECHO-offや手動Secure Keyboard Entry中はcommand開始前に確定したtreeをread-onlyで表示し、

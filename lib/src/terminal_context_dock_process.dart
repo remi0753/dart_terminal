@@ -323,6 +323,12 @@ typedef TerminalContextDockDirectoryPrivacyPolicy = bool Function(
 typedef TerminalContextDockDirectoryDisplayPolicy = bool Function(
   PaneId paneId,
 );
+typedef TerminalContextDockUnpresentedDirectoryRetentionPolicy = bool Function(
+  TerminalWindowId windowId,
+);
+typedef TerminalContextDockDirectoryRetentionInvalidation = void Function(
+  PaneId paneId,
+);
 typedef TerminalContextDockProcessTerminalFocus = bool Function(
   TerminalContextDockFocusRequest request,
 );
@@ -342,6 +348,10 @@ final class TerminalContextDockProcessController {
     TerminalContextDockProcessPrivacyPolicy? canObserveProcess,
     TerminalContextDockDirectoryPrivacyPolicy? canObserveDirectory,
     TerminalContextDockDirectoryDisplayPolicy? canDisplayDirectory,
+    TerminalContextDockUnpresentedDirectoryRetentionPolicy?
+    canRetainDirectoryWhileUnpresented,
+    TerminalContextDockDirectoryRetentionInvalidation?
+    invalidateRetainedDirectory,
     TerminalContextDockProcessTerminalFocus? focusTerminal,
     TerminalContextDockScheduleTask? scheduleTask,
     int Function()? monotonicMicros,
@@ -355,6 +365,10 @@ final class TerminalContextDockProcessController {
            canDisplayDirectory ??
            canObserveDirectory ??
            _alwaysObserveDirectory,
+       _canRetainDirectoryWhileUnpresented =
+           canRetainDirectoryWhileUnpresented ?? _neverRetainUnpresented,
+       _invalidateRetainedDirectory =
+           invalidateRetainedDirectory ?? _ignoreDirectoryInvalidation,
        _focusTerminal = focusTerminal ?? _acceptTerminalFocus,
        _scheduleTask = scheduleTask ?? _scheduleTimerTask,
        _onChanged = onChanged {
@@ -372,6 +386,10 @@ final class TerminalContextDockProcessController {
   final TerminalContextDockProcessPrivacyPolicy _canObserveProcess;
   final TerminalContextDockDirectoryPrivacyPolicy _canObserveDirectory;
   final TerminalContextDockDirectoryDisplayPolicy _canDisplayDirectory;
+  final TerminalContextDockUnpresentedDirectoryRetentionPolicy
+  _canRetainDirectoryWhileUnpresented;
+  final TerminalContextDockDirectoryRetentionInvalidation
+  _invalidateRetainedDirectory;
   final TerminalContextDockProcessTerminalFocus _focusTerminal;
   final TerminalContextDockScheduleTask _scheduleTask;
   final void Function()? _onChanged;
@@ -520,7 +538,10 @@ final class TerminalContextDockProcessController {
   bool canRetainDirectoryPane(PaneId paneId) =>
       !_isDisposed &&
       _windows.values.any(
-        (state) => state.paneId == paneId && state.directorySuspended,
+        (state) =>
+            state.paneId == paneId &&
+            state.directorySuspended &&
+            state.directoryRetentionEligible,
       );
 
   void scheduleSynchronize() {
@@ -556,9 +577,22 @@ final class TerminalContextDockProcessController {
           )) {
         final TerminalContextDockWindowSnapshot? dock = dockState
             .snapshotForWindow(logicalWindow.id);
-        if (dock == null ||
-            !dock.isVisible ||
-            !_safeCanPresentWindow(logicalWindow.id)) {
+        if (dock == null || !dock.isVisible) {
+          changed = _removeWindow(logicalWindow.id) || changed;
+          continue;
+        }
+        if (!_safeCanPresentWindow(logicalWindow.id)) {
+          final _TerminalContextDockProcessWindowState? retained =
+              _windows[logicalWindow.id];
+          final bool wasSuspended = retained?.presentationSuspended ?? false;
+          if (_safeCanRetainDirectoryWhileUnpresented(logicalWindow.id) &&
+              retained != null &&
+              retained.paneId == dock.targetPaneId &&
+              (wasSuspended || _suspendUnpresented(retained))) {
+            eligible.add(logicalWindow.id);
+            changed = !wasSuspended || changed;
+            continue;
+          }
           changed = _removeWindow(logicalWindow.id) || changed;
           continue;
         }
@@ -571,7 +605,12 @@ final class TerminalContextDockProcessController {
         if (state == null ||
             state.paneId != dock.targetPaneId ||
             state.sessionId != process.sessionId) {
-          if (state != null) _cancelState(state);
+          if (state != null) {
+            if (state.presentationSuspended) {
+              _safeInvalidateRetainedDirectory(state.paneId);
+            }
+            _cancelState(state);
+          }
           state = _TerminalContextDockProcessWindowState(
             windowId: logicalWindow.id,
             paneId: dock.targetPaneId,
@@ -580,6 +619,9 @@ final class TerminalContextDockProcessController {
           );
           _windows[logicalWindow.id] = state;
           changed = true;
+        }
+        if (state.presentationSuspended) {
+          changed = _resumePresented(state, process) || changed;
         }
         changed = _reconcileWindow(state, dock, process) || changed;
       }
@@ -651,6 +693,46 @@ final class TerminalContextDockProcessController {
     }
   }
 
+  bool _suspendUnpresented(_TerminalContextDockProcessWindowState state) {
+    final TerminalContextDockForegroundJobIdentity? identity = state.identity;
+    if (state.presentationSuspended ||
+        state.mode != TerminalContextDockContentMode.foregroundJob ||
+        identity == null ||
+        !state.directoryRetentionEligible) {
+      return false;
+    }
+    final int foregroundProcessGroup = identity.foregroundProcessGroup;
+    _cancelTransientState(state);
+    state
+      ..presentationSuspended = true
+      ..suspendedForegroundProcessGroup = foregroundProcessGroup
+      ..mode = TerminalContextDockContentMode.unavailable
+      ..directorySuspended = true
+      ..shellCommandStartedMicros = null
+      ..generation = ++_nextGeneration;
+    return true;
+  }
+
+  bool _resumePresented(
+    _TerminalContextDockProcessWindowState state,
+    TerminalPaneProcessSnapshot process,
+  ) {
+    final int? retainedProcessGroup = state.suspendedForegroundProcessGroup;
+    final bool sameForegroundJob =
+        process.disposition ==
+            TerminalPaneProcessDisposition.foregroundProcess &&
+        process.foregroundProcessGroup == retainedProcessGroup;
+    state
+      ..presentationSuspended = false
+      ..suspendedForegroundProcessGroup = null
+      ..generation = ++_nextGeneration;
+    if (!sameForegroundJob) {
+      state.directoryRetentionEligible = false;
+      _safeInvalidateRetainedDirectory(state.paneId);
+    }
+    return true;
+  }
+
   bool _enterDirectory(_TerminalContextDockProcessWindowState state) {
     final bool changed =
         state.mode != TerminalContextDockContentMode.directoryNavigator ||
@@ -661,6 +743,7 @@ final class TerminalContextDockProcessController {
     state
       ..mode = TerminalContextDockContentMode.directoryNavigator
       ..directorySuspended = false
+      ..directoryRetentionEligible = true
       ..shellCommandStartedMicros = null;
     if (changed) state.generation = ++_nextGeneration;
     return changed;
@@ -767,6 +850,7 @@ final class TerminalContextDockProcessController {
     state
       ..mode = mode
       ..directorySuspended = true
+      ..directoryRetentionEligible = false
       ..shellCommandStartedMicros = null;
     if (changed) state.generation = ++_nextGeneration;
     return changed;
@@ -988,6 +1072,23 @@ final class TerminalContextDockProcessController {
     }
   }
 
+  bool _safeCanRetainDirectoryWhileUnpresented(TerminalWindowId windowId) {
+    try {
+      return _canRetainDirectoryWhileUnpresented(windowId);
+    } on Object {
+      return false;
+    }
+  }
+
+  void _safeInvalidateRetainedDirectory(PaneId paneId) {
+    try {
+      _invalidateRetainedDirectory(paneId);
+    } on Object {
+      // Invalidation is fail-closed in the process controller itself. The
+      // callback only lets the Directory owner eagerly discard its content.
+    }
+  }
+
   bool _canToggleActiveWindowContent() {
     if (_isDisposed || applicationState.isDisposed || dockState.isDisposed) {
       return false;
@@ -1010,7 +1111,8 @@ final class TerminalContextDockProcessController {
   }
 
   void _ensurePoll() {
-    if (_isDisposed || _windows.isEmpty) {
+    if (_isDisposed ||
+        !_windows.values.any((state) => !state.presentationSuspended)) {
       _cancelPoll();
       return;
     }
@@ -1032,6 +1134,9 @@ final class TerminalContextDockProcessController {
       windowId,
     );
     if (state == null) return false;
+    if (state.presentationSuspended) {
+      _safeInvalidateRetainedDirectory(state.paneId);
+    }
     _cancelState(state);
     return true;
   }
@@ -1040,6 +1145,9 @@ final class TerminalContextDockProcessController {
     if (_windows.isEmpty) return false;
     for (final _TerminalContextDockProcessWindowState state
         in _windows.values) {
+      if (state.presentationSuspended) {
+        _safeInvalidateRetainedDirectory(state.paneId);
+      }
       _cancelState(state);
     }
     _windows.clear();
@@ -1048,7 +1156,11 @@ final class TerminalContextDockProcessController {
 
   void _cancelState(_TerminalContextDockProcessWindowState state) {
     _cancelTransientState(state);
-    state.process = null;
+    state
+      ..process = null
+      ..directoryRetentionEligible = false
+      ..presentationSuspended = false
+      ..suspendedForegroundProcessGroup = null;
   }
 
   void _cancelTransientState(_TerminalContextDockProcessWindowState state) {
@@ -1096,6 +1208,8 @@ final class TerminalContextDockProcessController {
   static bool _alwaysObserveProcess(PaneId _, TerminalPaneProcessSnapshot __) =>
       true;
   static bool _alwaysObserveDirectory(PaneId _) => true;
+  static bool _neverRetainUnpresented(TerminalWindowId _) => false;
+  static void _ignoreDirectoryInvalidation(PaneId _) {}
   static bool _acceptTerminalFocus(TerminalContextDockFocusRequest _) => true;
   static TerminalContextDockScheduledTask _scheduleTimerTask(
     Duration delay,
@@ -1127,6 +1241,9 @@ final class _TerminalContextDockProcessWindowState {
   int? shellCommandStartedMicros;
   _TerminalContextDockRichRequest? request;
   bool directoryNavigatorOverride = false;
+  bool directoryRetentionEligible = false;
+  bool presentationSuspended = false;
+  int? suspendedForegroundProcessGroup;
 }
 
 final class _TerminalContextDockRichRequest {

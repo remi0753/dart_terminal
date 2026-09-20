@@ -251,6 +251,26 @@ final class TerminalContextDockDirectoryController {
             window.rootSnapshot != null,
       );
 
+  /// Drops a frozen snapshot whose pane, session, or foreground-job authority
+  /// changed while its native window was not presentable.
+  void invalidateRetainedSnapshot(PaneId paneId) {
+    if (_isDisposed) return;
+    var changed = false;
+    for (final TerminalWindowId windowId
+        in _windows.entries
+            .where((entry) => entry.value.paneId == paneId)
+            .map((entry) => entry.key)
+            .toList(growable: false)) {
+      _windows.remove(windowId)!.cancel();
+      changed = true;
+    }
+    _commandRefreshPaneIds.remove(paneId);
+    _processSuspendedRefreshPaneIds.remove(paneId);
+    _pendingRefreshPaneIds.remove(paneId);
+    _deferredRefreshPaneIds.remove(paneId);
+    if (changed) _onChanged?.call();
+  }
+
   bool canRefreshWindow(TerminalWindowId windowId, PaneId paneId) {
     if (_isDisposed || applicationState.isDisposed || dockState.isDisposed) {
       return false;

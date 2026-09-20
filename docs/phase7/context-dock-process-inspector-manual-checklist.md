@@ -49,6 +49,9 @@ architecture、Developer JIT／Release AOT、pass/failとcontent-freeな失敗�
 - [ ] `node` REPLなどECHO-offのProcess InspectorでもControl-Shift-Command-Nが有効で、command開始前のtreeを
   `Snapshot updates: Paused while process is running`付きで表示する。Search／Go To／Move、展開、更新、path操作は
   新しいfilesystem処理を開始せず、終了後の一回refreshで最新状態へ戻る。
+- [ ] ECHO-offのProcess Inspector表示中に別applicationへfocusを移して戻っても、同じjobなら
+  Control-Shift-Command-Nで保持treeへ切り替わる。非active中にDirectory内容を投影せず、別pane／session／PGIDへ
+  変わった場合は古いtreeを表示しない。
 - [ ] Option-Shift-CはProcess Inspector表示中もDockだけを開閉し、foreground commandを停止・変更しない。
 - [ ] View > Show Process Arguments（日本語: プロセスの引数を表示）のcheckを外すとargvだけが非表示となり、
   process名、実行ファイル、PID／PGID、経過時間は維持される。Shift-Command-Pから同じactionを検索し、

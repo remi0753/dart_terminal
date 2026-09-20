@@ -3489,7 +3489,44 @@ final class TerminalApplication {
 
     bool contextDockCanDisplayDirectoryPane(PaneId paneId) =>
         contextDockCanObservePane(paneId) ||
-        (contextDockDirectoryController?.hasRetainedSnapshot(paneId) ?? false);
+        ((contextDockProcessController?.canRetainDirectoryPane(paneId) ??
+                false) &&
+            (contextDockDirectoryController?.hasRetainedSnapshot(paneId) ??
+                false));
+
+    bool contextDockCanRetainDirectoryWhileUnpresented(
+      TerminalWindowId windowId,
+    ) {
+      final TerminalWindowState? logicalWindow = state.windowForId(windowId);
+      final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
+      if (logicalWindow == null ||
+          logicalWindow.role != TerminalWindowRole.standard ||
+          state.activeWindow?.id != windowId ||
+          nativeHierarchy == null ||
+          nativeHierarchy.isDisposed) {
+        return false;
+      }
+      final Window? nativeWindow = nativeHierarchy.windowForTab(
+        logicalWindow.selectedTabId,
+      );
+      if (nativeWindow == null ||
+          nativeWindow.isDisposed ||
+          nativeWindow.isClosed ||
+          !nativeWindow.isVisible) {
+        return false;
+      }
+      if (!application.isActive) return true;
+      return !state.windows.any((TerminalWindowState candidate) {
+        final Window? candidateWindow = nativeHierarchy.windowForTab(
+          candidate.selectedTabId,
+        );
+        return candidateWindow != null &&
+            !candidateWindow.isDisposed &&
+            !candidateWindow.isClosed &&
+            candidateWindow.isVisible &&
+            candidateWindow.isFocused;
+      });
+    }
 
     TerminalContextDockPathTarget? contextDockPathTarget(
       TerminalWindowId windowId,
@@ -4596,89 +4633,92 @@ final class TerminalApplication {
                 configurationAuthority.newSessionConfiguration.contextDockWidth,
           )..synchronize(state);
       contextDockState = createdContextDockState;
-      final TerminalContextDockProcessController createdDockProcess =
-          TerminalContextDockProcessController(
-            applicationState: state,
-            dockState: createdContextDockState,
-            resolveProcessSnapshot: (PaneId paneId) =>
-                state.paneForId(paneId)?.processSnapshot() ??
-                TerminalPaneProcessSnapshot.unavailable(
-                  sessionId: TerminalSessionId(paneId: paneId, generation: 1),
-                ),
-            resolveForegroundJob: (PaneId paneId, TerminalSessionId sessionId) {
-              final TerminalSession? session = sessions[paneId];
-              if (session == null || session.id != sessionId) return null;
-              return session.foregroundJobSnapshot();
-            },
-            canPresentWindow: (TerminalWindowId windowId) {
-              final TerminalWindowState? logicalWindow = state.windowForId(
-                windowId,
-              );
-              final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
-              if (logicalWindow == null) return false;
-              if (nativeHierarchy == null || nativeHierarchy.isDisposed) {
-                return true;
-              }
-              final Window? nativeWindow = nativeHierarchy.windowForTab(
-                logicalWindow.selectedTabId,
-              );
-              return application.isActive &&
-                  nativeWindow != null &&
-                  !nativeWindow.isDisposed &&
-                  !nativeWindow.isClosed &&
-                  nativeWindow.isVisible &&
-                  nativeWindow.isFocused;
-            },
-            canObserveProcess: contextDockCanObserveProcess,
-            canObserveDirectory: contextDockCanObservePane,
-            canDisplayDirectory: contextDockCanDisplayDirectoryPane,
-            focusTerminal: (TerminalContextDockFocusRequest request) {
-              final TerminalContextDockDirectoryPresenter? presenter =
-                  contextDockPresenter;
-              if (presenter == null || presenter.isDisposed) return false;
-              try {
-                presenter.focusTerminal(request);
-                return true;
-              } on Object {
-                return false;
-              }
-            },
-            onChanged: () {
-              final TerminalContextDockProcessController? processController =
-                  contextDockProcessController;
-              final Set<PaneId> observable = <PaneId>{};
-              if (processController != null) {
-                for (final TerminalWindowState window in state.windows.where(
-                  (TerminalWindowState candidate) =>
-                      candidate.role == TerminalWindowRole.standard,
-                )) {
-                  final TerminalContextDockWindowSnapshot? dock =
-                      createdContextDockState.snapshotForWindow(window.id);
-                  if (dock?.isVisible == true &&
-                      processController.canObserveDirectoryPane(
-                        dock!.targetPaneId,
-                      )) {
-                    observable.add(dock.targetPaneId);
-                  }
-                }
-              }
-              for (final PaneId resumed in observable.difference(
-                directoryObservableProcessPaneIds,
-              )) {
-                contextDockDirectoryController?.scheduleCommandCompletion(
-                  resumed,
-                );
-              }
-              directoryObservableProcessPaneIds
-                ..clear()
-                ..addAll(observable);
-              reconcileRequest?.call();
-              final TerminalAppKitMenuProjection? menu = menuProjection;
-              if (menu != null && !menu.isDisposed) menu.refresh();
-              final TerminalCommandPalettePresenter? palette = palettePresenter;
-              if (palette != null && !palette.isDisposed) palette.refresh();
-            },
+      final TerminalContextDockProcessController
+      createdDockProcess = TerminalContextDockProcessController(
+        applicationState: state,
+        dockState: createdContextDockState,
+        resolveProcessSnapshot: (PaneId paneId) =>
+            state.paneForId(paneId)?.processSnapshot() ??
+            TerminalPaneProcessSnapshot.unavailable(
+              sessionId: TerminalSessionId(paneId: paneId, generation: 1),
+            ),
+        resolveForegroundJob: (PaneId paneId, TerminalSessionId sessionId) {
+          final TerminalSession? session = sessions[paneId];
+          if (session == null || session.id != sessionId) return null;
+          return session.foregroundJobSnapshot();
+        },
+        canPresentWindow: (TerminalWindowId windowId) {
+          final TerminalWindowState? logicalWindow = state.windowForId(
+            windowId,
           );
+          final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
+          if (logicalWindow == null) return false;
+          if (nativeHierarchy == null || nativeHierarchy.isDisposed) {
+            return true;
+          }
+          final Window? nativeWindow = nativeHierarchy.windowForTab(
+            logicalWindow.selectedTabId,
+          );
+          return application.isActive &&
+              nativeWindow != null &&
+              !nativeWindow.isDisposed &&
+              !nativeWindow.isClosed &&
+              nativeWindow.isVisible &&
+              nativeWindow.isFocused;
+        },
+        canObserveProcess: contextDockCanObserveProcess,
+        canObserveDirectory: contextDockCanObservePane,
+        canDisplayDirectory: contextDockCanDisplayDirectoryPane,
+        canRetainDirectoryWhileUnpresented:
+            contextDockCanRetainDirectoryWhileUnpresented,
+        invalidateRetainedDirectory: (PaneId paneId) {
+          contextDockDirectoryController?.invalidateRetainedSnapshot(paneId);
+        },
+        focusTerminal: (TerminalContextDockFocusRequest request) {
+          final TerminalContextDockDirectoryPresenter? presenter =
+              contextDockPresenter;
+          if (presenter == null || presenter.isDisposed) return false;
+          try {
+            presenter.focusTerminal(request);
+            return true;
+          } on Object {
+            return false;
+          }
+        },
+        onChanged: () {
+          final TerminalContextDockProcessController? processController =
+              contextDockProcessController;
+          final Set<PaneId> observable = <PaneId>{};
+          if (processController != null) {
+            for (final TerminalWindowState window in state.windows.where(
+              (TerminalWindowState candidate) =>
+                  candidate.role == TerminalWindowRole.standard,
+            )) {
+              final TerminalContextDockWindowSnapshot? dock =
+                  createdContextDockState.snapshotForWindow(window.id);
+              if (dock?.isVisible == true &&
+                  processController.canObserveDirectoryPane(
+                    dock!.targetPaneId,
+                  )) {
+                observable.add(dock.targetPaneId);
+              }
+            }
+          }
+          for (final PaneId resumed in observable.difference(
+            directoryObservableProcessPaneIds,
+          )) {
+            contextDockDirectoryController?.scheduleCommandCompletion(resumed);
+          }
+          directoryObservableProcessPaneIds
+            ..clear()
+            ..addAll(observable);
+          reconcileRequest?.call();
+          final TerminalAppKitMenuProjection? menu = menuProjection;
+          if (menu != null && !menu.isDisposed) menu.refresh();
+          final TerminalCommandPalettePresenter? palette = palettePresenter;
+          if (palette != null && !palette.isDisposed) palette.refresh();
+        },
+      );
       contextDockProcessController = createdDockProcess;
       createdDockProcess.synchronize();
       const TerminalWorkingDirectoryResolver workingDirectoryResolver =
@@ -9907,7 +9947,7 @@ final class TerminalApplication {
               .toList(growable: false);
       initialPane.insertText(
         "stty -echo; printf '\\r\\n__DT_NAV_ECHO_OFF__\\r\\n'; "
-        "sleep 8; stty echo; printf '\\r\\n__DT_NAV_ECHO_ON__\\r\\n'",
+        "sleep 12; stty echo; printf '\\r\\n__DT_NAV_ECHO_ON__\\r\\n'",
       );
       await initialPane.submit();
       await _waitForAsciiMarker(initialSession, '__DT_NAV_ECHO_OFF__');
@@ -9989,6 +10029,122 @@ final class TerminalApplication {
             processDocumentText()?.contains('/sleep') == true &&
             !contentItem.isChecked;
       }, 'second ECHO-off content toggle did not restore Process Inspector');
+      final int focusRoundTripWriteBaseline =
+          writeEnqueuedCounts[initialPaneId] ?? 0;
+      _injectFocusEventForTesting(
+        application,
+        contextDockWindow,
+        isFocused: false,
+        monotonicNanoseconds: eventTimestamp++,
+      );
+      appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+        application.eventProtocolVersion,
+        30,
+        0,
+        0,
+        eventTimestamp++,
+        0,
+        false,
+      ]);
+      await waitFor(
+        () => !application.isActive && !contextDockWindow.isFocused,
+        'protected-process fixture did not lose application focus',
+      );
+      reconcile();
+      await waitFor(
+        () {
+          final TerminalContextDockContentSnapshot? content = contextDockProcess
+              .snapshotForWindow(initialWindow.id);
+          final TerminalContextDockDirectorySnapshot? directory =
+              contextDockDirectory.snapshotForWindow(initialWindow.id);
+          return content?.mode == TerminalContextDockContentMode.unavailable &&
+              content?.process == null &&
+              contextDockProcess.canRetainDirectoryPane(initialPaneId) &&
+              contextDockProcess.activeOperationCount == 0 &&
+              contextDockProcess.activeTimerCount == 0 &&
+              directory?.isFrozen == true &&
+              directory?.workingDirectory ==
+                  retainedBeforeProtectedJob.workingDirectory &&
+              directory!.rows
+                      .map(
+                        (TerminalContextDockDirectoryRow row) => row.entry.path,
+                      )
+                      .join('\n') ==
+                  retainedPathsBeforeProtectedJob.join('\n') &&
+              contextDockDirectory.activeOperationCount == 0 &&
+              processDocumentText()?.contains('/sleep') == false;
+        },
+        'focus loss discarded the frozen Directory or retained process details',
+      );
+      appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+        application.eventProtocolVersion,
+        30,
+        0,
+        0,
+        eventTimestamp++,
+        0,
+        true,
+      ]);
+      reconcile();
+      _expectLifecycle(
+        application.isActive &&
+            !contextDockWindow.isFocused &&
+            contextDockProcess.canRetainDirectoryPane(initialPaneId) &&
+            contextDockDirectory.activeOperationCount == 0,
+        'application-active/window-focus event gap discarded retained Directory authority',
+      );
+      _injectFocusEventForTesting(
+        application,
+        contextDockWindow,
+        isFocused: true,
+        monotonicNanoseconds: eventTimestamp++,
+      );
+      await waitFor(
+        () {
+          menu.refresh();
+          final TerminalContextDockContentSnapshot? content = contextDockProcess
+              .snapshotForWindow(initialWindow.id);
+          return application.isActive &&
+              contextDockWindow.isFocused &&
+              content?.mode == TerminalContextDockContentMode.foregroundJob &&
+              content?.process?.executablePath?.endsWith('/sleep') == true &&
+              contentItem.isEnabled &&
+              contextDockDirectory
+                      .snapshotForWindow(initialWindow.id)
+                      ?.isFrozen ==
+                  true &&
+              contextDockDirectory.activeOperationCount == 0;
+        },
+        'focus reactivation did not restore Process Inspector with the Directory toggle',
+      );
+      contentItem.performAction();
+      await waitFor(
+        () =>
+            contextDockProcess.snapshotForWindow(initialWindow.id)?.mode ==
+                TerminalContextDockContentMode.directoryNavigator &&
+            contextDockDirectory
+                    .snapshotForWindow(initialWindow.id)
+                    ?.workingDirectory ==
+                retainedBeforeProtectedJob.workingDirectory &&
+            contextDockDirectory.activeOperationCount == 0,
+        'focus-reactivated Process Inspector could not show the retained Directory',
+      );
+      contentItem.performAction();
+      await waitFor(
+        () =>
+            contextDockProcess.snapshotForWindow(initialWindow.id)?.mode ==
+            TerminalContextDockContentMode.foregroundJob,
+        'focus-reactivated Directory did not return to Process Inspector',
+      );
+      _expectLifecycle(
+        !contextDockState
+                .snapshotForWindow(initialWindow.id)!
+                .navigatorOwnsInput &&
+            contextDockWindow.keyEventRouting == KeyEventRouting.appKitOnly &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) ==
+                focusRoundTripWriteBaseline,
+        'focus round trip moved Navigator input or wrote to the PTY',
+      );
       await dispatch(TerminalActionId.toggleSecureKeyboardEntry);
       reconcile();
       contextDockProcess.synchronize();
@@ -10052,12 +10208,28 @@ final class TerminalApplication {
       await dispatch(TerminalActionId.toggleSecureKeyboardEntry);
 
       await _waitForAsciiMarker(initialSession, '__DT_NAV_ECHO_ON__');
-      await waitFor(
-        () =>
-            initialPane.processSnapshot().disposition ==
-            TerminalPaneProcessDisposition.idleShell,
-        'plain sh did not restore the idle-shell Navigator boundary',
-      );
+      try {
+        await waitFor(
+          () =>
+              initialPane.processSnapshot().disposition ==
+              TerminalPaneProcessDisposition.idleShell,
+          'plain sh did not restore the idle-shell Navigator boundary',
+          timeout: const Duration(seconds: 20),
+        );
+      } on Object {
+        final TerminalPaneProcessSnapshot process = initialPane
+            .processSnapshot();
+        stdout.writeln(
+          'TERMINAL_CONTEXT_DOCK_FOCUS_SETTLE_FAILURE '
+          'disposition=${process.disposition.name} '
+          'session=${process.sessionId} '
+          'child=${process.childProcessId} '
+          'owning_pgid=${process.owningProcessGroup} '
+          'foreground_pgid=${process.foregroundProcessGroup} '
+          'echo=${process.terminalEchoEnabled}',
+        );
+        rethrow;
+      }
       contextDockProcess.synchronize();
       reconcile();
       await waitFor(

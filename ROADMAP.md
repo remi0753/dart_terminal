@@ -1669,6 +1669,10 @@ arm64-only bundle を Universal と扱わない監査までを受け入れた。
   （実施時に
   [`docs/phase7/context-dock-manual-switch-investigation.md`](docs/phase7/context-dock-manual-switch-investigation.md)
   の修正方針とregression testを参照する）
+- [x] appのfocus復帰後も実行中Process Inspectorから保持済みDirectory Navigatorへ手動切替できるよう修正する
+  （実施時に
+  [`docs/phase7/context-dock-focus-reactivation-switch.md`](docs/phase7/context-dock-focus-reactivation-switch.md)
+  を参照する）
 - [ ] 既存PTYのcompeting-reaper回帰fixtureの非決定性を調査し、実external-reap検証を安定化する
   （実施時に
   [`docs/phase2/pty-competing-reaper-fixture-determinism.md`](docs/phase2/pty-competing-reaper-fixture-determinism.md)
