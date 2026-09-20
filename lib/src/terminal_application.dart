@@ -5002,6 +5002,14 @@ final class TerminalApplication {
               ),
             ],
             ensureQuickTerminalContext: true,
+            copyEffect: (String body) {
+              try {
+                application.generalPasteboard.writeText(body);
+                return true;
+              } on Object {
+                return false;
+              }
+            },
             presentation: notePresentationForPane(initialPane.id),
             onError: recordAsynchronousError,
           );

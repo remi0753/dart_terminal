@@ -25,6 +25,9 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
       <_FakeProductNativeChannel>[];
   final Queue<TerminalNotesAttachDisposition> initialAttachments =
       Queue<TerminalNotesAttachDisposition>();
+  final List<String> copiedBodies = <String>[];
+  var copyAttempts = 0;
+  var failCopy = false;
   var clockMicros = 3000;
   _FakeProductNativeChannel createChannel() {
     final _FakeProductNativeChannel channel = _FakeProductNativeChannel(
@@ -53,6 +56,12 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
           initialPaneIdsInTraversalOrder: const <PaneId>[PaneId(1), PaneId(2)],
           ensureQuickTerminalContext: true,
           updatedAtUtcMicros: 1000,
+          copyEffect: (String body) {
+            copyAttempts++;
+            if (failCopy) throw StateError('injected pasteboard failure');
+            copiedBodies.add(body);
+            return true;
+          },
           clock: () => clockMicros++,
           initializeNativeCapability: () {},
           surfaceFactory: createChannel,
@@ -549,10 +558,30 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
     final TerminalNoteProductTopologyResult showedDetached = await subsystem
         .pumpSurfaceIntent(const PaneId(1));
     final TerminalNotesProjection detachedProjection = first.projections.last;
+    final int projectionsBeforeDetachedCopy = first.projections.length;
     first.intents.add(
       _nativeIntent(
         detachedProjection,
         eventGeneration: 13,
+        kind: TerminalNotesIntentKind.copy,
+        cardToken: detachedProjection.cards.single.token,
+        body: detachedProjection.cards.single.body,
+      ),
+    );
+    final TerminalNoteProductTopologyResult copiedDetached = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    _expect(
+      copiedDetached.isAccepted &&
+          first.projections.length == projectionsBeforeDetachedCopy &&
+          first.results.last.disposition ==
+              TerminalNotesResultDisposition.accepted &&
+          copiedBodies.single == 'detached from another terminal',
+      'Detached copy writes only its exact body without a projection mutation',
+    );
+    first.intents.add(
+      _nativeIntent(
+        detachedProjection,
+        eventGeneration: 14,
         kind: TerminalNotesIntentKind.reattach,
         cardToken: detachedProjection.cards.single.token,
       ),
@@ -563,7 +592,7 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
     first.intents.add(
       _nativeIntent(
         emptyDetached,
-        eventGeneration: 14,
+        eventGeneration: 15,
         kind: TerminalNotesIntentKind.showCurrent,
       ),
     );
@@ -596,7 +625,7 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
     first.intents.add(
       _nativeIntent(
         currentAfterDetachedRoundTrip,
-        eventGeneration: 15,
+        eventGeneration: 16,
         kind: TerminalNotesIntentKind.selectCard,
         cardToken: currentSelection.token,
       ),
@@ -607,32 +636,62 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
     _expect(selectedAgain.isAccepted, 'Current card is selected again');
 
     final int projectionsBeforeCopy = first.projections.length;
+    failCopy = true;
     first.intents.add(
       _nativeIntent(
         currentAfterDetachedRoundTrip,
-        eventGeneration: 16,
+        eventGeneration: 17,
         kind: TerminalNotesIntentKind.copy,
         cardToken: currentAfterDetachedRoundTrip.selectedToken,
         body: currentSelection.body,
       ),
     );
-    final TerminalNoteProductTopologyResult deferredCopy = await subsystem
+    final TerminalNoteProductTopologyResult failedCopy = await subsystem
         .pumpSurfaceIntent(const PaneId(1));
     _expect(
-      deferredCopy.disposition ==
-              TerminalNoteProductTopologyDisposition.rejected &&
+      failedCopy.disposition ==
+              TerminalNoteProductTopologyDisposition.unavailable &&
           first.projections.length == projectionsBeforeCopy &&
           first.results.last.disposition ==
-              TerminalNotesResultDisposition.rejected &&
+              TerminalNotesResultDisposition.unavailable &&
           first.results.last.newProjectionGeneration ==
-              currentAfterDetachedRoundTrip.projectionGeneration,
-      'deferred copy/export work rejects without advancing authority state',
+              currentAfterDetachedRoundTrip.projectionGeneration &&
+          copyAttempts == 2 &&
+          copiedBodies.length == 1,
+      'pasteboard failure stays content-free and advances no authority state',
+    );
+    failCopy = false;
+    first.intents.add(
+      _nativeIntent(
+        currentAfterDetachedRoundTrip,
+        eventGeneration: 18,
+        kind: TerminalNotesIntentKind.copy,
+        cardToken: currentAfterDetachedRoundTrip.selectedToken,
+        body: currentSelection.body,
+      ),
+    );
+    final TerminalNoteProductTopologyResult copiedCurrent = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    _expect(
+      copiedCurrent.isAccepted &&
+          first.projections.length == projectionsBeforeCopy &&
+          first.results.last.disposition ==
+              TerminalNotesResultDisposition.accepted &&
+          first.results.last.newStoreRevision ==
+              currentAfterDetachedRoundTrip.storeRevision &&
+          first.results.last.newProjectionGeneration ==
+              currentAfterDetachedRoundTrip.projectionGeneration &&
+          copyAttempts == 3 &&
+          copiedBodies.length == 2 &&
+          copiedBodies.last == 'check the release artifact' &&
+          !copiedCurrent.toString().contains(currentSelection.body),
+      'Current copy writes the exact body once without metadata or mutation',
     );
 
     first.intents.add(
       _nativeIntent(
         currentAfterDetachedRoundTrip,
-        eventGeneration: 17,
+        eventGeneration: 19,
         kind: TerminalNotesIntentKind.delete,
         cardToken: currentAfterDetachedRoundTrip.selectedToken,
       ),
@@ -691,7 +750,7 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
     first.intents.add(
       _nativeIntent(
         afterDelete,
-        eventGeneration: 18,
+        eventGeneration: 20,
         kind: TerminalNotesIntentKind.export,
       ),
     );
@@ -762,6 +821,7 @@ Future<void> _testStartupFailureStaysContentFree() async {
         initialPaneIdsInTraversalOrder: const <PaneId>[],
         ensureQuickTerminalContext: true,
         updatedAtUtcMicros: 0,
+        copyEffect: (_) => true,
         initializeNativeCapability: () => initializerCalls++,
       );
   _expect(
@@ -787,6 +847,7 @@ Future<void> _testStartupFailureStaysContentFree() async {
         initialPaneIdsInTraversalOrder: const <PaneId>[],
         ensureQuickTerminalContext: true,
         updatedAtUtcMicros: 0,
+        copyEffect: (_) => true,
         initializeNativeCapability: () => initializerCalls++,
       );
   _expect(

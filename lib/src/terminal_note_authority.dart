@@ -110,6 +110,7 @@ enum TerminalNoteSurfaceIntentKind {
   reopen,
   delete,
   reattach,
+  copy,
 }
 
 /// Content-free semantic intent result for one authority-owned surface.
@@ -785,6 +786,26 @@ final class TerminalNoteAuthority {
           _applyRuntimeSurfaceIntent(pane, surface, () {
             surface.visibility = TerminalNoteSurfaceVisibility.collapsed;
           }),
+        );
+      case TerminalNoteSurfaceIntentKind.copy:
+        final NoteId? noteId = _projectedNoteId(surface, cardToken);
+        final NoteRecord? note = noteId == null
+            ? null
+            : _document.snapshot.noteFor(noteId);
+        if (note == null ||
+            body != note.body.value ||
+            draftGeneration != 0 ||
+            surface.visibility != TerminalNoteSurfaceVisibility.expanded ||
+            surface.editorMode != TerminalNoteEditorMode.inactive) {
+          return Future<TerminalNoteSurfaceIntentResult>.value(
+            _invalidSurfaceIntent(surface),
+          );
+        }
+        return Future<TerminalNoteSurfaceIntentResult>.value(
+          _surfaceIntentResult(
+            TerminalNoteAuthorityMutationDisposition.runtimeApplied,
+            surface: surface,
+          ),
         );
       case TerminalNoteSurfaceIntentKind.showCurrent:
       case TerminalNoteSurfaceIntentKind.showDetached:
@@ -1472,6 +1493,8 @@ final class TerminalNoteAuthority {
   }) => switch (kind) {
     TerminalNoteSurfaceIntentKind.save =>
       body != null && color != null && updatedAtUtcMicros != null,
+    TerminalNoteSurfaceIntentKind.copy =>
+      body != null && color == null && updatedAtUtcMicros == null,
     TerminalNoteSurfaceIntentKind.changeColor =>
       body == null && color != null && updatedAtUtcMicros != null,
     TerminalNoteSurfaceIntentKind.moveEarlier ||
@@ -1770,6 +1793,7 @@ final class TerminalNoteAuthority {
       case TerminalNoteSurfaceIntentKind.showDetached:
       case TerminalNoteSurfaceIntentKind.previousPage:
       case TerminalNoteSurfaceIntentKind.nextPage:
+      case TerminalNoteSurfaceIntentKind.copy:
       case TerminalNoteSurfaceIntentKind.selectCard:
       case TerminalNoteSurfaceIntentKind.beginCreate:
       case TerminalNoteSurfaceIntentKind.beginEdit:

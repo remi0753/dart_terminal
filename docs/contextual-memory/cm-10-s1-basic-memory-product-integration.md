@@ -449,6 +449,61 @@ explicit exportをdurable authorityに接続する。Default-offではentry/surf
 - Native Copy intentは既存どおりfull bodyを持つが、現時点のproduct pumpは固定rejectする。次taskではauthorityがtoken、generation、
   exact bodyを検証した後だけ、application compositionから注入した汎用pasteboard effectを一回実行する。IDやmetadataはcopyしない。
 
+## 2026-09-21: explicit body-only pasteboard copy着手
+
+- ROADMAPを再確認し、先頭未完了が「selected Noteのexplicit body-only pasteboard copyを接続する」であることを確認した。
+- 目的は、Current/Detachedの明示Copy操作で選択または対象cardのfull plain-text bodyだけをsystem pasteboardへ一回書き、
+  persistent ID、context、color、status、trigger、timestamp、revisionを一切egressしないことである。
+- 範囲はauthorityのgeneration/token/exact-body検証、product subsystemの単発copy effect、application compositionからの汎用pasteboard
+  callback注入、success/failureのcontent-free native resultである。Export、import、automatic copy、copy履歴、diagnosticsへの本文追加は対象外とする。
+- Nativeだけでpasteboardへ直接書く案は、persistent authorityがstale token/bodyを検証できず、effect orderingをproduct testで固定できないため
+  不採用とする。Authorityから本文をresultとして返す案もcontent-free result境界を破るため不採用とする。
+- Native intentに既に含まれるbounded full bodyをauthorityの現在snapshot本文と完全一致で検証し、その検証成功後だけproductが注入callbackへ
+  同じ本文を渡す。Callback成功後にだけaccepted resultを返し、失敗・例外は本文を保持または記録せずfixed unavailable resultへ畳む。
+- `dart_appkit`は変更せず、既存`AppKitApplication.generalPasteboard.writeText`をproduction callback内で使う。Product/authorityは
+  AppKit型をimportせず、汎用的な同期effect signatureだけを所有する。
+- 完了条件はCurrent/Detached双方のexact body copy、stale token/mismatched body拒否、effect一回、metadata 0、projection/store mutation 0、
+  pasteboard failureのfixed result、focused/aggregate test成功、task memoと個別commitである。
+
+## 2026-09-21: explicit body-only pasteboard copy完了
+
+### 実装と判断
+
+- Authorityへcopy semantic intentを追加した。Expanded surface、inactive editor、current projectionのephemeral card token、draft/store/projection/event
+  generationを照合し、intent bodyが現在snapshotのNote bodyと完全一致する場合だけcontent-free `runtimeApplied`を返す。
+  Persistent IDや本文はresultへ返さず、projection generation、store revision、selectionも変更しない。
+- Product subsystemへ同期`TerminalNoteBodyCopyEffect`を必須注入した。Authority検証成功後に限り同じbodyを一回だけeffectへ渡し、effectがtrueを
+  返した後だけnative accepted resultを適用する。falseまたは例外は同じstore/projection generationのfixed unavailableへ畳み、再送用本文、
+  pasteboard change count、例外内容を保持・診断しない。
+- Application compositionは既存`AppKitApplication.generalPasteboard.writeText`をcallback内で呼ぶ。Product/authority層はAppKit型をimportせず、
+  callbackはplain body以外のID、color、status、trigger、timestamp、revisionを受け取れない。
+- Native ABIは既存Copy kind 10と4,096-byte/64-line plain-text payload validationをそのまま使う。Current/Detachedのどちらでも、現在projectionの
+  cardだけをcopyできる。Copyはnon-projecting resultとして同じgeneration/revisionで完了する。
+- `dart_appkit`は変更していない。汎用pasteboard APIの利用はDart Terminal production compositionだけに置いた。
+
+### 検証
+
+- Authority focused testはexact bodyを受理し、mismatched bodyを拒否し、store commit数、native projection数、revision/generationを変えず、
+  result文字列表現へ本文を出さないことを確認してpassした。
+- Product focused testはDetached bodyとCurrent bodyをそれぞれ一回だけcallbackへ渡し、projection/store mutation 0を確認した。
+  注入effect例外はnative/productのfixed unavailableとなり、その後の明示retryは成功した。Copy resultにはbody/metadataを含めない。
+- `dart analyze`はissue 0、両focused testはpassした。
+- 最初のfull `make test`は`terminal_application.dart`のhash変更を検知したPhase 7 freshness gateだけで停止した。正規generatorでPhase 7、
+  compatibility regression、Ghostty gap、release-candidate daily-use証跡を再生成した。実差分はapplicationと連鎖artifactのSHA-256だけで、
+  criterion、count、classification、release blockerは変えていない。
+- 再実行した`CI=true DART_SUPPRESS_ANALYTICS=true make test`は376 file format変更0、root/package analyze issue 0、native Notes、real store、
+  security stress、compatibility、distributionを含めて`dart_terminal tests passed`で完了した。Capability auditは
+  `manifest=registered snapshot=content-free exports=20 dart_appkit=generic`を報告した。
+- `make RUNTIME_ARCH=arm64 developer-jit-audit release-aot-audit`は両modeで5 build assets、3 capabilities、Notes dylibを受け入れて成功した。
+  `git diff --check`も成功した。
+- 隣接`dart_appkit`は着手前から存在する3 fileの変更だけで、本taskによる変更は0である。
+
+### 次への引き継ぎ
+
+- 次の先頭未完了taskは「sensitive warning、save panel、portable exportを接続する」である。
+- Exportはcopyと異なり全Note snapshotをworkerでportable v1へserializeする。Save panel承認前にstoreを読まず、path/contentをproduct statusや
+  diagnosticsへ残さず、mutation queueと排他的に実行する必要がある。
+
 ## 2026-09-21: S1 mutation/Detached/export/action task分割
 
 - ROADMAPを再確認し、先頭未完了がCM-10の「S1 mutation、Detached、export、localized actionを接続する」であることを確認した。

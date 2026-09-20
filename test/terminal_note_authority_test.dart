@@ -1054,6 +1054,31 @@ Future<void> _testSurfaceSemanticMutationContract() async {
   );
 
   final TerminalNoteCardToken firstToken = projection.selectedToken!;
+  final int commitsBeforeCopy = store.commitCount;
+  final int projectionsBeforeCopy = surface.applied.length;
+  final TerminalNoteSurfaceIntentResult copied = await intent(
+    TerminalNoteSurfaceIntentKind.copy,
+    cardToken: firstToken,
+    body: 'alpha',
+  );
+  final TerminalNoteSurfaceIntentResult mismatchedCopy = await intent(
+    TerminalNoteSurfaceIntentKind.copy,
+    cardToken: firstToken,
+    body: 'different body',
+  );
+  _expect(
+    copied.disposition ==
+            TerminalNoteAuthorityMutationDisposition.runtimeApplied &&
+        identical(copied.projection, projection) &&
+        store.commitCount == commitsBeforeCopy &&
+        surface.applied.length == projectionsBeforeCopy &&
+        mismatchedCopy.disposition ==
+            TerminalNoteAuthorityMutationDisposition.rejected &&
+        mismatchedCopy.mutationFailure ==
+            TerminalNoteMutationFailure.invalidState &&
+        !copied.toString().contains('alpha'),
+    'copy validates the exact projected body without mutation or content result',
+  );
   final TerminalNoteSurfaceIntentResult editing = await intent(
     TerminalNoteSurfaceIntentKind.beginEdit,
     cardToken: firstToken,

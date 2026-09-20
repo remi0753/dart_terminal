@@ -21,6 +21,7 @@ typedef TerminalNoteStoreLocationResolver = TerminalNoteStoreLocation Function(
 );
 typedef TerminalNoteUtcMicrosClock = int Function();
 typedef TerminalNoteProductSurfaceEventHandler = void Function(PaneId paneId);
+typedef TerminalNoteBodyCopyEffect = bool Function(String body);
 
 enum TerminalNoteProductFocusTarget { rail, editor }
 
@@ -204,12 +205,14 @@ final class TerminalNoteProductSubsystem
     required TerminalNoteFeatureConfiguration configuration,
     required TerminalNoteNativeSurfaceChannelFactory surfaceFactory,
     required TerminalNoteUtcMicrosClock clock,
+    required TerminalNoteBodyCopyEffect copyEffect,
     required Iterable<PaneId> initialPaneIds,
     required TerminalNoteNativePresentationState presentation,
   }) : _authority = authority,
        _configuration = configuration,
        _surfaceFactory = surfaceFactory,
        _clock = clock,
+       _copyEffect = copyEffect,
        _presentation = _presentationWithFont(presentation, configuration) {
     for (final PaneId paneId in initialPaneIds) {
       _paneKinds[paneId] = TerminalNoteContextKind.standard;
@@ -225,6 +228,7 @@ final class TerminalNoteProductSubsystem
     required Iterable<PaneId> initialPaneIdsInTraversalOrder,
     required bool ensureQuickTerminalContext,
     required int updatedAtUtcMicros,
+    required TerminalNoteBodyCopyEffect copyEffect,
     TerminalNoteNativeCapabilityInitializer? initializeNativeCapability,
     TerminalNoteNativeSurfaceChannelFactory? surfaceFactory,
     TerminalNoteStoreLocationResolver? locationResolver,
@@ -310,6 +314,7 @@ final class TerminalNoteProductSubsystem
         configuration: configuration,
         surfaceFactory: surfaceFactory ?? _openNativeSurface,
         clock: clock ?? () => DateTime.now().toUtc().microsecondsSinceEpoch,
+        copyEffect: copyEffect,
         initialPaneIds: paneIds,
         presentation: presentation,
       ),
@@ -324,6 +329,7 @@ final class TerminalNoteProductSubsystem
   final TerminalNoteAuthority _authority;
   final TerminalNoteNativeSurfaceChannelFactory _surfaceFactory;
   final TerminalNoteUtcMicrosClock _clock;
+  final TerminalNoteBodyCopyEffect _copyEffect;
   final Map<PaneId, TerminalNoteContextKind> _paneKinds =
       <PaneId, TerminalNoteContextKind>{};
   final Map<PaneId, _TerminalNoteProductSurface> _surfaces =
@@ -844,7 +850,8 @@ final class TerminalNoteProductSubsystem
       TerminalNotesIntentKind.delete => TerminalNoteSurfaceIntentKind.delete,
       TerminalNotesIntentKind.reattach =>
         TerminalNoteSurfaceIntentKind.reattach,
-      TerminalNotesIntentKind.export || TerminalNotesIntentKind.copy => null,
+      TerminalNotesIntentKind.copy => TerminalNoteSurfaceIntentKind.copy,
+      TerminalNotesIntentKind.export => null,
     };
     if (authorityKind == null) {
       return _completeNativeIntent(
@@ -912,6 +919,28 @@ final class TerminalNoteProductSubsystem
         projectionGeneration: intent.projectionGeneration,
         topologyDisposition: TerminalNoteProductTopologyDisposition.unavailable,
       );
+    }
+    if (authorityKind == TerminalNoteSurfaceIntentKind.copy &&
+        authorityResult.isAccepted &&
+        authorityResult.projection != null) {
+      var copied = false;
+      try {
+        copied = _copyEffect(intent.body!);
+      } on Object {
+        copied = false;
+      }
+      if (!copied) {
+        return _completeNativeIntent(
+          paneId: paneId,
+          surface: surface,
+          intent: intent,
+          disposition: TerminalNotesResultDisposition.unavailable,
+          storeRevision: intent.expectedStoreRevision,
+          projectionGeneration: intent.projectionGeneration,
+          topologyDisposition:
+              TerminalNoteProductTopologyDisposition.unavailable,
+        );
+      }
     }
     final bool accepted =
         authorityResult.isAccepted && authorityResult.projection != null;
