@@ -92,6 +92,7 @@ import 'terminal_mouse_router_test.dart';
 import 'terminal_native_content_test.dart';
 import 'terminal_native_hierarchy_test.dart';
 import 'terminal_note_authority_test.dart';
+import 'terminal_note_composition_test.dart';
 import 'terminal_note_model_test.dart';
 import 'terminal_note_store_acceptance_test.dart';
 import 'terminal_note_store_codec_test.dart';
@@ -214,6 +215,7 @@ Future<void> main() async {
   await runTerminalNativeHierarchyTests();
   await runTerminalNativeContentTests();
   await runTerminalNoteAuthorityTests();
+  await runTerminalNoteCompositionTests();
   runTerminalNoteModelTests();
   await runTerminalNoteStoreAcceptanceTests();
   runTerminalNoteStoreCodecTests();

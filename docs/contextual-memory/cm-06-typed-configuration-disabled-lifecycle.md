@@ -1,7 +1,7 @@
 # CM-06 typed configuration and disabled lifecycle
 
 日付: 2026-09-21
-状態: 実装中
+状態: 完了
 
 ## 目的
 
@@ -176,3 +176,62 @@ Reloadではrestart境界とlive変更を混同せず、invalid candidateを従�
 - 次はこのlaunch-fixed `TerminalNoteFeatureConfiguration`を唯一のadmission入力にするcomposition rootを追加する。
   `notes=false` branchではfactory/location/store/context/surface/timerを評価せず、font observerも登録しない。
 - Enabled rootはCM-05 authorityをinjected factoryで所有し、shutdown/stopを一回だけ完了してから参照を破棄する。
+
+## 2026-09-21: 第3サブタスク完了
+
+### 現在地と設計確認
+
+- 着手前にROADMAPを再確認し、先頭未完了がCM-06第3サブタスクであること、対象がcomposition-root admission、
+  disabled/enabled/re-enabled lifecycle、C-01〜C-03とRelease AOT性能gateであることを確認した。
+- Product applicationへのNote action/pane wiringはCM-10以降であるため、本サブタスクでは起動時の唯一のadmission ownerを
+  product-owned boundaryとして完成させた。Store location、CM-05 authority、将来のnative surface/timerの具体生成はfactory injectionの
+  後ろへ置き、`notes=false` branchではfactory引数自体を評価しない。
+- 無効時のterminal inputは既存`TerminalKeyEventRouter`へNote分岐を追加しない。したがってC-01は、構造上factory 0であることと、
+  同一Release AOT processで既存key router→pane writeをbaseline/disabled交互測定することの両方で固定する。
+- `dart_appkit`は汎用libraryのまま維持し、Terminal固有option、Note capability、store location、composition ownerを一切追加しない。
+
+### 実装結果
+
+- `TerminalNoteCompositionRoot`を追加し、launch-fixed `TerminalNoteFeatureConfiguration`を唯一のadmission入力にした。
+  Disabled rootはruntimeを所有せず、factory、location解決、directory/store worker、context binding、surface、timerの生成経路へ到達しない。
+- Enabled rootはinjected `TerminalNoteSubsystemPort`を一つだけ所有する。Startup failureは固定capabilityへ縮退し、例外本文を保持・表示しない。
+  Shutdownはsingle-flightでruntimeを一回だけ停止し、所有参照とdebug live countを必ず解放する。
+- Live projectionはlaunch時の3 feature flagが一致する場合だけfont変更をruntimeへ渡す。Flag driftは`stale`、disabled/stopped/
+  unavailableは固定dispositionで拒否し、C-03のterminal grid、drawable、winsize、SIGWINCH経路へ接続しない。
+- Fake boundaryでfactory/location/store/context/surface/timer各0、disabled→enabled→disabled restart、shutdown一回性、font 12→24、
+  failure redactionを検証した。実filesystem/worker/authorityでもdisabled時directory 0、enabled時owner各1、shutdown後handle 0、
+  disabled restartでdurable bytes不変、re-enableで既存store再読込を確認した。
+- `terminal-note-disabled-input-benchmark`を追加した。既存key router→bounded pane writeを二つの同一harnessで実行し、片方だけ
+  disabled composition rootと同居させる。21 roundを交互順で測り、各経路1,050,000 event、factory 0、byte/checksum一致、
+  queue reject 0を要求し、median ratio 1.05以下と各p95 2 ms未満をRelease AOT hard gateにした。
+- 新sourceを監査対象へ反映し、release-candidate daily-use matrixのsource fingerprintだけを再生成した。
+
+### 失敗した試行と修正
+
+- 最初のfocused testは永続file名をテスト側で`current.json`と誤認して失敗した。CM-03の正本
+  `TerminalNoteStoreTransactionEngine.currentLeaf`（`store.json`）を参照するよう修正し、製品実装の名前を重複定義しないようにした。
+- Sandbox内の`dart analyze`、AOT target、generatorはDart SDKが`~/.dart-tool`のtelemetry session更新を試みて権限エラーになった。
+  Code failureではないことを確認し、`DART_SUPPRESS_ANALYTICS=true`と許可済み実行環境で同じcommandを再実行した。
+- 最初のaggregate testは新source hashによりdaily-use matrixのstaleを正しく検出した。Phase 7 acceptance、Ghostty gap inventory、
+  daily-use matrixの依存順でgeneratorを実行し、前二者は内容差分なし、daily-use matrixのsource fingerprintだけを更新した。
+
+### 検証結果
+
+- `dart format`（composition root、focused test、AOT benchmark、export/aggregate wiring）: format済み。
+- `dart analyze`: repository全体 issue 0。
+- `terminal_note_composition_test.dart`: C-01/C-03、fake lifecycle、real worker/store disabled→enabled→disabled→re-enabled、
+  shutdown single-flight、startup failure redactionをpass。
+- `make terminal-note-disabled-input-benchmark`: Release AOT pass。21 round、各経路1,050,000 event、factory call 0、
+  baseline p95 248 ns、disabled p95 266 ns、median ratio 0.999215（上限1.05）、integrity true。
+- `dart test/run_tests.dart`: pass。Note store acceptanceはcommit p95 133,288 us、primitive p95 15,511 us、
+  contention/recovery/privacyすべてpass。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: pass。367 filesのformat変更0、全analyze/test/native capability/
+  privacy/security/compatibility/release gate pass。Note store 20 runsはcommit p95 131,288 us、primitive p95 13,850 us。
+- `git diff --check`: pass。Composition/benchmark outputは固定capability/count/latencyだけで、Note body/ID/path/timeを出力しない。
+  隣接`dart_appkit`は着手前からの3変更ファイル以外に差分0で、本タスクからの変更0。
+
+### 後続への引き継ぎ
+
+- CM-07はこのcomposition rootへNote surfaceをまだ追加せず、既存terminal/Context Dock/system modal ownerを
+  `TerminalWindowInteractionAuthority`へ統合し、future Note ownerはtest doubleだけでexactly-one ownershipを固定する。
+- CM-10でproduct startupへ具体factoryを注入する際も、`notes=false` branchより前でstore locationやnative capabilityを解決してはならない。

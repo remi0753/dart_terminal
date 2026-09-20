@@ -123,6 +123,7 @@ override PRODUCT_PARSER_BENCHMARK_DIR := $(PROJECT_ROOT)/build/benchmarks
 override PRODUCT_PARSER_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_parser_benchmark
 override PRODUCT_DAMAGE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_damage_benchmark
 override PRODUCT_PERFORMANCE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/product_performance_benchmark
+override TERMINAL_NOTE_DISABLED_INPUT_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/terminal_note_disabled_input_benchmark
 override PRODUCT_PERFORMANCE_BASELINE := $(PROJECT_ROOT)/benchmark/baselines/product-micro-macos-arm64-m1.json
 override PRODUCT_PERFORMANCE_COMPARATOR_EVIDENCE := $(PROJECT_ROOT)/benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json
 override PRODUCT_RELATIVE_PERFORMANCE_EVIDENCE := $(PROJECT_ROOT)/benchmark/evidence/product-relative-performance-macos-arm64-m1.json
@@ -159,6 +160,7 @@ override PRODUCT_PERFORMANCE_AGGREGATE_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)
 	terminal-compatibility-regressions-check terminal-compatibility-regression-coverage terminal-compatibility-regression-coverage-check \
 	product-damage-benchmark-build product-damage-benchmark \
 	product-performance-benchmark-build product-performance-benchmark \
+	terminal-note-disabled-input-benchmark-build terminal-note-disabled-input-benchmark \
 	product-performance-comparator-check product-performance-regression-gate \
 	runtime-source-check runtime-architecture-check \
 	developer-jit-build developer-jit-run developer-jit-audit \
@@ -206,6 +208,7 @@ help:
 	@echo "  make product-parser-benchmark     Run the Release AOT 100 MiB/s parser gate"
 	@echo "  make product-damage-benchmark     Run the Release AOT 100,000-cell damage gate"
 	@echo "  make product-performance-benchmark  Run product microbenchmarks against the M1 baseline"
+	@echo "  make terminal-note-disabled-input-benchmark  Compare disabled Notes key-to-PTY with the Release AOT baseline"
 	@echo "  make product-performance-comparator-check  Validate pinned Ghostty relative evidence"
 	@echo "  make product-performance-regression-gate  Run the complete Release AOT performance gate"
 	@echo "  make compatibility-inventory      Regenerate sequence inventory and summary"
@@ -705,6 +708,15 @@ product-performance-benchmark-build: dependencies
 
 product-performance-benchmark: product-performance-benchmark-build
 	@$(PRODUCT_PERFORMANCE_BENCHMARK) --baseline=$(PRODUCT_PERFORMANCE_BASELINE)
+
+terminal-note-disabled-input-benchmark-build: dependencies
+	@mkdir -p $(PRODUCT_PARSER_BENCHMARK_DIR)
+	@cd $(PROJECT_ROOT) && $(DART) compile exe \
+		tool/terminal_note_disabled_input_benchmark.dart \
+		-o $(TERMINAL_NOTE_DISABLED_INPUT_BENCHMARK)
+
+terminal-note-disabled-input-benchmark: terminal-note-disabled-input-benchmark-build
+	@$(TERMINAL_NOTE_DISABLED_INPUT_BENCHMARK)
 
 product-performance-comparator-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run test/product_performance_comparator_test.dart
