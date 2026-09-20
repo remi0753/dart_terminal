@@ -317,6 +317,9 @@ typedef TerminalContextDockProcessPrivacyPolicy = bool Function(
   PaneId paneId,
   TerminalPaneProcessSnapshot process,
 );
+typedef TerminalContextDockDirectoryPrivacyPolicy = bool Function(
+  PaneId paneId,
+);
 typedef TerminalContextDockProcessTerminalFocus = bool Function(
   TerminalContextDockFocusRequest request,
 );
@@ -334,6 +337,7 @@ final class TerminalContextDockProcessController {
     required TerminalContextDockForegroundJobResolver resolveForegroundJob,
     TerminalContextDockWindowPresentationPolicy? canPresentWindow,
     TerminalContextDockProcessPrivacyPolicy? canObserveProcess,
+    TerminalContextDockDirectoryPrivacyPolicy? canObserveDirectory,
     TerminalContextDockProcessTerminalFocus? focusTerminal,
     TerminalContextDockScheduleTask? scheduleTask,
     int Function()? monotonicMicros,
@@ -342,6 +346,7 @@ final class TerminalContextDockProcessController {
        _resolveForegroundJob = resolveForegroundJob,
        _canPresentWindow = canPresentWindow ?? _alwaysPresentWindow,
        _canObserveProcess = canObserveProcess ?? _alwaysObserveProcess,
+       _canObserveDirectory = canObserveDirectory ?? _alwaysObserveDirectory,
        _focusTerminal = focusTerminal ?? _acceptTerminalFocus,
        _scheduleTask = scheduleTask ?? _scheduleTimerTask,
        _onChanged = onChanged {
@@ -357,6 +362,7 @@ final class TerminalContextDockProcessController {
   final TerminalContextDockForegroundJobResolver _resolveForegroundJob;
   final TerminalContextDockWindowPresentationPolicy _canPresentWindow;
   final TerminalContextDockProcessPrivacyPolicy _canObserveProcess;
+  final TerminalContextDockDirectoryPrivacyPolicy _canObserveDirectory;
   final TerminalContextDockProcessTerminalFocus _focusTerminal;
   final TerminalContextDockScheduleTask _scheduleTask;
   final void Function()? _onChanged;
@@ -377,9 +383,20 @@ final class TerminalContextDockProcessController {
 
   bool get isDisposed => _isDisposed;
   bool get argumentsVisible => _argumentsVisible;
+  bool get activeWindowShowsDirectoryDuringProcess {
+    if (_isDisposed) return false;
+    final TerminalWindowState? window = applicationState.activeWindow;
+    if (window == null) return false;
+    return _windows[window.id]?.directoryNavigatorOverride ?? false;
+  }
 
   List<TerminalActionRegistration> registrations() =>
       <TerminalActionRegistration>[
+        TerminalActionRegistration(
+          id: TerminalActionId.toggleContextDockContent,
+          isAvailable: _canToggleActiveWindowContent,
+          handler: toggleActiveWindowContent,
+        ),
         TerminalActionRegistration(
           id: TerminalActionId.toggleProcessArguments,
           isAvailable: () {
@@ -394,6 +411,37 @@ final class TerminalContextDockProcessController {
           handler: toggleArgumentsVisibility,
         ),
       ];
+
+  /// Toggles only the projected document for the current foreground job.
+  ///
+  /// Process observation remains active so returning to Process Inspector is
+  /// immediate. Directory observation retains its stricter privacy policy,
+  /// and this override is never carried to another job identity.
+  void toggleActiveWindowContent() {
+    if (_isDisposed) return;
+    final TerminalWindowState? window = applicationState.activeWindow;
+    if (window == null || window.role != TerminalWindowRole.standard) return;
+    final TerminalContextDockWindowSnapshot? dock = dockState.snapshotForWindow(
+      window.id,
+    );
+    final _TerminalContextDockProcessWindowState? state = _windows[window.id];
+    if (dock == null ||
+        !dock.isVisible ||
+        state == null ||
+        state.paneId != dock.targetPaneId ||
+        state.mode != TerminalContextDockContentMode.foregroundJob) {
+      return;
+    }
+    if (!state.directoryNavigatorOverride &&
+        !_safeCanObserveDirectory(state.paneId)) {
+      return;
+    }
+    state.directoryNavigatorOverride = !state.directoryNavigatorOverride;
+    if (!state.directoryNavigatorOverride) {
+      _returnInputToTerminal(dock);
+    }
+    _onChanged?.call();
+  }
 
   /// Application-lifetime display preference, unrelated to Secure Input.
   /// Hiding immediately drops retained argv. Revealing waits for the next
@@ -431,14 +479,19 @@ final class TerminalContextDockProcessController {
       );
       process = process.withElapsed(process.elapsedMicroseconds + advance);
     }
+    final bool showsDirectory =
+        state.directoryNavigatorOverride &&
+        state.mode == TerminalContextDockContentMode.foregroundJob;
     return TerminalContextDockContentSnapshot(
       windowId: state.windowId,
       paneId: state.paneId,
       sessionId: state.sessionId,
       generation: state.generation,
-      mode: state.mode,
-      directorySuspended: state.directorySuspended,
-      process: process,
+      mode: showsDirectory
+          ? TerminalContextDockContentMode.directoryNavigator
+          : state.mode,
+      directorySuspended: showsDirectory ? false : state.directorySuspended,
+      process: showsDirectory ? null : process,
       argumentsVisible: _argumentsVisible,
     );
   }
@@ -448,8 +501,11 @@ final class TerminalContextDockProcessController {
       _windows.values.any(
         (state) =>
             state.paneId == paneId &&
-            state.mode == TerminalContextDockContentMode.directoryNavigator &&
-            !state.directorySuspended,
+            _safeCanObserveDirectory(paneId) &&
+            ((state.mode == TerminalContextDockContentMode.directoryNavigator &&
+                    !state.directorySuspended) ||
+                (state.mode == TerminalContextDockContentMode.foregroundJob &&
+                    state.directoryNavigatorOverride)),
       );
 
   void scheduleSynchronize() {
@@ -562,11 +618,18 @@ final class TerminalContextDockProcessController {
         _returnInputToTerminal(dock);
         return changed;
       case TerminalPaneProcessDisposition.foregroundProcess:
+        var overrideChanged = false;
+        if (state.directoryNavigatorOverride &&
+            !_safeCanObserveDirectory(state.paneId)) {
+          state.directoryNavigatorOverride = false;
+          overrideChanged = true;
+        }
         final bool changed = _enterForeground(state, process);
-        if (state.mode == TerminalContextDockContentMode.foregroundJob) {
+        if (state.mode == TerminalContextDockContentMode.foregroundJob &&
+            !state.directoryNavigatorOverride) {
           _returnInputToTerminal(dock);
         }
-        return changed;
+        return changed || overrideChanged;
       case TerminalPaneProcessDisposition.nonLive:
       case TerminalPaneProcessDisposition.unavailable:
         throw StateError('unreachable process disposition');
@@ -894,6 +957,35 @@ final class TerminalContextDockProcessController {
     }
   }
 
+  bool _safeCanObserveDirectory(PaneId paneId) {
+    try {
+      return _canObserveDirectory(paneId);
+    } on Object {
+      return false;
+    }
+  }
+
+  bool _canToggleActiveWindowContent() {
+    if (_isDisposed || applicationState.isDisposed || dockState.isDisposed) {
+      return false;
+    }
+    final TerminalWindowState? window = applicationState.activeWindow;
+    if (window == null || window.role != TerminalWindowRole.standard) {
+      return false;
+    }
+    final TerminalContextDockWindowSnapshot? dock = dockState.snapshotForWindow(
+      window.id,
+    );
+    final _TerminalContextDockProcessWindowState? state = _windows[window.id];
+    return dock != null &&
+        dock.isVisible &&
+        state != null &&
+        state.paneId == dock.targetPaneId &&
+        state.mode == TerminalContextDockContentMode.foregroundJob &&
+        (state.directoryNavigatorOverride ||
+            _safeCanObserveDirectory(state.paneId));
+  }
+
   void _ensurePoll() {
     if (_isDisposed || _windows.isEmpty) {
       _cancelPoll();
@@ -950,7 +1042,8 @@ final class TerminalContextDockProcessController {
       ..candidateStartedMicros = null
       ..identity = null
       ..process = null
-      ..lastRichRequestMicros = null;
+      ..lastRichRequestMicros = null
+      ..directoryNavigatorOverride = false;
   }
 
   void _cancelDebounce() {
@@ -979,6 +1072,7 @@ final class TerminalContextDockProcessController {
   static bool _alwaysPresentWindow(TerminalWindowId _) => true;
   static bool _alwaysObserveProcess(PaneId _, TerminalPaneProcessSnapshot __) =>
       true;
+  static bool _alwaysObserveDirectory(PaneId _) => true;
   static bool _acceptTerminalFocus(TerminalContextDockFocusRequest _) => true;
   static TerminalContextDockScheduledTask _scheduleTimerTask(
     Duration delay,
@@ -1009,6 +1103,7 @@ final class _TerminalContextDockProcessWindowState {
   int? lastRichRequestMicros;
   int? shellCommandStartedMicros;
   _TerminalContextDockRichRequest? request;
+  bool directoryNavigatorOverride = false;
 }
 
 final class _TerminalContextDockRichRequest {

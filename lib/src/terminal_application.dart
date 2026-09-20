@@ -4626,6 +4626,7 @@ final class TerminalApplication {
                   nativeWindow.isFocused;
             },
             canObserveProcess: contextDockCanObserveProcess,
+            canObserveDirectory: contextDockCanObservePane,
             focusTerminal: (TerminalContextDockFocusRequest request) {
               final TerminalContextDockDirectoryPresenter? presenter =
                   contextDockPresenter;
@@ -5942,6 +5943,8 @@ final class TerminalApplication {
               createdSecureKeyboardEntry.manualRequested,
           TerminalActionId.toggleProcessArguments: () =>
               createdDockProcess.argumentsVisible,
+          TerminalActionId.toggleContextDockContent: () =>
+              createdDockProcess.activeWindowShowsDirectoryDuringProcess,
         },
         onNativeInvocation: (TerminalActionId id, MenuItemInvokedEvent event) {
           if (runUserActionAcceptance ||
@@ -8709,7 +8712,12 @@ final class TerminalApplication {
                     .actionForId(TerminalActionId.toggleHiddenFiles)!
                     .shortcut!
                     .identity ==
-                'shift+command+h',
+                'shift+command+h' &&
+            dispatcher.catalog
+                    .actionForId(TerminalActionId.toggleContextDockContent)!
+                    .shortcut!
+                    .identity ==
+                'shift+control+command+n',
         'Context Dock actions did not expose their default native shortcuts',
       );
       final TerminalPaneProcessSnapshot navigatorProcess = initialPane
@@ -9710,6 +9718,67 @@ final class TerminalApplication {
             (writeEnqueuedCounts[initialPaneId] ?? 0) ==
                 processShortcutWriteBaseline,
         'Process Inspector Navigator shortcut changed focus or wrote to the PTY',
+      );
+      final MenuItem contentItem = menu.itemForAction(
+        TerminalActionId.toggleContextDockContent,
+      );
+      menu.refresh();
+      _expectLifecycle(
+        contentItem.isEnabled && !contentItem.isChecked,
+        'Process Inspector did not expose the native Directory toggle',
+      );
+      contentItem.performAction();
+      await waitFor(() {
+        reconcile();
+        final TerminalContextDockContentSnapshot? content = contextDockProcess
+            .snapshotForWindow(initialWindow.id);
+        final String? document = contextDockPresenter
+            .nativeEditorSnapshotForWindow(initialWindow.id)
+            ?.text;
+        return content?.mode ==
+                TerminalContextDockContentMode.directoryNavigator &&
+            contextDockProcess.activeWindowShowsDirectoryDuringProcess &&
+            contentItem.isChecked &&
+            document?.contains('Directory Navigator') == true &&
+            !contextDockPresenter.nativeProcessUsesFullHeightForWindow(
+              initialWindow.id,
+            ) &&
+            contextDockPresenter
+                    .nativeDetailsTextForWindow(initialWindow.id)
+                    ?.contains('Path actions') ==
+                true;
+      }, 'native content toggle did not project Directory Navigator');
+      _expectLifecycle(
+        !contextDockState
+                .snapshotForWindow(initialWindow.id)!
+                .navigatorOwnsInput &&
+            contextDockWindow.keyEventRouting == KeyEventRouting.appKitOnly &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) ==
+                processShortcutWriteBaseline,
+        'Directory display toggle changed terminal input or wrote to the PTY',
+      );
+      contentItem.performAction();
+      await waitFor(() {
+        reconcile();
+        final TerminalContextDockContentSnapshot? content = contextDockProcess
+            .snapshotForWindow(initialWindow.id);
+        return content?.mode == TerminalContextDockContentMode.foregroundJob &&
+            isSamePipelineJob(content?.process) &&
+            !contextDockProcess.activeWindowShowsDirectoryDuringProcess &&
+            !contentItem.isChecked &&
+            processDocumentText()?.contains('Process Inspector') == true &&
+            contextDockPresenter.nativeProcessUsesFullHeightForWindow(
+              initialWindow.id,
+            );
+      }, 'second native content toggle did not restore Process Inspector');
+      _expectLifecycle(
+        !contextDockState
+                .snapshotForWindow(initialWindow.id)!
+                .navigatorOwnsInput &&
+            contextDockWindow.keyEventRouting == KeyEventRouting.appKitOnly &&
+            (writeEnqueuedCounts[initialPaneId] ?? 0) ==
+                processShortcutWriteBaseline,
+        'Process display restore changed terminal input or wrote to the PTY',
       );
       final int processFixtureHoldMilliseconds =
           processFixtureClock.elapsedMilliseconds;

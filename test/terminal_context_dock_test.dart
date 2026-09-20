@@ -538,6 +538,7 @@ Future<void> _testProcessCoordinatorRefreshPrivacyAndCancellation() async {
   var foregroundGroup = firstPane.value;
   var owningShellCommand = false;
   var privacyAllowed = true;
+  var directoryAllowed = true;
   var canPresent = true;
   var activeSession = firstSession;
   var focusCount = 0;
@@ -579,6 +580,7 @@ Future<void> _testProcessCoordinatorRefreshPrivacyAndCancellation() async {
         canObserveProcess: (_, process) =>
             privacyAllowed &&
             TerminalContextDockPrivacyPolicy.canObserveProcess(process),
+        canObserveDirectory: (_) => directoryAllowed,
         focusTerminal: (TerminalContextDockFocusRequest request) {
           focusCount++;
           return request.windowId == window.id &&
@@ -667,6 +669,60 @@ Future<void> _testProcessCoordinatorRefreshPrivacyAndCancellation() async {
         controller.activeOperationCount == 0,
     'matching rich result becomes one immutable ready projection',
   );
+  final TerminalActionRegistration contentToggle = controller
+      .registrations()
+      .singleWhere(
+        (TerminalActionRegistration registration) =>
+            registration.id == TerminalActionId.toggleContextDockContent,
+      );
+  final int focusBeforeDirectoryToggle = focusCount;
+  _expect(
+    contentToggle.isAvailable(),
+    'Process Inspector exposes the shared content toggle action',
+  );
+  contentToggle.handler();
+  content = controller.snapshotForWindow(window.id)!;
+  _expect(
+    controller.activeWindowShowsDirectoryDuringProcess &&
+        content.mode == TerminalContextDockContentMode.directoryNavigator &&
+        !content.directorySuspended &&
+        content.process == null &&
+        controller.canObserveDirectoryPane(firstPane) &&
+        focusCount == focusBeforeDirectoryToggle &&
+        !dock.snapshotForWindow(window.id)!.navigatorOwnsInput,
+    'manual toggle projects Directory Navigator without moving terminal input or discarding process observation',
+  );
+  final TerminalContextDockFocusRequest move = dock.requestNavigatorFocus(
+    window.id,
+    firstPane,
+    TerminalContextDockNavigatorMode.move,
+  );
+  _expect(
+    dock.confirmNavigatorInput(move),
+    'manual Directory projection can explicitly receive Navigator input',
+  );
+  contentToggle.handler();
+  content = controller.snapshotForWindow(window.id)!;
+  _expect(
+    !controller.activeWindowShowsDirectoryDuringProcess &&
+        content.mode == TerminalContextDockContentMode.foregroundJob &&
+        content.process?.members.length == 2 &&
+        focusCount == focusBeforeDirectoryToggle + 1 &&
+        !dock.snapshotForWindow(window.id)!.navigatorOwnsInput,
+    'second toggle restores the same Process Inspector and terminal input',
+  );
+  directoryAllowed = false;
+  _expect(
+    !contentToggle.isAvailable(),
+    'directory privacy veto disables switching away from Process Inspector',
+  );
+  contentToggle.handler();
+  _expect(
+    controller.snapshotForWindow(window.id)!.mode ==
+        TerminalContextDockContentMode.foregroundJob,
+    'unavailable content toggle cannot bypass directory privacy',
+  );
+  directoryAllowed = true;
 
   scheduler.elapse(const Duration(milliseconds: 500));
   _expect(
@@ -706,10 +762,30 @@ Future<void> _testProcessCoordinatorRefreshPrivacyAndCancellation() async {
     richRequests.length == 3 && controller.activeOperationCount == 1,
     'only one refresh request may be in flight for a window',
   );
+  contentToggle.handler();
+  _expect(
+    controller.activeWindowShowsDirectoryDuringProcess,
+    'Directory override can be active while a bounded process refresh is in flight',
+  );
+  directoryAllowed = false;
+  controller.synchronize();
+  _expect(
+    !controller.activeWindowShowsDirectoryDuringProcess &&
+        controller.snapshotForWindow(window.id)!.mode ==
+            TerminalContextDockContentMode.foregroundJob,
+    'directory privacy loss revokes an active display override',
+  );
+  directoryAllowed = true;
+  contentToggle.handler();
+  _expect(
+    controller.activeWindowShowsDirectoryDuringProcess,
+    'Directory override can be reacquired after privacy recovery',
+  );
   foregroundGroup = firstPane.value + 20;
   controller.synchronize();
   _expect(
     controller.activeOperationCount == 0 &&
+        !controller.activeWindowShowsDirectoryDuringProcess &&
         controller.snapshotForWindow(window.id)!.directorySuspended &&
         controller.snapshotForWindow(window.id)!.process == null,
     'PGID replacement cancels and clears the prior content generation',

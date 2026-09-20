@@ -148,6 +148,7 @@ void _testStableStandardCatalog() {
             .join(',') ==
         <TerminalActionId>[
           TerminalActionId.toggleContextDock,
+          TerminalActionId.toggleContextDockContent,
           TerminalActionId.refreshDirectoryNavigator,
           TerminalActionId.toggleHiddenFiles,
           TerminalActionId.moveContextDockBoundaryLeft,
@@ -210,6 +211,14 @@ void _testStableStandardCatalog() {
                 .identity ==
             'shift+option+c' &&
         catalog
+                .actionForId(TerminalActionId.toggleContextDockContent)!
+                .shortcut!
+                .identity ==
+            'shift+control+command+n' &&
+        !catalog
+            .actionForId(TerminalActionId.toggleContextDockContent)!
+            .restoresTerminalFocusAfterInvocation &&
+        catalog
                 .actionForId(TerminalActionId.refreshDirectoryNavigator)!
                 .shortcut ==
             null &&
@@ -227,7 +236,11 @@ void _testStableStandardCatalog() {
         TerminalActionCatalog.standard(
               localization: TerminalLocalization.japanese,
             ).actionForId(TerminalActionId.refreshDirectoryNavigator)!.title ==
-            'ディレクトリナビゲータを更新',
+            'ディレクトリナビゲータを更新' &&
+        TerminalActionCatalog.standard(
+              localization: TerminalLocalization.japanese,
+            ).actionForId(TerminalActionId.toggleContextDockContent)!.title ==
+            'ディレクトリナビゲータ／プロセスインスペクタを切り替え',
     'Context Dock actions own reviewed focus and distinct shortcuts',
   );
   _expect(
@@ -592,6 +605,11 @@ void _testSearchOrderingAndBounds() {
     dispatcher.search('search files folders find').first.definition.id ==
         TerminalActionId.searchFilesAndFolders,
     'file and folder search is discoverable through the shared palette',
+  );
+  _expect(
+    dispatcher.search('process inspector switch').first.definition.id ==
+        TerminalActionId.toggleContextDockContent,
+    'Context Dock content switching is discoverable through the shared palette',
   );
   _expect(
     dispatcher.search('go to file folder jump').first.definition.id ==

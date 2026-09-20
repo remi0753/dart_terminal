@@ -44,6 +44,8 @@ architecture、Developer JIT／Release AOT、pass/failとcontent-freeな失敗�
   Control-Dで終了するとDirectory Navigatorへ戻る。
 - [ ] Process Inspector表示中のShift-Command-F、Shift-Command-G、Shift-Command-Mはbeepせず、query caretを出さず、
   terminalへ文字やescape sequenceを送らない。command終了後は同じshortcutでNavigatorへ移れる。
+- [ ] foreground job実行中にControl-Shift-Command-Nを押すとterminal inputを維持したままDirectory Navigatorへ
+  切り替わり、同じキーで同一jobのProcess Inspectorへ戻る。job終了後と次のjobでは自動表示policyへ戻る。
 - [ ] Option-Shift-CはProcess Inspector表示中もDockだけを開閉し、foreground commandを停止・変更しない。
 - [ ] View > Show Process Arguments（日本語: プロセスの引数を表示）のcheckを外すとargvだけが非表示となり、
   process名、実行ファイル、PID／PGID、経過時間は維持される。Shift-Command-Pから同じactionを検索し、

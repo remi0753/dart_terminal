@@ -39,6 +39,7 @@ enum TerminalActionMessageId {
   togglePaneZoom,
   equalizeSplits,
   toggleContextDock,
+  toggleContextDockContent,
   refreshDirectoryNavigator,
   moveContextDockBoundaryLeft,
   moveContextDockBoundaryRight,
@@ -790,6 +791,10 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _englishActions =
           'Toggle Context Dock',
           <String>['show', 'hide', 'sidebar', 'navigator'],
         ),
+        TerminalActionMessageId.toggleContextDockContent: _action(
+          'Toggle Directory Navigator / Process Inspector',
+          <String>['directory', 'navigator', 'process', 'inspector', 'switch'],
+        ),
         TerminalActionMessageId.refreshDirectoryNavigator: _action(
           'Refresh Directory Navigator',
           <String>['refresh', 'reload', 'files', 'folders'],
@@ -988,6 +993,10 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _japaneseActions =
       TerminalActionMessageId.toggleContextDock: _action(
         'コンテキストDockの表示を切り替え',
         <String>['表示', '非表示', 'サイドバー', 'ナビゲータ'],
+      ),
+      TerminalActionMessageId.toggleContextDockContent: _action(
+        'ディレクトリナビゲータ／プロセスインスペクタを切り替え',
+        <String>['ディレクトリ', 'ナビゲータ', 'プロセス', 'インスペクタ', '切り替え'],
       ),
       TerminalActionMessageId.refreshDirectoryNavigator: _action(
         'ディレクトリナビゲータを更新',
