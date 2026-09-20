@@ -218,6 +218,27 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
           first.projections.last.bodyFontMilliPoints == 24000,
       'direct injection cannot mutate launch-fixed Note flags',
     );
+    _expect(
+      subsystem.prepareSurfaceForHostTeardown(const PaneId(1)) &&
+          subsystem.nativeSurfaceCount == 0 &&
+          first.projections.last.visibility ==
+              TerminalNotesVisibility.collapsed,
+      'host teardown preparation detaches native composition synchronously',
+    );
+    final TerminalNoteProductTopologyResult preparedReattach = await subsystem
+        .updateSurface(
+          paneId: const PaneId(1),
+          configuration: _surfaceConfiguration(
+            handle: 14,
+            visibility: TerminalNoteSurfaceVisibility.expanded,
+            foreground: true,
+            occluded: false,
+          ),
+        );
+    _expect(
+      preparedReattach.isAccepted && subsystem.nativeSurfaceCount == 1,
+      'a prepared live surface can attach to a replacement host',
+    );
 
     initialAttachments.add(TerminalNotesAttachDisposition.rendererUnavailable);
     final TerminalNoteProductTopologyResult failedSurface = await subsystem

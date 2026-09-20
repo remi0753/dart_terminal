@@ -68,6 +68,7 @@ final class TerminalNoteProductSurfaceConfiguration {
     required this.foreground,
     required this.occluded,
     this.requestedRailWidth = 0,
+    this.presentation,
   }) {
     final int handle = rendererIdentity.handle;
     final int generation = rendererIdentity.generation;
@@ -99,6 +100,49 @@ final class TerminalNoteProductSurfaceConfiguration {
   final TerminalNoteSurfaceVisibility visibility;
   final bool foreground;
   final bool occluded;
+  final TerminalNoteNativePresentationState? presentation;
+}
+
+/// Product topology operations consumed by the application composition layer.
+///
+/// Keeping this port in dart_terminal lets deterministic tests inject a fake
+/// runtime without teaching generic AppKit code about Notes.
+abstract interface class TerminalNoteProductTopologyPort
+    implements TerminalNoteSubsystemPort {
+  bool get isStopped;
+  int get livePaneCount;
+  int get liveSurfaceCount;
+  int get nativeSurfaceCount;
+
+  bool hasPane(PaneId paneId);
+
+  int? surfaceGenerationForPane(PaneId paneId);
+
+  Future<TerminalNoteProductTopologyResult> bindPane({
+    required PaneId paneId,
+    TerminalNoteContextKind kind = TerminalNoteContextKind.standard,
+  });
+
+  Future<TerminalNoteProductTopologyResult> closePane({
+    required PaneId paneId,
+    required int updatedAtUtcMicros,
+  });
+
+  Future<TerminalNoteProductTopologyResult> attachSurface({
+    required PaneId paneId,
+    required TerminalNoteProductSurfaceConfiguration configuration,
+  });
+
+  Future<TerminalNoteProductTopologyResult> updateSurface({
+    required PaneId paneId,
+    required TerminalNoteProductSurfaceConfiguration configuration,
+  });
+
+  Future<TerminalNoteProductTopologyResult> detachSurface(PaneId paneId);
+
+  bool prepareSurfaceForHostTeardown(PaneId paneId);
+
+  void updatePresentation(TerminalNoteNativePresentationState presentation);
 }
 
 /// Production owner of the durable Note authority and pane-local native
@@ -108,7 +152,8 @@ final class TerminalNoteProductSurfaceConfiguration {
 /// authority startup happen once, while native surfaces remain lazy until a
 /// concrete pane renderer is attached. All topology changes are serialized so
 /// authority sequence, native host, and adapter ownership cannot diverge.
-final class TerminalNoteProductSubsystem implements TerminalNoteSubsystemPort {
+final class TerminalNoteProductSubsystem
+    implements TerminalNoteProductTopologyPort {
   TerminalNoteProductSubsystem._({
     required TerminalNoteAuthority authority,
     required TerminalNoteFeatureConfiguration configuration,
@@ -268,6 +313,7 @@ final class TerminalNoteProductSubsystem implements TerminalNoteSubsystemPort {
     _applyPresentationToLiveSurfaces();
   }
 
+  @override
   void updatePresentation(TerminalNoteNativePresentationState presentation) {
     _requireRunning();
     _presentation = _presentationWithFont(presentation, _configuration);
@@ -341,6 +387,34 @@ final class TerminalNoteProductSubsystem implements TerminalNoteSubsystemPort {
       _serialize(() => _detachSurface(paneId));
 
   @override
+  bool prepareSurfaceForHostTeardown(PaneId paneId) {
+    final _TerminalNoteProductSurface? surface = _surfaces[paneId];
+    if (surface == null || !surface.hostAttached) return true;
+    try {
+      surface.adapter.detachFromHost();
+      surface.hostAttached = false;
+      final TerminalNoteSurfaceResult result = _authority.updateSurface(
+        sequence: _authority.nextSequence(),
+        paneId: paneId,
+        surfaceGeneration: surface.surfaceGeneration,
+        visibility: TerminalNoteSurfaceVisibility.collapsed,
+        foreground: false,
+        occluded: true,
+      );
+      if (result.disposition == TerminalNoteSurfaceDisposition.applied) {
+        return true;
+      }
+    } on Object {
+      // Synchronous native destruction below is the final host-safety fence.
+    }
+    _surfaces.remove(paneId);
+    surface
+      ..hostAttached = false
+      ..adapter.disposeSynchronously();
+    return false;
+  }
+
+  @override
   Future<void> shutdown() {
     final Future<void>? existing = _shutdownFuture;
     if (existing != null) return existing;
@@ -367,7 +441,10 @@ final class TerminalNoteProductSubsystem implements TerminalNoteSubsystemPort {
     try {
       adapter = TerminalNoteNativeSurfaceAdapter(
         channel: _surfaceFactory(),
-        presentation: _presentation,
+        presentation: _presentationWithFont(
+          configuration.presentation ?? _presentation,
+          _configuration,
+        ),
       );
     } on Object {
       return const TerminalNoteProductTopologyResult(
@@ -483,7 +560,12 @@ final class TerminalNoteProductSubsystem implements TerminalNoteSubsystemPort {
     }
     try {
       surface.adapter
-        ..updatePresentation(_presentation)
+        ..updatePresentation(
+          _presentationWithFont(
+            configuration.presentation ?? _presentation,
+            _configuration,
+          ),
+        )
         ..updateLayout(
           paneWidth: configuration.paneWidth,
           paneHeight: configuration.paneHeight,
@@ -595,7 +677,12 @@ final class TerminalNoteProductSubsystem implements TerminalNoteSubsystemPort {
     for (final MapEntry<PaneId, _TerminalNoteProductSurface> entry
         in _surfaces.entries) {
       final _TerminalNoteProductSurface surface = entry.value;
-      surface.adapter.updatePresentation(_presentation);
+      surface.adapter.updatePresentation(
+        _presentationWithFont(
+          surface.configuration.presentation ?? _presentation,
+          _configuration,
+        ),
+      );
       final TerminalNoteProductSurfaceConfiguration configuration =
           surface.configuration;
       final TerminalNoteSurfaceResult result = _authority.updateSurface(

@@ -110,10 +110,10 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
   （[`cm-10-s1-basic-memory-product-integration.md`](docs/contextual-memory/cm-10-s1-basic-memory-product-integration.md)
   を参照して実施する）
   - [x] native capability manifestとproduct Note subsystem adapterを実装する
-  - [ ] application compositionとpane/Quick Terminal surface lifecycleを接続する
+  - [x] application compositionとpane/Quick Terminal surface lifecycleを接続する
     - [x] product-owned native-to-native Note overlay composition seamを実装する
     - [x] production Note subsystemのauthority/topology lifecycleを実装する
-    - [ ] application composition、interaction、live font、disabled lifecycleを接続する
+    - [x] application composition、interaction、live font、disabled lifecycleを接続する
   - [ ] S1 mutation、Detached、export、localized actionを接続する
   - [ ] restart、fault、close/quit、両runtime product acceptanceを完了する
 - [ ] CM-11 S2 On Returnをproductへ統合する

@@ -4,6 +4,11 @@ import 'terminal_application_state.dart';
 import 'terminal_pane.dart';
 
 typedef TerminalPanePreRemovalCallback = FutureOr<void> Function(PaneId paneId);
+typedef TerminalPaneRemovalAdmission = bool Function(PaneId paneId);
+typedef TerminalWindowRemovalAdmission = bool Function(
+  TerminalWindowId windowId,
+);
+typedef TerminalApplicationQuitAdmission = bool Function();
 
 enum TerminalPaneCloseDisposition {
   confirmationRequired,
@@ -166,15 +171,24 @@ final class TerminalPaneCloseCoordinator {
   TerminalPaneCloseCoordinator({
     required TerminalApplicationState state,
     TerminalPanePreRemovalCallback? onBeforePaneRemoved,
+    TerminalPaneRemovalAdmission? canRemovePane,
+    TerminalWindowRemovalAdmission? canRemoveWindow,
+    TerminalApplicationQuitAdmission? canBeginApplicationQuit,
     void Function()? onHierarchyChanged,
   }) : _state = state,
        _onBeforePaneRemoved = onBeforePaneRemoved,
+       _canRemovePane = canRemovePane,
+       _canRemoveWindow = canRemoveWindow,
+       _canBeginApplicationQuit = canBeginApplicationQuit,
        _onHierarchyChanged = onHierarchyChanged;
 
   static const int maximumOperationId = 0x7fffffffffffffff;
 
   final TerminalApplicationState _state;
   final TerminalPanePreRemovalCallback? _onBeforePaneRemoved;
+  final TerminalPaneRemovalAdmission? _canRemovePane;
+  final TerminalWindowRemovalAdmission? _canRemoveWindow;
+  final TerminalApplicationQuitAdmission? _canBeginApplicationQuit;
   final void Function()? _onHierarchyChanged;
 
   TerminalPaneCloseConfirmation? _pendingConfirmation;
@@ -207,6 +221,11 @@ final class TerminalPaneCloseCoordinator {
         _cancelWindowPending();
       return const TerminalWindowCloseResult(
         TerminalWindowCloseDisposition.noTarget,
+      );
+    }
+    if (!(_canRemoveWindow?.call(windowId) ?? true)) {
+      return const TerminalWindowCloseResult(
+        TerminalWindowCloseDisposition.busy,
       );
     }
     final List<_WindowClosePaneSnapshot> panes = _captureWindow(windowId);
@@ -325,6 +344,7 @@ final class TerminalPaneCloseCoordinator {
         _state.mutationInProgress) {
       return false;
     }
+    if (!(_canBeginApplicationQuit?.call() ?? true)) return false;
     _cancelPending();
     _applicationQuitInProgress = true;
     return true;
@@ -345,6 +365,9 @@ final class TerminalPaneCloseCoordinator {
     if (targetId == null) {
       _cancelPending();
       return const TerminalPaneCloseResult.noTarget();
+    }
+    if (!(_canRemovePane?.call(targetId) ?? true)) {
+      return const TerminalPaneCloseResult.busy();
     }
 
     _cancelWindowPending();
@@ -397,6 +420,9 @@ final class TerminalPaneCloseCoordinator {
     if (!_isCurrent(confirmation)) {
       _pendingConfirmation = null;
       return const TerminalPaneCloseResult.stale();
+    }
+    if (!(_canRemovePane?.call(confirmation.paneId) ?? true)) {
+      return const TerminalPaneCloseResult.busy();
     }
     _pendingConfirmation = null;
     return _remove(confirmation.paneId);

@@ -208,7 +208,13 @@ final class TerminalNoteNativeSurfaceAdapter
   }
 
   @override
-  Future<void> dispose() async {
+  Future<void> dispose() async => disposeSynchronously();
+
+  /// Releases the native child before its renderer host view is destroyed.
+  ///
+  /// Authority teardown may await this adapter later; repeated disposal is
+  /// therefore intentionally a no-op.
+  void disposeSynchronously() {
     if (_disposed) return;
     _disposed = true;
     _lastAuthorityProjection = null;

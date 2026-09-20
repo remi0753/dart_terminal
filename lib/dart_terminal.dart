@@ -224,6 +224,7 @@ export 'src/terminal_localization.dart';
 export 'src/terminal_memory_pressure.dart';
 export 'src/terminal_native_content.dart';
 export 'src/terminal_native_hierarchy.dart';
+export 'src/terminal_note_application_coordinator.dart';
 export 'src/terminal_note_authority.dart';
 export 'src/terminal_note_composition.dart';
 export 'src/terminal_note_context_restoration.dart';

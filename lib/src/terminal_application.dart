@@ -11,6 +11,8 @@ import 'package:dart_pty_macos/dart_pty_macos.dart';
 import 'package:dart_terminal_app_intents_macos/dart_terminal_app_intents_macos.dart';
 import 'package:dart_terminal_app_intents_macos/testing.dart'
     as app_intents_testing;
+import 'package:dart_terminal_notes_macos/dart_terminal_notes_macos.dart'
+    show TerminalNotesLocale;
 import 'package:dart_terminal_renderer_macos/dart_terminal_renderer_macos.dart';
 
 import 'runtime_lifecycle.dart';
@@ -67,6 +69,11 @@ import 'terminal_localization.dart';
 import 'terminal_memory_pressure.dart';
 import 'terminal_native_content.dart';
 import 'terminal_native_hierarchy.dart';
+import 'terminal_note_application_coordinator.dart';
+import 'terminal_note_model.dart';
+import 'terminal_note_native_adapter.dart';
+import 'terminal_note_product_subsystem.dart';
+import 'terminal_note_projection.dart';
 import 'terminal_notification_product.dart';
 import 'terminal_osc52_confirmation.dart';
 import 'terminal_osc52_projection.dart';
@@ -2834,8 +2841,13 @@ final class TerminalApplication {
     windowSubscriptions = <TerminalTabId, StreamSubscription<WindowEvent>>{};
     final TerminalPaneWorkScheduler paneWorkScheduler =
         TerminalPaneWorkScheduler();
+    TerminalNoteConfigurationObserver? noteConfigurationObserver;
     final TerminalProductConfigurationAuthority configurationAuthority =
-        TerminalProductConfigurationAuthority(productConfiguration);
+        TerminalProductConfigurationAuthority(
+          productConfiguration,
+          onNoteConfigurationChanged: (configuration) =>
+              noteConfigurationObserver?.call(configuration),
+        );
     final TerminalTabPresentationResolver presentationResolver =
         TerminalTabPresentationResolver(
           metadataForPane: (PaneId paneId) =>
@@ -2864,6 +2876,7 @@ final class TerminalApplication {
     TerminalWindowInteractionAuthority? windowInteractionAuthority;
     TerminalWindowInteractionRouter? windowInteractionRouter;
     TerminalWindowSystemSurfaceCoordinator? windowSystemSurfaceCoordinator;
+    TerminalNoteApplicationCoordinator? noteApplicationCoordinator;
     final Object commandPaletteSystemSurface = Object();
     final Object settingsSystemSurface = Object();
     final Object diagnosticsSystemSurface = Object();
@@ -2905,6 +2918,7 @@ final class TerminalApplication {
     void Function(PaneId paneId, TerminalNativeContentCell cell)?
     quickLookRequest;
     void Function(PaneId paneId)? nativeContentReconcileRequest;
+    void Function(PaneId paneId)? noteSurfaceReconcileRequest;
     void Function()? reconcileRequest;
     void Function()? secureReconcileRequest;
     RuntimeLifecycleCoordinator? lifecycle;
@@ -3154,6 +3168,7 @@ final class TerminalApplication {
                       sessions[id.paneId]?.projectColorScheme(
                         _terminalColorScheme(brightness),
                       );
+                      noteSurfaceReconcileRequest?.call(id.paneId);
                     },
                   );
               final TerminalSession session = TerminalSession(
@@ -3253,6 +3268,127 @@ final class TerminalApplication {
         },
       );
     }
+
+    List<TerminalNoteApplicationPaneBinding> notePaneBindings() =>
+        <TerminalNoteApplicationPaneBinding>[
+          for (final TerminalWindowState window in state.windows)
+            for (final TerminalTabState tab in window.tabs)
+              for (final PaneId paneId in tab.paneIds)
+                TerminalNoteApplicationPaneBinding(
+                  paneId: paneId,
+                  windowId: window.id,
+                  kind: window.role == TerminalWindowRole.quickTerminal
+                      ? TerminalNoteContextKind.quickTerminal
+                      : TerminalNoteContextKind.standard,
+                ),
+        ];
+
+    TerminalNoteNativePresentationState notePresentationForPane(PaneId paneId) {
+      final TerminalAccessibilityPresentation accessibility =
+          applicationAccessibilityProjection?.presentation ??
+          const TerminalAccessibilityPresentation.standard();
+      final TerminalThemeBrightness systemAppearance =
+          applicationThemeProjection?.systemAppearance ??
+          TerminalThemeBrightness.dark;
+      final TerminalProductConfiguration configuration =
+          paneConfigurations[paneId] ??
+          configurationAuthority.newSessionConfiguration;
+      final _TerminalHierarchyProductPane? owner = owners[paneId];
+      return TerminalNoteNativePresentationState(
+        darkAppearance:
+            configuration.resolveThemeBrightness(systemAppearance) ==
+            TerminalThemeBrightness.dark,
+        increaseContrast: accessibility.increaseContrast,
+        differentiateWithoutColor: accessibility.differentiateWithoutColor,
+        reduceMotion: accessibility.reduceMotion,
+        systemBadgeVisible: owner?.hasSystemBadge ?? false,
+        locale: localization.language == TerminalLanguage.japanese
+            ? TerminalNotesLocale.japanese
+            : TerminalNotesLocale.english,
+        bodyFontMilliPoints:
+            (configurationAuthority.noteConfiguration.fontSize * 1000).round(),
+      );
+    }
+
+    void synchronizeNoteSurface(PaneId paneId) {
+      final TerminalNoteApplicationCoordinator? coordinator =
+          noteApplicationCoordinator;
+      final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
+      final TerminalWindowInteractionAuthority? interactionAuthority =
+          windowInteractionAuthority;
+      final TerminalWindowInteractionRouter? interactionRouter =
+          windowInteractionRouter;
+      final _TerminalHierarchyProductPane? owner = owners[paneId];
+      final TerminalPaneLocation? location = state.locationForPane(paneId);
+      final TerminalPaneLayoutRect? layout = owner?.layout;
+      if (coordinator == null ||
+          !coordinator.ownsRuntime ||
+          nativeHierarchy == null ||
+          nativeHierarchy.isDisposed ||
+          interactionAuthority == null ||
+          interactionRouter == null ||
+          interactionRouter.isDisposed ||
+          owner == null ||
+          owner.surface.isDisposed ||
+          layout == null ||
+          location == null ||
+          layout.width <= 0 ||
+          layout.height <= 0) {
+        return;
+      }
+      final Window? window = nativeHierarchy.windowForTab(location.tabId);
+      if (window == null || window.isDisposed || window.isClosed) return;
+      final TerminalWindowState? activeWindow = state.activeWindow;
+      final bool foreground =
+          application.isActive &&
+          window.isVisible &&
+          window.isFocused &&
+          activeWindow?.id == location.windowId &&
+          activeWindow?.selectedTabId == location.tabId &&
+          activeWindow?.selectedTab.focusedPaneId == paneId;
+      final TerminalNoteProductSurfaceConfiguration surfaceConfiguration =
+          TerminalNoteProductSurfaceConfiguration(
+            rendererIdentity: owner.surface.compositionIdentity,
+            paneWidth: layout.width,
+            paneHeight: layout.height,
+            backingScale: owner.backingScaleFactor,
+            requestedRailWidth: 320,
+            visibility: TerminalNoteSurfaceVisibility.collapsed,
+            foreground: foreground,
+            occluded:
+                !owner.isVisible || !window.isVisible || window.isOccluded,
+            presentation: notePresentationForPane(paneId),
+          );
+      unawaited(
+        coordinator
+            .synchronizeSurface(
+              paneId: paneId,
+              windowId: location.windowId,
+              configuration: surfaceConfiguration,
+              interactionAuthority: interactionAuthority,
+              interactionRouter: interactionRouter,
+              focusTerminal: () {
+                final TerminalNativePaneResources? resources = nativeHierarchy
+                    .resourcesForPane(paneId);
+                final Window? currentWindow = nativeHierarchy.windowForTab(
+                  location.tabId,
+                );
+                if (resources == null ||
+                    resources.isDisposed ||
+                    currentWindow == null ||
+                    currentWindow.isDisposed ||
+                    currentWindow.isClosed) {
+                  return false;
+                }
+                currentWindow.makeFirstResponder(resources.view);
+                return true;
+              },
+            )
+            .then<void>((_) {}, onError: recordAsynchronousError),
+      );
+    }
+
+    noteSurfaceReconcileRequest = synchronizeNoteSurface;
 
     TerminalNativePaneResources createResources(TerminalPane pane) {
       if (runUserActionAcceptance) {
@@ -3414,6 +3550,7 @@ final class TerminalApplication {
         textRouter: textRouter,
         horizontalPadding: paneConfiguration.windowPaddingHorizontal,
         verticalPadding: paneConfiguration.windowPaddingVertical,
+        onPresentationChanged: () => noteSurfaceReconcileRequest?.call(pane.id),
         onTextInputError: recordAsynchronousError,
       );
       owners[pane.id] = owner;
@@ -3585,6 +3722,7 @@ final class TerminalApplication {
         onLayout: owner.applyLayout,
         onBackingScale: owner.updateBackingScale,
         onDisposeAdapters: () {
+          noteApplicationCoordinator?.preparePaneForViewTeardown(pane.id);
           secureReconcileRequest?.call();
           applicationThemeProjection?.removePane(pane.id);
           selections.remove(pane.id)?.dispose();
@@ -4014,6 +4152,7 @@ final class TerminalApplication {
         final TerminalLiveMetalSurface surface = entry.value.surface;
         if (!surface.isDisposed) {
           surface.updatePaneActive(entry.key == activePaneId);
+          noteSurfaceReconcileRequest?.call(entry.key);
         }
       }
     }
@@ -4023,6 +4162,15 @@ final class TerminalApplication {
       if (nativeHierarchy == null || nativeHierarchy.isDisposed) return;
       if (hierarchyReconciliationInProgress) return;
       reconcileSecureKeyboardEntry();
+      final TerminalNoteApplicationCoordinator? notes =
+          noteApplicationCoordinator;
+      if (notes != null) {
+        unawaited(
+          notes
+              .synchronizeTopology(notePaneBindings())
+              .then<void>((_) {}, onError: recordAsynchronousError),
+        );
+      }
       hierarchyReconciliationInProgress = true;
       try {
         contextDockState?.synchronize(state);
@@ -4149,6 +4297,7 @@ final class TerminalApplication {
         case WindowOcclusionChangedEvent(:final isOccluded):
           for (final PaneId paneId in tab.paneIds) {
             owners[paneId]?.surface.updateWindowState(isOccluded: isOccluded);
+            noteSurfaceReconcileRequest?.call(paneId);
           }
         case WindowBackingScaleChangedEvent(:final backingScaleFactor):
           cancelHyperlinkInteraction(tab);
@@ -4473,6 +4622,19 @@ final class TerminalApplication {
       )) {
         await owner.cancelTextInput();
       }
+      noteConfigurationObserver = null;
+      noteSurfaceReconcileRequest = null;
+      final TerminalNoteApplicationCoordinator? notes =
+          noteApplicationCoordinator;
+      noteApplicationCoordinator = null;
+      if (notes != null) {
+        try {
+          await notes.shutdown();
+        } on Object catch (error, stackTrace) {
+          disposalError ??= error;
+          disposalStackTrace ??= stackTrace;
+        }
+      }
       final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
       if (nativeHierarchy != null && !nativeHierarchy.isDisposed) {
         nativeHierarchy.dispose();
@@ -4733,6 +4895,7 @@ final class TerminalApplication {
                   in owners.values.toList(growable: false)) {
                 if (!owner.surface.isDisposed) {
                   owner.surface.updateAccessibilityPresentation(presentation);
+                  noteSurfaceReconcileRequest?.call(owner.pane.id);
                 }
               }
             },
@@ -4805,6 +4968,23 @@ final class TerminalApplication {
       windowSystemSurfaceCoordinator = TerminalWindowSystemSurfaceCoordinator(
         createdInteractionAuthority,
       );
+      final TerminalNoteApplicationCoordinator createdNoteCoordinator =
+          await TerminalNoteApplicationCoordinator.startProduction(
+            launchConfiguration: configurationAuthority.noteConfiguration,
+            environment: Platform.environment,
+            authorityGeneration: createdLifecycle.generation,
+            restoration: null,
+            initialBindings: <TerminalNoteApplicationPaneBinding>[
+              TerminalNoteApplicationPaneBinding(
+                paneId: initialPane.id,
+                windowId: initialWindow.id,
+              ),
+            ],
+            ensureQuickTerminalContext: true,
+            presentation: notePresentationForPane(initialPane.id),
+          );
+      noteApplicationCoordinator = createdNoteCoordinator;
+      noteConfigurationObserver = createdNoteCoordinator.applyLiveConfiguration;
 
       final TerminalContextDockState createdContextDockState =
           TerminalContextDockState(
@@ -5216,21 +5396,39 @@ final class TerminalApplication {
         await osc52Presenter!.show(startupPending);
       }
 
-      final TerminalPaneCloseCoordinator createdPaneCloseCoordinator =
-          TerminalPaneCloseCoordinator(
-            state: state,
-            onBeforePaneRemoved: (PaneId paneId) async {
-              await owners[paneId]?.cancelTextInput();
-            },
-            onHierarchyChanged: () {
-              reconcileInteractiveHierarchy();
-              final TerminalAppKitMenuProjection? menu = menuProjection;
-              if (menu != null && !menu.isDisposed) menu.refresh();
-              final TerminalCommandPalettePresenter? palette = palettePresenter;
-              if (palette != null && !palette.isDisposed) palette.refresh();
-              diagnosticsPresenter?.refresh();
-            },
-          );
+      final TerminalPaneCloseCoordinator
+      createdPaneCloseCoordinator = TerminalPaneCloseCoordinator(
+        state: state,
+        canRemovePane: (PaneId paneId) {
+          final TerminalPaneLocation? location = state.locationForPane(paneId);
+          return location != null &&
+              createdInteractionAuthority.permitsHierarchyMutation(
+                location.windowId,
+              );
+        },
+        canRemoveWindow: createdInteractionAuthority.permitsHierarchyMutation,
+        canBeginApplicationQuit: () => state.windows.every(
+          (TerminalWindowState window) =>
+              createdInteractionAuthority.permitsHierarchyMutation(window.id),
+        ),
+        onBeforePaneRemoved: (PaneId paneId) async {
+          if (!(noteApplicationCoordinator?.preparePaneForViewTeardown(
+                paneId,
+              ) ??
+              true)) {
+            throw StateError('Note interaction blocked pane teardown');
+          }
+          await owners[paneId]?.cancelTextInput();
+        },
+        onHierarchyChanged: () {
+          reconcileInteractiveHierarchy();
+          final TerminalAppKitMenuProjection? menu = menuProjection;
+          if (menu != null && !menu.isDisposed) menu.refresh();
+          final TerminalCommandPalettePresenter? palette = palettePresenter;
+          if (palette != null && !palette.isDisposed) palette.refresh();
+          diagnosticsPresenter?.refresh();
+        },
+      );
       paneCloseCoordinator = createdPaneCloseCoordinator;
       final TerminalProductHierarchyActionCoordinator createdActions =
           TerminalProductHierarchyActionCoordinator(
@@ -5244,7 +5442,11 @@ final class TerminalApplication {
             canMutate: () =>
                 productResourceDisposalFuture == null &&
                 !createdPaneCloseCoordinator.removalInProgress &&
-                !createdPaneCloseCoordinator.applicationQuitInProgress,
+                !createdPaneCloseCoordinator.applicationQuitInProgress &&
+                state.activeWindow != null &&
+                createdInteractionAuthority.permitsHierarchyMutation(
+                  state.activeWindow!.id,
+                ),
             onChanged: () {
               final TerminalAppKitMenuProjection? menu = menuProjection;
               if (menu != null && !menu.isDisposed) menu.refresh();
@@ -5300,7 +5502,11 @@ final class TerminalApplication {
             canMutate: () =>
                 productResourceDisposalFuture == null &&
                 !createdPaneCloseCoordinator.removalInProgress &&
-                !createdPaneCloseCoordinator.applicationQuitInProgress,
+                !createdPaneCloseCoordinator.applicationQuitInProgress &&
+                state.windows.every(
+                  (TerminalWindowState window) => createdInteractionAuthority
+                      .permitsHierarchyMutation(window.id),
+                ),
           );
       final TerminalAppleScriptMacosNativePort createdAppleScriptNativePort =
           TerminalAppleScriptMacosNativePort.open();
@@ -5928,7 +6134,11 @@ final class TerminalApplication {
                 !state.isDisposed &&
                 !createdQuickTerminal.isDisposed &&
                 !createdPaneCloseCoordinator.removalInProgress &&
-                !createdPaneCloseCoordinator.applicationQuitInProgress,
+                !createdPaneCloseCoordinator.applicationQuitInProgress &&
+                state.windows.every(
+                  (TerminalWindowState window) => createdInteractionAuthority
+                      .permitsHierarchyMutation(window.id),
+                ),
             handler: createdQuickTerminal.toggle,
           ),
           TerminalActionRegistration(
@@ -24196,9 +24406,11 @@ final class _TerminalHierarchyProductPane {
     required TerminalTextInputEventRouter textRouter,
     this.horizontalPadding = 0,
     this.verticalPadding = 0,
+    void Function()? onPresentationChanged,
     required void Function(Object, StackTrace) onTextInputError,
   }) : client = client,
        textRouter = textRouter,
+       _onPresentationChanged = onPresentationChanged,
        _textInputSubscription = client.events.listen(
          textRouter.route,
          onError: onTextInputError,
@@ -24212,6 +24424,7 @@ final class _TerminalHierarchyProductPane {
   final TerminalTextInputEventRouter textRouter;
   final double horizontalPadding;
   final double verticalPadding;
+  final void Function()? _onPresentationChanged;
   final StreamSubscription<TerminalTextInputEvent> _textInputSubscription;
   final List<StreamSubscription<AppKitEvent>> _nativeContentSubscriptions =
       <StreamSubscription<AppKitEvent>>[];
@@ -24220,12 +24433,16 @@ final class _TerminalHierarchyProductPane {
   bool _textInputCancelled = false;
   bool adaptersDisposed = false;
   bool isVisible = false;
+  double backingScaleFactor = 1;
   TerminalPaneLayoutRect? layout;
   TerminalAppKitContextMenuProjection? contextMenu;
   int _servicesSelectionGeneration = -1;
   int _servicesViewportGeneration = -1;
   bool _servicesRequestorLive = false;
   ViewBadge? _secureInputBadge;
+  ViewBadge? _appliedViewBadge;
+
+  bool get hasSystemBadge => _appliedViewBadge != null;
 
   TerminalPaneLayoutRect? get contentLayout {
     final TerminalPaneLayoutRect? rectangle = layout;
@@ -24258,14 +24475,20 @@ final class _TerminalHierarchyProductPane {
 
   void _synchronizeViewBadge() {
     if (view.isDisposed) return;
-    view.badge = terminalViewBadge(
+    final ViewBadge? badge = terminalViewBadge(
       secureInputBadge: _secureInputBadge,
       notice: session.presentationNotice,
     );
+    if (_appliedViewBadge == badge) return;
+    view.badge = badge;
+    _appliedViewBadge = badge;
+    _onPresentationChanged?.call();
   }
 
   void updateBackingScale(double backingScaleFactor) {
+    this.backingScaleFactor = backingScaleFactor;
     if (!surface.isDisposed) surface.updateBackingScale(backingScaleFactor);
+    _onPresentationChanged?.call();
   }
 
   void addNativeContentSubscription(
@@ -24304,13 +24527,17 @@ final class _TerminalHierarchyProductPane {
     isVisible = visible;
     this.layout = rectangle;
     surface.updateWindowState(isVisible: visible, isOccluded: !visible);
-    if (!visible) return;
+    if (!visible) {
+      _onPresentationChanged?.call();
+      return;
+    }
     final TerminalPaneLayoutRect resolvedLayout = rectangle!;
     final TerminalGridSize grid = surface.resizeViewport(
       logicalWidth: resolvedLayout.width,
       logicalHeight: resolvedLayout.height,
     );
     pane.resize(rows: grid.rows, columns: grid.columns);
+    _onPresentationChanged?.call();
   }
 
   Future<void> cancelTextInput() => _cancelFuture ??= _cancelTextInput();

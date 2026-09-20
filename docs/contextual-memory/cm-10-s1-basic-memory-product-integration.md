@@ -282,3 +282,78 @@ explicit exportをdurable authorityに接続する。Default-offではentry/surf
 - Product subsystemはまだ`TerminalApplication`から生成・駆動されていない。次はcomposition rootをapplication startupへ接続し、
   pane/Quick Terminal renderer lifecycle、window interaction adapter、live font reload、ordered teardownをproduction eventへ結ぶ。
 - Mutation/action/exportは後続サブタスクの範囲であり、この段階ではnative intentをpollせず、S2/S3 trigger deliveryも開始しない。
+
+## 2026-09-21: Application composition/interaction lifecycle着手
+
+- ROADMAPを再確認し、先頭未完了がCM-10第2サブタスク内の
+  「application composition、interaction、live font、disabled lifecycleを接続する」であることを確認した。
+- `TerminalApplication`のinteractive hierarchy startup、pane resource factory、Quick Terminal、configuration reload、
+  accessibility/theme projection、window interaction authority、pane/window close、quit teardownの順序を再確認した。
+- Pane/window/tabを生成する全action implementationへNote処理を個別追加する案は、AppleScript、Quick Terminal、close/recoveryなどで
+  漏れや順序差を作るため不採用とする。Application stateのsettled topologyを一箇所で比較するproduct coordinatorを追加し、
+  logical bind/closeをnative hierarchy reconciliationより前にqueueする。
+- Generic `TerminalNativeHierarchyAdapter`や`dart_appkit`へNote型を追加する案は不採用とする。既存のpane resource callbackから
+  Dart Terminal側coordinatorへrenderer identity、layout、window identity、presentationだけを注入する。
+- Native hierarchyのadapter teardown callbackは同期でview destroyより先に呼ばれる。Authority detach完了を待つだけでは順序を保証
+  できないため、product subsystemへ同期のhost-detach preparationを追加し、interaction ownerを返してNote childをhostから外した後に
+  非同期authority closeをqueueする。Application全体のshutdownではNote subsystem shutdown完了後にterminal renderer viewを破棄する。
+- Disabled branchはcomposition factoryを呼ばず、store path解決、native Notes initialization、authority/worker、surface、interaction adapterを
+  すべて0に保つ。有効時もnative surfaceは最初のlive layoutまで生成しない。
+- Note fontだけをconfiguration reloadからlive projectionし、renderer recovery、pane resize、backing scale、window focus/occlusion、
+  accessibility/theme/system badgeはpane-local presentation updateへ変換する。Terminal grid/drawable/PTY resizeは既存経路だけが所有する。
+- Native semantic intentのmutation、Note action catalog、Detached/exportは次サブタスクで接続し、本サブタスクでは先行実装しない。
+
+## 2026-09-21: Application composition/interaction lifecycle実装
+
+### 実装と判断
+
+- `TerminalNoteApplicationCoordinator`をDart Terminalのapplication-owned composition境界として追加した。
+  Launch admission、logical pane/Quick Terminal binding、native surface、window interaction adapterを一か所で直列化し、
+  generic AppKit hierarchyや`dart_appkit`へNote型を追加しない。
+- `TerminalApplication`は既存hierarchyを走査してstandard/Quick Terminalのpane bindingを注入し、実rendererの
+  composition identity、pane-local layout/backing scale/foreground/occlusion/theme/accessibility/system badge/localeを
+  product subsystemへ投影する。Note overlayはrenderer child compositionであり、grid/PTY resize入力には加えない。
+- Default-offでもapplication coordinator自体はcontent-freeなdisabled shellとして存在するが、composition rootは
+  production factoryを呼ばない。したがってstore location解決、worker、authority、native initializer、surface、timerは0のままにする。
+- Note editorのdirty/pending transferはsole window interaction authorityからpane/window closeとapplication Quitを
+  `busy`にする。View teardown時はterminal first responderへの二段階transfer、native host detach、terminal view destroyの順に固定した。
+- Renderer recoveryでは、host detach時に破棄したinteraction adapterだけを新しいrenderer hostへ再生成する。
+  Durable contextとauthority surface generationは維持し、renderer generationの変更だけを再attachする。
+- Live reloadはlaunch-fixedな`notes*` flagを変更せず、`notes-font-size`だけをcomposition root経由で全live surfaceへ反映する。
+- 端末screen更新ごとの無用なNote presentation再送を避けるため、system badge projectionが実際に変わった時だけ
+  Note surface reconciliationを要求する。Terminal session notice由来のbadgeもsecure-input badgeと同じくsystem badgeとして扱う。
+- S1 create/open/edit等のsemantic intentとexpanded rail visibilityは次のsubtaskへ残し、この段階ではsurfaceをcollapsedで接続した。
+
+### 検証途中の判明事項
+
+- Focused analyzeは対象9 fileでissue 0。
+- 最初のfocused testはMetal build hookがsandbox外の`~/.cache/clang/ModuleCache`へ書き込めず失敗した。
+  `CLANG_MODULE_CACHE_PATH`は`xcrun metal`に反映されなかったため、同じ検証を許可済みの通常cache経路で再実行した。
+- 再実行したcoordinator、product subsystem、application state、window interaction、product configurationのfocused testはpassした。
+  Disabled factory 0、standard/Quick binding、dirty close/quit admission、live font、adapter-before-view、renderer reattach、single-flight shutdownを確認した。
+- 実AppKit JIT/AOT、restart/fault、多window topologyのaggregateはCM-10最後のacceptance subtaskで実施する。
+
+## 2026-09-21: Application composition/interaction lifecycle完了
+
+### 検証
+
+- Focused format/analyzeは成功。Coordinator、product subsystem、application state、window interaction、product
+  configurationのfocused testを許可済みcache経路で再実行し、すべてpassした。
+- 最初のfull `make test`は変更した`terminal_application.dart`を追跡するPhase 7 AppKit acceptanceのfreshnessだけで停止した。
+  正規generatorでPhase 7、compatibility regression、Ghostty gap、release-candidate daily-use証跡を再生成した。
+  差分はapplication/test runnerと連鎖artifactのSHA-256だけで、criterion、count、classification、release blockerは変えていない。
+- 再実行した`CI=true DART_SUPPRESS_ANALYTICS=true make test`は376 fileのformat変更0、root/package analyze issue 0、
+  native Notes host/capability、real Note store、security stress、compatibility、distributionを含めて
+  `dart_terminal tests passed`で完了した。Notes host acceptanceは両modeで`geometry_delta=0`、capability auditは
+  `dart_appkit=generic`を報告した。
+- `make RUNTIME_ARCH=arm64 developer-jit-audit release-aot-audit`は両方成功。Developer JIT/Release AOTとも
+  `capabilities=3`のexact bundle、5 build assets、Note dylibを受け入れた。
+- `git diff --check`は成功。隣接`dart_appkit`は着手前から存在する3 fileの変更だけで、本subtaskによる変更は0。
+
+### 次への引き継ぎ
+
+- Application、standard pane、Quick Terminal、renderer recovery、interaction/close admission、live font、ordered teardownの
+  production接続は完了した。次の先頭未完了taskはS1 mutation、Detached、export、localized actionである。
+- Native surfaceは意図的にcollapsedのままである。次のtaskでsemantic intentをdurable authorityへ接続し、create/open actionから
+  railを展開する。Accepted resultはdurable commit後にだけnativeへ返し、content-free境界を維持する。
+- 実AppKitのS1全flow、restart/fault、2 window/3 tab/5 pane、dirty confirmation、owner 0 aggregateはCM-10最後のtaskで実施する。
