@@ -121,3 +121,55 @@ fail closedにする。
   intent/result state machineを含めASan/UBSan instrumentation下でpassした。
 - `git diff --check`: pass。Root application manifest/dependency登録0、`dart_appkit`変更0。
 - Editor view、IME/Undo、buttons/dirty confirmationはまだ実装しておらず、第2サブタスクの対象である。
+
+## 2026-09-21: 第2サブタスク着手
+
+- ROADMAPを再確認し、CM-09の先頭未完了が「native multiline editor、draft admission、actions」であることを確認した。
+- EditorはCM-08 rail内のselected card/list領域を置換するproduct-owned `NSTextView` compositionとする。別window/sheetや
+  `dart_appkit`変更は行わない。
+- Draft bodyをDartへchange eventとして送る案はper-keystroke mirrorとprivacy境界に反するため不採用とする。Text、selection、
+  marked text、scroll、Undoはnativeに保持し、Save時だけbounded snapshotをsemantic intentへ載せる。
+- Six-color選択はdraft-localとし、Save intentのpalette keyへ含める。既存cardのread-mode color changeは独立semantic intentとする。
+- Paste/drop/Servicesごとに別validationを作らず、candidate全文を一つのadmission関数へ通す。Invalid operationはtext storage、
+  selection、Undo、baselineを全て変更しない。
+
+### 第2サブタスクの実装と判断
+
+- CM-08のrail内へstandard `NSTextView`を持つeditor cardを追加した。本文、selection、marked text、scroll、Undo、baseline、
+  draft colorはnativeだけが保持し、同じ`draftGeneration`のprojectionでは再初期化しない。新しいdraft、accepted Save/Cancel、
+  teardownだけがUndoを破棄する。
+- Editor cardは6色のsurface/accent、multiline body、fixed local error、Save/Cancel、dirty時のDiscard/Keep Editingを持つ。
+  Command+ReturnはSave buttonのnative key equivalentとし、Save前にmarked textをcommitしてから全文をsnapshotする。
+- `DtnPlainTextView`のreadable/acceptable pasteboard typeをplain text一種へ限定した。Typing、IME commit、paste、plain-text
+  drop、Services returned textは全て`NSTextViewDelegate`の同じcandidate全文admissionを通る。Rich/custom/file URLはreaderへ
+  入れずrejectする。
+- Draft admissionはUTF-8 4,096 bytes以下、64 lines以下、control/bidi/unpaired surrogateなしを毎operationで判定する。
+  空またはwhitespace-onlyは編集途中だけ許し、Saveではnon-whitespaceを必須とする。Reject時はtext、selection、Undo action、
+  baselineを変更せずfixed local errorだけを表示する。
+- Read modeにはEarlier/Later、Resolve/Reopen、Delete、Reattach、Export、Copyと6色controlをactual AppKit controlとして追加した。
+  Deleteは独立した二回目のconfirmation actionを必要とする。Saveとexplicit Copy以外はbody payloadを作らない。
+- UI eventはsurfaceのlast event generationから単調増加させ、public `dtn_surface_request_intent`へ集約した。Outstanding中は全semantic
+  controlをdisableし、failure/conflictではdraft/selection/Undoを維持して再enableする。Accepted mutation後はauthorityから次の
+  projectionが来るまでdisableを維持し、resultだけでlast-good projectionを変更しない。
+- English/Japanese label、system focus ring、explicit AX role/nameをeditor、buttons、color controlへ付与した。Editor表示中はcard bodyを
+  AX treeから外してeditor body一件だけを数え、read modeではcard actionをhoverに依存せず常設する。
+- `dart_appkit`へeditorやNote intentを追加する案は採用していない。実装は`dart_terminal_notes_macos`内に閉じ、隣接repositoryは
+  着手前から存在する3変更を含め読み取り監査だけとした。
+
+### 第2サブタスクの検証
+
+- `make terminal-notes-native-test`: pass。実`NSWindow`/`NSTextView`でJapanese marked→commit→Save、Undo、selection、
+  4,096/4,097 bytes、64/65 lines、whitespace Save、bidi/unpaired surrogate、plain-text paste/drop/Services admission、
+  file URL reject、conflict保持、dirty confirmation、6色、Copy/Delete、actual AX control、owner 0を確認した。
+- `make terminal-notes-contract-check terminal-notes-dart-test terminal-notes-capability-audit`: pass。Package format 9 files
+  0 changed、analyze issue 0、native asset、manifest absent、content-free snapshot、14 exports、generic `dart_appkit`を確認した。
+- `make product-native-sanitizer`: pass。5 suites、11 ASan artifacts、9 UBSan artifacts。Notes editor/intent harnessを含む。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: pass。370 root files format 0 changed、root/package analyze issue 0、
+  native/package/generated/freshness/compatibility/application/distribution/security、Developer JIT/Release AOT hostを含む。
+- `git diff --check`: pass。Application manifest/dependency登録0、`dart_appkit`変更0。
+
+### 第2サブタスク完了
+
+- Rail内editor、atomic draft admission、Save/Cancel/dirty confirmation、six-colorと全fixed semantic actionの実装・受け入れを完了した。
+- Window interaction authorityとのall-input routing、Escape/outside click、focus/VoiceOver順、adapter-before-view teardownのaggregate
+  acceptanceは第3サブタスクで実施する。

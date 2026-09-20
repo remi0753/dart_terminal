@@ -37,6 +37,13 @@ typedef struct DtnParsedProjection {
   uint32_t projection_flags;
 } DtnParsedProjection;
 
+static bool dtn_valid_editor_string(NSString* value,
+                                    bool require_non_whitespace);
+static int32_t dtn_emit_view_intent(DtnSurface* surface, uint32_t kind,
+                                    NSString* body, uint32_t color,
+                                    uint64_t token);
+static bool dtn_intent_kind_mutates(uint32_t kind);
+
 static const uint32_t kDtnLightSurfaces[6] = {
     0xf5f5f3ffu, 0xfff3a6ffu, 0xdcebffffu,
     0xddf4dcffu, 0xfaddeaffu, 0xe8deffffu,
@@ -256,14 +263,271 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 
 @end
 
+@interface DtnPlainTextView : NSTextView
+@end
+
+@implementation DtnPlainTextView
+
+- (NSArray<NSPasteboardType>*)readablePasteboardTypes {
+  return @[ NSPasteboardTypeString ];
+}
+
+- (NSArray<NSPasteboardType>*)acceptableDragTypes {
+  return @[ NSPasteboardTypeString ];
+}
+
+- (BOOL)readSelectionFromPasteboard:(NSPasteboard*)pasteboard
+                                type:(NSPasteboardType)type {
+  if (![type isEqualToString:NSPasteboardTypeString]) return NO;
+  return [super readSelectionFromPasteboard:pasteboard type:type];
+}
+
+@end
+
+@interface DtnNoteEditorView : DtnFlippedView <NSTextViewDelegate>
+@property(nonatomic, strong) NSScrollView* textScrollView;
+@property(nonatomic, strong) NSTextView* textView;
+@property(nonatomic, strong) NSSegmentedControl* colorControl;
+@property(nonatomic, strong) NSButton* saveButton;
+@property(nonatomic, strong) NSButton* cancelButton;
+@property(nonatomic, strong) DtnFlippedView* discardConfirmation;
+@property(nonatomic, strong) NSTextField* confirmationLabel;
+@property(nonatomic, strong) NSButton* discardButton;
+@property(nonatomic, strong) NSButton* keepEditingButton;
+@property(nonatomic, strong) NSTextField* errorLabel;
+@property(nonatomic, copy) NSString* baselineBody;
+@property(nonatomic) uint32_t baselineColor;
+@property(nonatomic) uint64_t draftGeneration;
+@property(nonatomic) BOOL japaneseLocale;
+- (void)beginDraft:(NSString*)body
+             color:(uint32_t)color
+   draftGeneration:(uint64_t)draftGeneration
+    bodyFontPoints:(CGFloat)bodyFontPoints
+    japaneseLocale:(BOOL)japaneseLocale;
+- (BOOL)isDirty;
+- (BOOL)validateForSave;
+- (void)showFixedError;
+- (void)showDiscardConfirmation;
+- (void)hideDiscardConfirmation;
+@end
+
+@implementation DtnNoteEditorView
+
+- (instancetype)initWithFrame:(NSRect)frame {
+  self = [super initWithFrame:frame];
+  if (self != nil) {
+    self.wantsLayer = YES;
+    self.layer.cornerRadius = 10;
+    self.layer.borderWidth = 1;
+    _baselineBody = @"";
+    _baselineColor = 1u;
+    _textScrollView = [[NSScrollView alloc] initWithFrame:NSZeroRect];
+    _textScrollView.hasVerticalScroller = YES;
+    _textScrollView.drawsBackground = YES;
+    _textView = [[DtnPlainTextView alloc] initWithFrame:NSZeroRect];
+    _textView.richText = NO;
+    _textView.importsGraphics = NO;
+    _textView.allowsUndo = YES;
+    _textView.automaticQuoteSubstitutionEnabled = NO;
+    _textView.automaticDashSubstitutionEnabled = NO;
+    _textView.automaticTextReplacementEnabled = NO;
+    _textView.delegate = self;
+    [_textView setAccessibilityLabel:@"Note body"];
+    _textScrollView.documentView = _textView;
+    [self addSubview:_textScrollView];
+
+    _colorControl = [[NSSegmentedControl alloc] initWithFrame:NSZeroRect];
+    _colorControl.segmentCount = 6;
+    NSArray<NSString*>* swatches = @[ @"N", @"Y", @"B", @"G", @"P", @"V" ];
+    for (NSInteger index = 0; index < 6; ++index) {
+      [_colorControl setLabel:swatches[index] forSegment:index];
+      [_colorControl setWidth:30 forSegment:index];
+    }
+    [_colorControl setAccessibilityLabel:@"Note color"];
+    [_colorControl setAccessibilityElement:YES];
+    [_colorControl setAccessibilityRole:NSAccessibilityRadioGroupRole];
+    [self addSubview:_colorControl];
+
+    _saveButton = [NSButton buttonWithTitle:@"Save" target:nil action:nil];
+    _saveButton.keyEquivalent = @"\r";
+    _saveButton.keyEquivalentModifierMask = NSEventModifierFlagCommand;
+    [_saveButton setAccessibilityElement:YES];
+    [_saveButton setAccessibilityRole:NSAccessibilityButtonRole];
+    [self addSubview:_saveButton];
+    _cancelButton = [NSButton buttonWithTitle:@"Cancel" target:nil action:nil];
+    [_cancelButton setAccessibilityElement:YES];
+    [_cancelButton setAccessibilityRole:NSAccessibilityButtonRole];
+    [self addSubview:_cancelButton];
+    _errorLabel = [NSTextField labelWithString:@""];
+    _errorLabel.textColor = NSColor.systemRedColor;
+    _errorLabel.hidden = YES;
+    [_errorLabel setAccessibilityElement:YES];
+    [_errorLabel setAccessibilityRole:NSAccessibilityStaticTextRole];
+    [self addSubview:_errorLabel];
+
+    _discardConfirmation = [[DtnFlippedView alloc] initWithFrame:NSZeroRect];
+    _discardConfirmation.wantsLayer = YES;
+    _discardConfirmation.layer.cornerRadius = 8;
+    _discardConfirmation.layer.backgroundColor =
+        NSColor.windowBackgroundColor.CGColor;
+    [_discardConfirmation setAccessibilityElement:YES];
+    [_discardConfirmation setAccessibilityRole:NSAccessibilityGroupRole];
+    _confirmationLabel = [NSTextField labelWithString:@"Discard changes?"];
+    [_discardConfirmation addSubview:_confirmationLabel];
+    _discardButton =
+        [NSButton buttonWithTitle:@"Discard" target:nil action:nil];
+    [_discardButton setAccessibilityElement:YES];
+    [_discardButton setAccessibilityRole:NSAccessibilityButtonRole];
+    [_discardConfirmation addSubview:_discardButton];
+    _keepEditingButton =
+        [NSButton buttonWithTitle:@"Keep Editing" target:nil action:nil];
+    [_keepEditingButton setAccessibilityElement:YES];
+    [_keepEditingButton setAccessibilityRole:NSAccessibilityButtonRole];
+    [_discardConfirmation addSubview:_keepEditingButton];
+    _discardConfirmation.hidden = YES;
+    [self addSubview:_discardConfirmation];
+    [self setAccessibilityElement:YES];
+    [self setAccessibilityRole:NSAccessibilityGroupRole];
+    [self setAccessibilityLabel:@"Note editor"];
+  }
+  return self;
+}
+
+- (BOOL)isOpaque { return YES; }
+
+- (void)beginDraft:(NSString*)body
+             color:(uint32_t)color
+   draftGeneration:(uint64_t)draftGeneration
+    bodyFontPoints:(CGFloat)bodyFontPoints
+    japaneseLocale:(BOOL)japaneseLocale {
+  self.japaneseLocale = japaneseLocale;
+  self.baselineBody = body;
+  self.baselineColor = color;
+  self.draftGeneration = draftGeneration;
+  [self.textView.undoManager disableUndoRegistration];
+  self.textView.string = body;
+  [self.textView.undoManager enableUndoRegistration];
+  [self.textView.undoManager removeAllActions];
+  self.textView.font = [NSFont systemFontOfSize:bodyFontPoints];
+  self.colorControl.selectedSegment = color;
+  self.textView.selectedRange = NSMakeRange(body.length, 0);
+  self.errorLabel.hidden = YES;
+  [self hideDiscardConfirmation];
+  if (japaneseLocale) {
+    [self setAccessibilityLabel:@"ノートエディタ"];
+    [self.textView setAccessibilityLabel:@"ノート本文"];
+    [self.colorControl setAccessibilityLabel:@"ノートの色"];
+    self.saveButton.title = @"保存";
+    self.cancelButton.title = @"キャンセル";
+    self.confirmationLabel.stringValue = @"変更を破棄しますか？";
+    self.discardButton.title = @"破棄";
+    self.keepEditingButton.title = @"編集を続ける";
+  } else {
+    [self setAccessibilityLabel:@"Note editor"];
+    [self.textView setAccessibilityLabel:@"Note body"];
+    [self.colorControl setAccessibilityLabel:@"Note color"];
+    self.saveButton.title = @"Save";
+    self.cancelButton.title = @"Cancel";
+    self.confirmationLabel.stringValue = @"Discard changes?";
+    self.discardButton.title = @"Discard";
+    self.keepEditingButton.title = @"Keep Editing";
+  }
+}
+
+- (BOOL)isDirty {
+  return ![self.textView.string isEqualToString:self.baselineBody] ||
+         self.colorControl.selectedSegment != self.baselineColor;
+}
+
+- (BOOL)validateForSave {
+  if ([self.textView hasMarkedText]) [self.textView unmarkText];
+  if (!dtn_valid_editor_string(self.textView.string, true)) {
+    [self showFixedError];
+    return NO;
+  }
+  return YES;
+}
+
+- (void)showFixedError {
+  self.errorLabel.stringValue = self.japaneseLocale
+                                    ? @"ノート本文を保存できません"
+                                    : @"Note body cannot be saved";
+  self.errorLabel.hidden = NO;
+}
+
+- (void)showDiscardConfirmation {
+  self.discardConfirmation.hidden = NO;
+  self.textView.editable = NO;
+}
+
+- (void)hideDiscardConfirmation {
+  self.discardConfirmation.hidden = YES;
+  self.textView.editable = YES;
+}
+
+- (BOOL)textView:(NSTextView*)textView
+    shouldChangeTextInRange:(NSRange)affectedCharRange
+          replacementString:(NSString*)replacementString {
+  (void)textView;
+  if (replacementString == nil ||
+      NSMaxRange(affectedCharRange) > self.textView.string.length) {
+    [self showFixedError];
+    return NO;
+  }
+  NSString* candidate =
+      [self.textView.string stringByReplacingCharactersInRange:affectedCharRange
+                                                    withString:replacementString];
+  if (!dtn_valid_editor_string(candidate, false)) {
+    [self showFixedError];
+    return NO;
+  }
+  self.errorLabel.hidden = YES;
+  return YES;
+}
+
+- (void)textDidChange:(NSNotification*)notification {
+  (void)notification;
+  self.errorLabel.hidden = YES;
+}
+
+- (void)layout {
+  [super layout];
+  const CGFloat width = self.bounds.size.width;
+  const CGFloat height = self.bounds.size.height;
+  self.colorControl.frame = NSMakeRect(10, 10, fmax(0, width - 20), 26);
+  self.textScrollView.frame =
+      NSMakeRect(10, 44, fmax(0, width - 20), fmax(60, height - 112));
+  self.errorLabel.frame =
+      NSMakeRect(10, fmax(44, height - 62), fmax(0, width - 20), 18);
+  self.cancelButton.frame =
+      NSMakeRect(fmax(10, width - 174), fmax(44, height - 36), 76, 26);
+  self.saveButton.frame =
+      NSMakeRect(fmax(92, width - 92), fmax(44, height - 36), 82, 26);
+  self.discardConfirmation.frame =
+      NSMakeRect(10, fmax(44, height - 112), fmax(0, width - 20), 102);
+  self.confirmationLabel.frame =
+      NSMakeRect(10, 10, fmax(0, width - 20), 20);
+  self.keepEditingButton.frame =
+      NSMakeRect(10, 50, fmax(92, width / 2 - 15), 28);
+  self.discardButton.frame =
+      NSMakeRect(width / 2 + 5, 50, fmax(76, width / 2 - 15), 28);
+}
+
+@end
+
 @interface DtnNoteSurfaceView : DtnFlippedView
 @property(nonatomic, strong) DtnNoteBadgeButton* badge;
 @property(nonatomic, strong) DtnOpaqueRailView* rail;
 @property(nonatomic, strong) DtnFlippedView* toolbar;
 @property(nonatomic, strong) NSTextField* titleLabel;
 @property(nonatomic, strong) NSSegmentedControl* sectionControl;
+@property(nonatomic, strong) DtnFlippedView* actionBar;
+@property(nonatomic, copy) NSArray<NSButton*>* actionButtons;
+@property(nonatomic, strong) NSSegmentedControl* cardColorControl;
 @property(nonatomic, strong) NSScrollView* scrollView;
 @property(nonatomic, strong) DtnFlippedView* cardList;
+@property(nonatomic, strong) DtnNoteEditorView* editor;
+@property(nonatomic, assign) DtnSurface* nativeSurface;
 @property(nonatomic, copy) NSArray<DtnCardModel*>* models;
 @property(nonatomic, copy) NSArray<DtnNoteCardView*>* cardViews;
 @property(nonatomic) DtnParsedProjection projection;
@@ -276,11 +540,16 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 @property(nonatomic) uint64_t visibleAcknowledgementEligibleGeneration;
 @property(nonatomic) uint64_t lastAnnouncedGeneration;
 @property(nonatomic) uint64_t accessibilityAnnouncementCount;
+@property(nonatomic) BOOL locallyClosedEditor;
+@property(nonatomic) BOOL deleteConfirmationArmed;
 - (void)applyProjection:(DtnParsedProjection)projection
                   cards:(NSArray<DtnCardModel*>*)cards;
 - (void)applyLayout:(DtnLayoutV1)layout;
 - (void)layoutPresentation;
 - (void)reconcileReadyAnnouncement;
+- (void)applySemanticResult:(DtnSurfaceResultV1)result
+                 intentKind:(uint32_t)intentKind;
+- (void)setSemanticControlsEnabled:(BOOL)enabled;
 @end
 
 @implementation DtnNoteSurfaceView
@@ -315,6 +584,46 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     [_sectionControl setLabel:@"Detached" forSegment:1];
     _sectionControl.selectedSegment = 0;
     [_toolbar addSubview:_sectionControl];
+    _actionBar = [[DtnFlippedView alloc] initWithFrame:NSZeroRect];
+    [_actionBar setAccessibilityElement:YES];
+    [_actionBar setAccessibilityRole:NSAccessibilityToolbarRole];
+    [_rail addSubview:_actionBar];
+    NSButton* earlier =
+        [NSButton buttonWithTitle:@"Earlier" target:self action:@selector(onEarlier:)];
+    NSButton* later =
+        [NSButton buttonWithTitle:@"Later" target:self action:@selector(onLater:)];
+    NSButton* resolve =
+        [NSButton buttonWithTitle:@"Resolve" target:self action:@selector(onResolve:)];
+    NSButton* reopen =
+        [NSButton buttonWithTitle:@"Reopen" target:self action:@selector(onReopen:)];
+    NSButton* delete_note =
+        [NSButton buttonWithTitle:@"Delete…" target:self action:@selector(onDelete:)];
+    NSButton* reattach =
+        [NSButton buttonWithTitle:@"Reattach" target:self action:@selector(onReattach:)];
+    NSButton* export_notes =
+        [NSButton buttonWithTitle:@"Export" target:self action:@selector(onExport:)];
+    NSButton* copy_note =
+        [NSButton buttonWithTitle:@"Copy" target:self action:@selector(onCopy:)];
+    _actionButtons = @[ earlier, later, resolve, reopen, delete_note,
+                        reattach, export_notes, copy_note ];
+    for (NSButton* button in _actionButtons) {
+      [button setAccessibilityElement:YES];
+      [button setAccessibilityRole:NSAccessibilityButtonRole];
+      [_actionBar addSubview:button];
+    }
+    _cardColorControl = [[NSSegmentedControl alloc] initWithFrame:NSZeroRect];
+    _cardColorControl.segmentCount = 6;
+    NSArray<NSString*>* card_swatches = @[ @"N", @"Y", @"B", @"G", @"P", @"V" ];
+    for (NSInteger index = 0; index < 6; ++index) {
+      [_cardColorControl setLabel:card_swatches[index] forSegment:index];
+      [_cardColorControl setWidth:30 forSegment:index];
+    }
+    [_cardColorControl setAccessibilityLabel:@"Note color"];
+    [_cardColorControl setAccessibilityElement:YES];
+    [_cardColorControl setAccessibilityRole:NSAccessibilityRadioGroupRole];
+    _cardColorControl.target = self;
+    _cardColorControl.action = @selector(onCardColor:);
+    [_actionBar addSubview:_cardColorControl];
     _scrollView = [[NSScrollView alloc] initWithFrame:NSZeroRect];
     _scrollView.hasVerticalScroller = YES;
     _scrollView.drawsBackground = NO;
@@ -325,6 +634,19 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     [_cardList setAccessibilityRole:NSAccessibilityListRole];
     _scrollView.documentView = _cardList;
     [_rail addSubview:_scrollView];
+    _editor = [[DtnNoteEditorView alloc] initWithFrame:NSZeroRect];
+    _editor.hidden = YES;
+    _editor.saveButton.target = self;
+    _editor.saveButton.action = @selector(onSave:);
+    _editor.cancelButton.target = self;
+    _editor.cancelButton.action = @selector(onCancel:);
+    _editor.colorControl.target = self;
+    _editor.colorControl.action = @selector(onDraftColor:);
+    _editor.discardButton.target = self;
+    _editor.discardButton.action = @selector(onDiscard:);
+    _editor.keepEditingButton.target = self;
+    _editor.keepEditingButton.action = @selector(onKeepEditing:);
+    [_rail addSubview:_editor];
     [self setAccessibilityElement:NO];
   }
   return self;
@@ -344,8 +666,194 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   return @[];
 }
 
+- (DtnCardModel*)selectedModel {
+  for (DtnCardModel* model in self.models) {
+    if (model.token == self.projection.selected_token) return model;
+  }
+  return nil;
+}
+
+- (void)resetDeleteConfirmation {
+  self.deleteConfirmationArmed = NO;
+  NSButton* button = self.actionButtons[4];
+  button.title = self.projection.locale == 1u ? @"削除…" : @"Delete…";
+}
+
+- (int32_t)emitIntent:(uint32_t)kind
+                 body:(NSString*)body
+                color:(uint32_t)color
+                token:(uint64_t)token {
+  [self resetDeleteConfirmation];
+  const int32_t status =
+      dtn_emit_view_intent(self.nativeSurface, kind, body, color, token);
+  if (status == DTN_STATUS_OK) {
+    [self setSemanticControlsEnabled:NO];
+  } else {
+    [self.editor showFixedError];
+  }
+  return status;
+}
+
+- (void)onSave:(id)sender {
+  (void)sender;
+  if (![self.editor validateForSave]) return;
+  [self emitIntent:DTN_INTENT_SAVE
+               body:self.editor.textView.string
+              color:(uint32_t)self.editor.colorControl.selectedSegment
+              token:self.projection.selected_token];
+}
+
+- (void)onCancel:(id)sender {
+  (void)sender;
+  if (self.editor.isDirty) {
+    [self.editor showDiscardConfirmation];
+    return;
+  }
+  [self emitIntent:DTN_INTENT_CANCEL
+               body:nil
+              color:DTN_NO_COLOR
+              token:self.projection.selected_token];
+}
+
+- (void)onDiscard:(id)sender {
+  (void)sender;
+  [self.editor hideDiscardConfirmation];
+  [self emitIntent:DTN_INTENT_CANCEL
+               body:nil
+              color:DTN_NO_COLOR
+              token:self.projection.selected_token];
+}
+
+- (void)onKeepEditing:(id)sender {
+  (void)sender;
+  [self.editor hideDiscardConfirmation];
+  [self.editor.textView.window makeFirstResponder:self.editor.textView];
+}
+
+- (void)onDraftColor:(id)sender {
+  (void)sender;
+  self.editor.errorLabel.hidden = YES;
+  const BOOL dark =
+      (self.projection.projection_flags & (1u << 2)) != 0u;
+  const uint32_t color =
+      (uint32_t)self.editor.colorControl.selectedSegment;
+  self.editor.layer.backgroundColor =
+      DtnColor(DtnSurfaceRgba(color, dark)).CGColor;
+  self.editor.layer.borderColor =
+      DtnColor(DtnAccentRgba(color, dark)).CGColor;
+}
+
+- (void)onCardColor:(id)sender {
+  (void)sender;
+  [self emitIntent:DTN_INTENT_CHANGE_COLOR
+               body:nil
+              color:(uint32_t)self.cardColorControl.selectedSegment
+              token:self.projection.selected_token];
+}
+
+- (void)onEarlier:(id)sender {
+  (void)sender;
+  [self emitIntent:DTN_INTENT_MOVE_EARLIER body:nil color:DTN_NO_COLOR
+              token:self.projection.selected_token];
+}
+
+- (void)onLater:(id)sender {
+  (void)sender;
+  [self emitIntent:DTN_INTENT_MOVE_LATER body:nil color:DTN_NO_COLOR
+              token:self.projection.selected_token];
+}
+
+- (void)onResolve:(id)sender {
+  (void)sender;
+  [self emitIntent:DTN_INTENT_RESOLVE body:nil color:DTN_NO_COLOR
+              token:self.projection.selected_token];
+}
+
+- (void)onReopen:(id)sender {
+  (void)sender;
+  [self emitIntent:DTN_INTENT_REOPEN body:nil color:DTN_NO_COLOR
+              token:self.projection.selected_token];
+}
+
+- (void)onDelete:(id)sender {
+  (void)sender;
+  if (!self.deleteConfirmationArmed) {
+    self.deleteConfirmationArmed = YES;
+    NSButton* button = self.actionButtons[4];
+    button.title = self.projection.locale == 1u ? @"削除を確認" : @"Confirm Delete";
+    return;
+  }
+  [self emitIntent:DTN_INTENT_DELETE body:nil color:DTN_NO_COLOR
+              token:self.projection.selected_token];
+}
+
+- (void)onReattach:(id)sender {
+  (void)sender;
+  [self emitIntent:DTN_INTENT_REATTACH body:nil color:DTN_NO_COLOR
+              token:self.projection.selected_token];
+}
+
+- (void)onExport:(id)sender {
+  (void)sender;
+  [self emitIntent:DTN_INTENT_EXPORT body:nil color:DTN_NO_COLOR token:0u];
+}
+
+- (void)onCopy:(id)sender {
+  (void)sender;
+  DtnCardModel* model = [self selectedModel];
+  if (model == nil) return;
+  [self emitIntent:DTN_INTENT_COPY body:model.body color:DTN_NO_COLOR
+              token:model.token];
+}
+
+- (void)setSemanticControlsEnabled:(BOOL)enabled {
+  if (!enabled) {
+    for (NSButton* button in self.actionButtons) button.enabled = NO;
+    self.cardColorControl.enabled = NO;
+  } else {
+    DtnCardModel* selected = [self selectedModel];
+    const BOOL has_selection = selected != nil;
+    self.actionButtons[0].enabled = has_selection;
+    self.actionButtons[1].enabled = has_selection;
+    self.actionButtons[2].enabled = has_selection && selected.status == 0u;
+    self.actionButtons[3].enabled = has_selection && selected.status == 1u;
+    self.actionButtons[4].enabled = has_selection;
+    self.actionButtons[5].enabled =
+        has_selection && self.projection.section == DTN_SECTION_DETACHED;
+    self.actionButtons[6].enabled = YES;
+    self.actionButtons[7].enabled = has_selection;
+    self.cardColorControl.enabled = has_selection;
+  }
+  self.editor.saveButton.enabled = enabled;
+  self.editor.cancelButton.enabled = enabled;
+  self.editor.colorControl.enabled = enabled;
+  self.editor.discardButton.enabled = enabled;
+  self.editor.keepEditingButton.enabled = enabled;
+}
+
+- (void)applySemanticResult:(DtnSurfaceResultV1)result
+                 intentKind:(uint32_t)intentKind {
+  const BOOL awaits_projection =
+      result.disposition == DTN_RESULT_ACCEPTED &&
+      dtn_intent_kind_mutates(intentKind);
+  [self setSemanticControlsEnabled:!awaits_projection];
+  if (result.disposition == DTN_RESULT_ACCEPTED &&
+      (intentKind == DTN_INTENT_SAVE || intentKind == DTN_INTENT_CANCEL)) {
+    self.locallyClosedEditor = YES;
+    self.editor.hidden = YES;
+    self.scrollView.hidden = NO;
+    [self.editor.textView.undoManager removeAllActions];
+    [self layoutPresentation];
+    return;
+  }
+  if (result.disposition != DTN_RESULT_ACCEPTED) {
+    if (!self.editor.hidden) [self.editor showFixedError];
+  }
+}
+
 - (void)applyProjection:(DtnParsedProjection)projection
                   cards:(NSArray<DtnCardModel*>*)cards {
+  const uint64_t previous_draft = self.editor.draftGeneration;
   self.projection = projection;
   self.models = cards;
   for (NSView* view in self.cardList.subviews.copy) {
@@ -405,9 +913,79 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   self.titleLabel.textColor =
       DtnColor(dark ? 0xf5f5f5ffu : 0x1f1f1fffu);
   self.sectionControl.selectedSegment = projection.section;
+  NSArray<NSString*>* english_actions = @[
+    @"Earlier", @"Later", @"Resolve", @"Reopen", @"Delete…", @"Reattach",
+    @"Export", @"Copy"
+  ];
+  NSArray<NSString*>* japanese_actions = @[
+    @"前へ", @"後へ", @"解決", @"再開", @"削除…", @"再接続", @"書き出す",
+    @"コピー"
+  ];
+  NSArray<NSString*>* action_titles =
+      japanese ? japanese_actions : english_actions;
+  for (NSUInteger index = 0; index < self.actionButtons.count; ++index) {
+    self.actionButtons[index].title = action_titles[index];
+  }
+  DtnCardModel* selected_model = [self selectedModel];
+  const BOOL has_selection = selected_model != nil;
+  self.actionButtons[0].enabled = has_selection;
+  self.actionButtons[1].enabled = has_selection;
+  self.actionButtons[2].enabled = has_selection && selected_model.status == 0u;
+  self.actionButtons[3].enabled = has_selection && selected_model.status == 1u;
+  self.actionButtons[4].enabled = has_selection;
+  self.actionButtons[5].enabled =
+      has_selection && projection.section == DTN_SECTION_DETACHED;
+  self.actionButtons[6].enabled = YES;
+  self.actionButtons[7].enabled = has_selection;
+  self.cardColorControl.enabled = has_selection;
+  if (has_selection) {
+    self.cardColorControl.selectedSegment = (NSInteger)selected_model.color;
+  } else {
+    for (NSInteger index = 0; index < self.cardColorControl.segmentCount;
+         ++index) {
+      [self.cardColorControl setSelected:NO forSegment:index];
+    }
+  }
+  [self.cardColorControl setAccessibilityLabel:japanese ? @"ノートの色"
+                                                    : @"Note color"];
+  self.deleteConfirmationArmed = NO;
+
+  const BOOL editor_active = projection.editor_mode != DTN_EDITOR_INACTIVE;
+  if (!editor_active) {
+    self.locallyClosedEditor = NO;
+    self.editor.hidden = YES;
+    self.scrollView.hidden = NO;
+    self.editor.draftGeneration = 0u;
+  } else {
+    if (projection.draft_generation != previous_draft) {
+      self.locallyClosedEditor = NO;
+      NSString* baseline = selected_model == nil ? @"" : selected_model.body;
+      const uint32_t color = selected_model == nil ? 1u : selected_model.color;
+      [self.editor beginDraft:baseline
+                        color:color
+              draftGeneration:projection.draft_generation
+               bodyFontPoints:font_points
+               japaneseLocale:japanese];
+    } else {
+      self.editor.textView.font = [NSFont systemFontOfSize:font_points];
+    }
+    self.editor.hidden = self.locallyClosedEditor;
+    self.scrollView.hidden = !self.locallyClosedEditor;
+    self.editor.layer.backgroundColor =
+        DtnColor(DtnSurfaceRgba(
+                     (uint32_t)self.editor.colorControl.selectedSegment, dark))
+            .CGColor;
+    self.editor.layer.borderColor =
+        DtnColor(DtnAccentRgba(
+                     (uint32_t)self.editor.colorControl.selectedSegment, dark))
+            .CGColor;
+    self.editor.textView.textColor =
+        DtnColor(dark ? 0xf5f5f5ffu : 0x1f1f1fffu);
+  }
   self.animationMilliseconds =
       (projection.projection_flags & (1u << 5)) != 0u ? 0u : 140u;
   self.visibleAcknowledgementEligibleGeneration = 0u;
+  [self setSemanticControlsEnabled:YES];
   [self layoutPresentation];
 }
 
@@ -484,9 +1062,26 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   self.titleLabel.frame = NSMakeRect(0, 0, 72, 20);
   self.sectionControl.frame =
       NSMakeRect(fmax(76, rail_width - 24 - 160), 0, 160, 24);
-  self.scrollView.frame =
-      NSMakeRect(12, 62, fmax(0, rail_width - 24),
-                 fmax(0, self.rail.bounds.size.height - 74));
+  const BOOL editor_visible = !self.editor.hidden;
+  self.actionBar.hidden = editor_visible;
+  self.actionBar.frame =
+      NSMakeRect(12, 60, fmax(0, rail_width - 24), 88);
+  const CGFloat action_width =
+      fmax(0, (self.actionBar.bounds.size.width - 18) / 4);
+  for (NSUInteger index = 0; index < self.actionButtons.count; ++index) {
+    const NSUInteger row = index / 4;
+    const NSUInteger column = index % 4;
+    self.actionButtons[index].frame =
+        NSMakeRect(column * (action_width + 6), row * 28, action_width, 24);
+  }
+  self.cardColorControl.frame =
+      NSMakeRect(0, 58, self.actionBar.bounds.size.width, 26);
+  const CGFloat content_y = editor_visible ? 62 : 154;
+  const NSRect content_frame =
+      NSMakeRect(12, content_y, fmax(0, rail_width - 24),
+                 fmax(0, self.rail.bounds.size.height - content_y - 12));
+  self.scrollView.frame = content_frame;
+  self.editor.frame = content_frame;
   CGFloat card_y = 0;
   const CGFloat card_width = fmax(0, self.scrollView.bounds.size.width - 12);
   for (DtnNoteCardView* card in self.cardViews) {
@@ -508,9 +1103,13 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   }
   self.cardList.frame = NSMakeRect(
       0, 0, card_width, fmax(self.scrollView.bounds.size.height, card_y));
-  self.accessibilityBodyCount = rail_visible ? (uint32_t)self.cardViews.count : 0;
+  self.accessibilityBodyCount =
+      rail_visible ? (editor_visible ? 1u : (uint32_t)self.cardViews.count)
+                   : 0u;
   self.accessibilityNodeCount =
-      rail_visible ? 5u + (uint32_t)self.cardViews.count * 3u
+      rail_visible ? (editor_visible
+                          ? 10u
+                          : 14u + (uint32_t)self.cardViews.count * 3u)
                    : (badge_visible ? 1u : 0u);
   [self reconcileReadyAnnouncement];
   [self.badge setNeedsDisplay:YES];
@@ -668,6 +1267,25 @@ static bool dtn_valid_body_utf8(const uint8_t* bytes, size_t length) {
     if (!dtn_unicode_whitespace(scalar)) has_non_whitespace = true;
   }
   return has_non_whitespace;
+}
+
+static bool dtn_valid_editor_string(NSString* value,
+                                    bool require_non_whitespace) {
+  if (value == nil) return false;
+  NSData* data = [value dataUsingEncoding:NSUTF8StringEncoding
+                     allowLossyConversion:NO];
+  if (data == nil || data.length > DTN_MAX_INTENT_PAYLOAD_BYTES) return false;
+  if (data.length == 0u) return !require_non_whitespace;
+  if (dtn_valid_body_utf8(data.bytes, data.length)) return true;
+  if (require_non_whitespace) return false;
+
+  // The shared persisted-body validator deliberately rejects whitespace-only
+  // bodies. Such text is a valid intermediate draft, so append one safe scalar
+  // only for structural validation; the original byte bound remains decisive.
+  NSMutableData* structural = [data mutableCopy];
+  const uint8_t non_whitespace = 'x';
+  [structural appendBytes:&non_whitespace length:1u];
+  return dtn_valid_body_utf8(structural.bytes, structural.length);
 }
 
 static bool dtn_trigger_matches(uint8_t kind, uint8_t phase) {
@@ -852,6 +1470,7 @@ DtnSurface* dtn_surface_create(void) {
     free(surface);
     return NULL;
   }
+  surface->view.nativeSurface = surface;
   atomic_fetch_add_explicit(&g_live_surfaces, 1u, memory_order_relaxed);
   return surface;
 }
@@ -1169,6 +1788,36 @@ int32_t dtn_surface_request_intent(DtnSurface* surface,
   return DTN_STATUS_OK;
 }
 
+static int32_t dtn_emit_view_intent(DtnSurface* surface, uint32_t kind,
+                                    NSString* body, uint32_t color,
+                                    uint64_t token) {
+  if (surface == NULL || surface->last_event_generation >= INT64_MAX) {
+    return DTN_STATUS_INVALID_ARGUMENT;
+  }
+  NSData* payload = nil;
+  if (body != nil) {
+    payload = [body dataUsingEncoding:NSUTF8StringEncoding
+                 allowLossyConversion:NO];
+    if (payload == nil || payload.length > DTN_MAX_INTENT_PAYLOAD_BYTES) {
+      return DTN_STATUS_INVALID_ARGUMENT;
+    }
+  }
+  DtnSurfaceIntentV1 intent = {0};
+  intent.struct_size = sizeof(intent);
+  intent.version = DTN_INTENT_VERSION;
+  intent.surface_generation = surface->projection.surface_generation;
+  intent.projection_generation = surface->projection.projection_generation;
+  intent.event_generation = surface->last_event_generation + 1u;
+  intent.draft_generation = surface->projection.draft_generation;
+  intent.card_token = token;
+  intent.expected_store_revision = surface->projection.store_revision_low;
+  intent.kind = kind;
+  intent.payload_bytes = (uint32_t)payload.length;
+  intent.color = color;
+  return dtn_surface_request_intent(
+      surface, &intent, payload.length == 0u ? NULL : payload.bytes);
+}
+
 int32_t dtn_surface_take_intent(DtnSurface* surface,
                                 DtnSurfaceIntentV1* intent,
                                 uint8_t* payload,
@@ -1241,6 +1890,7 @@ int32_t dtn_surface_apply_result(DtnSurface* surface,
     }
   }
 
+  [surface->view applySemanticResult:*result intentKind:pending.kind];
   surface->last_event_generation = pending.event_generation;
   memset(&surface->pending_intent, 0, sizeof(surface->pending_intent));
   memset(surface->pending_payload, 0, sizeof(surface->pending_payload));
@@ -1281,7 +1931,12 @@ int32_t dtn_surface_detach_from_host(DtnSurface* surface) {
 
 void dtn_surface_destroy(DtnSurface* surface) {
   if (surface == NULL) return;
-  if ([NSThread isMainThread]) [surface->view removeFromSuperview];
+  if ([NSThread isMainThread]) {
+    surface->view.nativeSurface = NULL;
+    surface->view.editor.textView.delegate = nil;
+    [surface->view.editor.textView.undoManager removeAllActions];
+    [surface->view removeFromSuperview];
+  }
   [surface->lock lock];
   uint8_t* packet = surface->packet;
   surface->packet = NULL;

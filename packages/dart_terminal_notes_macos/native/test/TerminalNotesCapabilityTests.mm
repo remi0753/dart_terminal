@@ -126,6 +126,24 @@ void find_views_named(NSView* root, NSString* class_name,
   }
 }
 
+NSButton* find_button_with_title(NSView* root, NSString* title) {
+  if ([root isKindOfClass:NSButton.class] &&
+      [[(NSButton*)root title] isEqualToString:title]) {
+    return (NSButton*)root;
+  }
+  for (NSView* child in root.subviews) {
+    NSButton* match = find_button_with_title(child, title);
+    if (match != nil) return match;
+  }
+  return nil;
+}
+
+void replace_text(NSTextView* text_view, NSString* replacement) {
+  const NSRange all = NSMakeRange(0u, text_view.string.length);
+  [text_view breakUndoCoalescing];
+  [text_view insertText:replacement replacementRange:all];
+}
+
 bool layer_color_matches(NSView* view, uint32_t rgba) {
   NSColor* color = view.layer.backgroundColor == nullptr
       ? nil
@@ -728,6 +746,372 @@ int main() {
                    snapshot.emitted_intent_count == 2u &&
                    snapshot.applied_result_count == 2u,
                "intent/result counters and ownership return to zero");
+
+  DtnSurface* editor_surface = dtn_surface_create();
+  ok &= expect(editor_surface != nullptr &&
+                   dtn_debug_live_surfaces() == 2u,
+               "isolated editor surface creation");
+  NSWindow* editor_window = [[NSWindow alloc]
+      initWithContentRect:NSMakeRect(0, 0, 640, 480)
+                styleMask:NSWindowStyleMaskBorderless
+                  backing:NSBackingStoreBuffered
+                    defer:NO];
+  NSView* editor_host =
+      [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 640, 480)];
+  editor_window.contentView = editor_host;
+  NSView* editor_note_view =
+      (__bridge NSView*)dtn_surface_native_view(editor_surface);
+  std::vector<uint8_t> editor_packet = packet(1u, 4u, {"baseline"}, 0x01u);
+  editor_packet[83u] = DTN_EDITOR_EDITING;
+  write_u16(editor_packet, 86u, 1u);
+  write_u64(editor_packet, 108u, 1u);
+  ok &= expect(dtn_surface_apply_projection(
+                   editor_surface, editor_packet.data(), editor_packet.size()) ==
+                       DTN_STATUS_OK &&
+                   dtn_surface_update_layout(editor_surface, &normal_layout) ==
+                       DTN_STATUS_OK &&
+                   dtn_surface_attach_to_host(
+                       editor_surface, (__bridge void*)editor_host) ==
+                       DTN_STATUS_OK,
+               "actual AppKit editor projection and attachment");
+
+  NSView* editor_view =
+      find_view_named(editor_note_view, @"DtnNoteEditorView");
+  NSTextView* text_view =
+      editor_view == nil ? nil : [editor_view valueForKey:@"textView"];
+  NSSegmentedControl* draft_color =
+      editor_view == nil ? nil : [editor_view valueForKey:@"colorControl"];
+  NSButton* save_button = find_button_with_title(editor_view, @"保存");
+  NSButton* cancel_button =
+      find_button_with_title(editor_view, @"キャンセル");
+  NSButton* discard_button = find_button_with_title(editor_view, @"破棄");
+  NSButton* keep_editing_button =
+      find_button_with_title(editor_view, @"編集を続ける");
+  NSView* discard_confirmation =
+      editor_view == nil ? nil
+                         : [editor_view valueForKey:@"discardConfirmation"];
+  NSTextField* editor_error =
+      editor_view == nil ? nil : [editor_view valueForKey:@"errorLabel"];
+  NSArray<NSButton*>* semantic_buttons =
+      editor_note_view == nil ? nil
+                              : [editor_note_view valueForKey:@"actionButtons"];
+  NSSegmentedControl* card_color =
+      editor_note_view == nil
+          ? nil
+          : [editor_note_view valueForKey:@"cardColorControl"];
+  ok &= expect(editor_view != nil && !editor_view.hidden && text_view != nil &&
+                   [text_view.string isEqualToString:@"baseline"] &&
+                   save_button != nil && cancel_button != nil &&
+                   discard_button != nil && keep_editing_button != nil &&
+                   draft_color.segmentCount == 6 &&
+                   semantic_buttons.count == 8u &&
+                   card_color.segmentCount == 6 &&
+                   [[editor_view accessibilityRole]
+                       isEqualToString:NSAccessibilityGroupRole] &&
+                   [[text_view accessibilityRole]
+                       isEqualToString:NSAccessibilityTextAreaRole] &&
+                   [[save_button accessibilityRole]
+                       isEqualToString:NSAccessibilityButtonRole],
+               "localized editor and actual accessibility controls");
+  presentation = {};
+  presentation.struct_size = sizeof(presentation);
+  presentation.version = DTN_PRESENTATION_SNAPSHOT_VERSION;
+  ok &= expect(dtn_surface_presentation_snapshot(editor_surface,
+                                                  &presentation) ==
+                       DTN_STATUS_OK &&
+                   presentation.accessibility_body_count == 1u,
+               "editor exposes one accessible body without card echo");
+
+  [editor_window makeFirstResponder:text_view];
+  [text_view setSelectedRange:NSMakeRange(text_view.string.length, 0u)];
+  [text_view setMarkedText:@"かな"
+             selectedRange:NSMakeRange(2u, 0u)
+          replacementRange:NSMakeRange(NSNotFound, 0u)];
+  const BOOL had_marked_text = text_view.hasMarkedText;
+  [text_view insertText:@"仮名" replacementRange:text_view.markedRange];
+  ok &= expect(had_marked_text && !text_view.hasMarkedText &&
+                   [text_view.string isEqualToString:@"baseline仮名"] &&
+                   text_view.undoManager.canUndo,
+               "Japanese marked text commits into volatile Undo draft");
+
+  NSString* before_invalid = [text_view.string copy];
+  [text_view setSelectedRange:NSMakeRange(3u, 2u)];
+  const NSRange selection_before_invalid = text_view.selectedRange;
+  const BOOL undo_before_invalid = text_view.undoManager.canUndo;
+  NSString* undo_name_before_invalid =
+      [text_view.undoManager.undoActionName copy];
+  replace_text(text_view,
+               [@"x" stringByPaddingToLength:4097u
+                                  withString:@"x"
+                             startingAtIndex:0u]);
+  ok &= expect([text_view.string isEqualToString:before_invalid] &&
+                   NSEqualRanges(text_view.selectedRange,
+                                 selection_before_invalid) &&
+                   text_view.undoManager.canUndo == undo_before_invalid &&
+                   [text_view.undoManager.undoActionName
+                       isEqualToString:undo_name_before_invalid],
+               "4,097-byte operation rejects atomically");
+
+  NSPasteboard* external_text = [NSPasteboard pasteboardWithUniqueName];
+  [external_text declareTypes:@[ NSPasteboardTypeString ] owner:nil];
+  [external_text setString:[@"p" stringByPaddingToLength:4097u
+                                             withString:@"p"
+                                        startingAtIndex:0u]
+                  forType:NSPasteboardTypeString];
+  (void)[text_view readSelectionFromPasteboard:external_text
+                                          type:NSPasteboardTypeString];
+  ok &= expect([text_view.string isEqualToString:before_invalid] &&
+                   NSEqualRanges(text_view.selectedRange,
+                                 selection_before_invalid) &&
+                   [text_view.readablePasteboardTypes
+                       isEqualToArray:@[ NSPasteboardTypeString ]] &&
+                   [text_view.acceptableDragTypes
+                       isEqualToArray:@[ NSPasteboardTypeString ]],
+               "paste drop and Services share bounded plain-text admission");
+  (void)[external_text setString:@"file:///tmp/private"
+                         forType:NSPasteboardTypeFileURL];
+  ok &= expect(![text_view readSelectionFromPasteboard:external_text
+                                                  type:NSPasteboardTypeFileURL] &&
+                   [text_view.string isEqualToString:before_invalid],
+               "file and custom pasteboard types are rejected");
+
+  replace_text(text_view, @"x\u202ey");
+  ok &= expect([text_view.string isEqualToString:before_invalid],
+               "bidi control operation rejects atomically");
+  const unichar unpaired_scalar = 0xd800u;
+  NSString* unpaired =
+      [NSString stringWithCharacters:&unpaired_scalar length:1u];
+  replace_text(text_view, unpaired);
+  ok &= expect([text_view.string isEqualToString:before_invalid],
+               "unpaired surrogate operation rejects atomically");
+
+  NSString* maximum_draft =
+      [@"x" stringByPaddingToLength:4096u
+                         withString:@"x"
+                    startingAtIndex:0u];
+  replace_text(text_view, maximum_draft);
+  ok &= expect([text_view.string lengthOfBytesUsingEncoding:NSUTF8StringEncoding] ==
+                       4096u &&
+                   text_view.undoManager.canUndo,
+               "4,096-byte operation is admitted with Undo");
+  [text_view.undoManager undo];
+  ok &= expect(![text_view.string isEqualToString:maximum_draft],
+               "maximum draft replacement is undoable");
+  replace_text(text_view, before_invalid);
+
+  NSMutableString* sixty_four_lines = [NSMutableString stringWithString:@"x"];
+  for (NSUInteger index = 1u; index < 64u; ++index) {
+    [sixty_four_lines appendString:@"\nx"];
+  }
+  replace_text(text_view, sixty_four_lines);
+  ok &= expect([text_view.string isEqualToString:sixty_four_lines],
+               "64-line operation is admitted");
+  [text_view.undoManager undo];
+  replace_text(text_view, before_invalid);
+  NSMutableString* sixty_five_lines = [sixty_four_lines mutableCopy];
+  [sixty_five_lines appendString:@"\nx"];
+  [text_view setSelectedRange:NSMakeRange(1u, 0u)];
+  const NSRange selection_before_65 = text_view.selectedRange;
+  replace_text(text_view, sixty_five_lines);
+  ok &= expect([text_view.string isEqualToString:before_invalid] &&
+                   NSEqualRanges(text_view.selectedRange,
+                                 selection_before_65),
+               "65-line operation rejects atomically");
+
+  replace_text(text_view, @" \t");
+  [save_button performClick:nil];
+  DtnSurfaceIntentV1 editor_taken = {};
+  editor_taken.struct_size = sizeof(editor_taken);
+  editor_taken.version = DTN_INTENT_VERSION;
+  uint8_t editor_payload[DTN_MAX_INTENT_PAYLOAD_BYTES] = {};
+  ok &= expect(!editor_error.hidden &&
+                   dtn_surface_take_intent(editor_surface, &editor_taken,
+                                           editor_payload,
+                                           sizeof(editor_payload)) ==
+                       DTN_STATUS_NOT_FOUND,
+               "whitespace-only Save is rejected before intent emission");
+
+  replace_text(text_view, @"仮名のメモ");
+  draft_color.selectedSegment = 2;
+  [draft_color sendAction:draft_color.action to:draft_color.target];
+  [text_view setSelectedRange:NSMakeRange(2u, 1u)];
+  const NSRange saved_selection = text_view.selectedRange;
+  const BOOL saved_can_undo = text_view.undoManager.canUndo;
+  [save_button performClick:nil];
+  NSData* expected_editor_body =
+      [text_view.string dataUsingEncoding:NSUTF8StringEncoding];
+  editor_taken = {};
+  editor_taken.struct_size = sizeof(editor_taken);
+  editor_taken.version = DTN_INTENT_VERSION;
+  ok &= expect(dtn_surface_take_intent(editor_surface, &editor_taken,
+                                       editor_payload,
+                                       sizeof(editor_payload)) ==
+                       DTN_STATUS_OK &&
+                   editor_taken.kind == DTN_INTENT_SAVE &&
+                   editor_taken.event_generation == 1u &&
+                   editor_taken.draft_generation == 1u &&
+                   editor_taken.color == 2u &&
+                   editor_taken.payload_bytes == expected_editor_body.length &&
+                   std::memcmp(editor_payload, expected_editor_body.bytes,
+                               expected_editor_body.length) == 0,
+               "Save emits committed Japanese body and draft color");
+  DtnSurfaceResultV1 editor_conflict = {};
+  editor_conflict.struct_size = sizeof(editor_conflict);
+  editor_conflict.version = DTN_RESULT_VERSION;
+  editor_conflict.surface_generation = 7u;
+  editor_conflict.projection_generation = 1u;
+  editor_conflict.event_generation = 1u;
+  editor_conflict.draft_generation = 1u;
+  editor_conflict.new_store_revision = 4u;
+  editor_conflict.new_projection_generation = 1u;
+  editor_conflict.disposition = DTN_RESULT_CONFLICT;
+  ok &= expect(dtn_surface_apply_result(editor_surface, &editor_conflict) ==
+                       DTN_STATUS_OK &&
+                   [text_view.string isEqualToString:@"仮名のメモ"] &&
+                   NSEqualRanges(text_view.selectedRange, saved_selection) &&
+                   text_view.undoManager.canUndo == saved_can_undo &&
+                   !editor_error.hidden && save_button.enabled,
+               "conflict preserves draft selection Undo and re-enables editor");
+
+  [cancel_button performClick:nil];
+  editor_taken = {};
+  editor_taken.struct_size = sizeof(editor_taken);
+  editor_taken.version = DTN_INTENT_VERSION;
+  ok &= expect(!discard_confirmation.hidden && !text_view.editable &&
+                   dtn_surface_take_intent(editor_surface, &editor_taken,
+                                           editor_payload,
+                                           sizeof(editor_payload)) ==
+                       DTN_STATUS_NOT_FOUND,
+               "dirty Cancel requires explicit discard confirmation");
+  [keep_editing_button performClick:nil];
+  ok &= expect(discard_confirmation.hidden && text_view.editable,
+               "Keep Editing returns to unchanged draft");
+  [cancel_button performClick:nil];
+  [discard_button performClick:nil];
+  editor_taken = {};
+  editor_taken.struct_size = sizeof(editor_taken);
+  editor_taken.version = DTN_INTENT_VERSION;
+  ok &= expect(dtn_surface_take_intent(editor_surface, &editor_taken,
+                                       editor_payload,
+                                       sizeof(editor_payload)) ==
+                       DTN_STATUS_OK &&
+                   editor_taken.kind == DTN_INTENT_CANCEL &&
+                   editor_taken.event_generation == 2u &&
+                   editor_taken.payload_bytes == 0u,
+               "explicit Discard emits body-free Cancel");
+  DtnSurfaceResultV1 cancel_accepted = {};
+  cancel_accepted.struct_size = sizeof(cancel_accepted);
+  cancel_accepted.version = DTN_RESULT_VERSION;
+  cancel_accepted.surface_generation = 7u;
+  cancel_accepted.projection_generation = 1u;
+  cancel_accepted.event_generation = 2u;
+  cancel_accepted.draft_generation = 1u;
+  cancel_accepted.new_store_revision = 4u;
+  cancel_accepted.new_projection_generation = 1u;
+  cancel_accepted.disposition = DTN_RESULT_ACCEPTED;
+  ok &= expect(dtn_surface_apply_result(editor_surface, &cancel_accepted) ==
+                       DTN_STATUS_OK &&
+                   editor_view.hidden,
+               "accepted Cancel closes volatile editor locally");
+
+  BOOL actual_actions = semantic_buttons.count == 8u;
+  for (NSButton* button in semantic_buttons) {
+    actual_actions = actual_actions && button.target != nil &&
+                     button.action != nil &&
+                     [[button accessibilityRole]
+                         isEqualToString:NSAccessibilityButtonRole];
+  }
+  ok &= expect(actual_actions && !card_color.hidden && card_color.enabled,
+               "all read-mode semantic actions are actual AppKit controls");
+  card_color.selectedSegment = 4;
+  [card_color sendAction:card_color.action to:card_color.target];
+  editor_taken = {};
+  editor_taken.struct_size = sizeof(editor_taken);
+  editor_taken.version = DTN_INTENT_VERSION;
+  ok &= expect(dtn_surface_take_intent(editor_surface, &editor_taken,
+                                       editor_payload,
+                                       sizeof(editor_payload)) ==
+                       DTN_STATUS_OK &&
+                   editor_taken.kind == DTN_INTENT_CHANGE_COLOR &&
+                   editor_taken.color == 4u &&
+                   editor_taken.event_generation == 3u,
+               "read-mode six-color control emits semantic change");
+  DtnSurfaceResultV1 color_rejected = {};
+  color_rejected.struct_size = sizeof(color_rejected);
+  color_rejected.version = DTN_RESULT_VERSION;
+  color_rejected.surface_generation = 7u;
+  color_rejected.projection_generation = 1u;
+  color_rejected.event_generation = 3u;
+  color_rejected.draft_generation = 1u;
+  color_rejected.new_store_revision = 4u;
+  color_rejected.new_projection_generation = 1u;
+  color_rejected.disposition = DTN_RESULT_REJECTED;
+  ok &= expect(dtn_surface_apply_result(editor_surface, &color_rejected) ==
+                       DTN_STATUS_OK &&
+                   card_color.enabled,
+               "rejected card action restores semantic controls");
+
+  NSButton* copy_button = semantic_buttons[7];
+  [copy_button performClick:nil];
+  editor_taken = {};
+  editor_taken.struct_size = sizeof(editor_taken);
+  editor_taken.version = DTN_INTENT_VERSION;
+  ok &= expect(dtn_surface_take_intent(editor_surface, &editor_taken,
+                                       editor_payload,
+                                       sizeof(editor_payload)) ==
+                       DTN_STATUS_OK &&
+                   editor_taken.kind == DTN_INTENT_COPY &&
+                   editor_taken.event_generation == 4u &&
+                   editor_taken.payload_bytes == 8u &&
+                   std::memcmp(editor_payload, "baseline", 8u) == 0,
+               "explicit Copy is the only non-Save body-bearing action");
+  DtnSurfaceResultV1 copy_accepted = {};
+  copy_accepted.struct_size = sizeof(copy_accepted);
+  copy_accepted.version = DTN_RESULT_VERSION;
+  copy_accepted.surface_generation = 7u;
+  copy_accepted.projection_generation = 1u;
+  copy_accepted.event_generation = 4u;
+  copy_accepted.draft_generation = 1u;
+  copy_accepted.new_store_revision = 4u;
+  copy_accepted.new_projection_generation = 1u;
+  copy_accepted.disposition = DTN_RESULT_ACCEPTED;
+  ok &= expect(dtn_surface_apply_result(editor_surface, &copy_accepted) ==
+                       DTN_STATUS_OK,
+               "nonmutating Copy completes without projection advance");
+
+  NSButton* delete_button = semantic_buttons[4];
+  [delete_button performClick:nil];
+  editor_taken = {};
+  editor_taken.struct_size = sizeof(editor_taken);
+  editor_taken.version = DTN_INTENT_VERSION;
+  ok &= expect([delete_button.title isEqualToString:@"削除を確認"] &&
+                   dtn_surface_take_intent(editor_surface, &editor_taken,
+                                           editor_payload,
+                                           sizeof(editor_payload)) ==
+                       DTN_STATUS_NOT_FOUND,
+               "Delete requires a separate confirmation action");
+  [delete_button performClick:nil];
+  editor_taken = {};
+  editor_taken.struct_size = sizeof(editor_taken);
+  editor_taken.version = DTN_INTENT_VERSION;
+  ok &= expect(dtn_surface_take_intent(editor_surface, &editor_taken,
+                                       editor_payload,
+                                       sizeof(editor_payload)) ==
+                       DTN_STATUS_OK &&
+                   editor_taken.kind == DTN_INTENT_DELETE &&
+                   editor_taken.event_generation == 5u,
+               "confirmed Delete emits one semantic intent");
+  DtnSurfaceResultV1 delete_rejected = color_rejected;
+  delete_rejected.event_generation = 5u;
+  ok &= expect(dtn_surface_apply_result(editor_surface, &delete_rejected) ==
+                   DTN_STATUS_OK,
+               "rejected Delete returns action ownership");
+
+  ok &= expect(dtn_surface_detach_from_host(editor_surface) == DTN_STATUS_OK,
+               "editor surface detaches before destruction");
+  dtn_surface_destroy(editor_surface);
+  ok &= expect(dtn_debug_live_surfaces() == 1u,
+               "isolated editor surface releases all native ownership");
 
   ok &= expect(std::memcmp(&terminal, &terminal_before, sizeof(terminal)) == 0,
                "G1-G3/T1 terminal geometry and input sentinel delta zero");
