@@ -2936,13 +2936,14 @@ TerminalDiagnosticsSnapshot _diagnosticsPresenterSnapshot(
   ),
   renderer: TerminalDiagnosticsRendererSnapshot.unavailable(),
   configuration: TerminalDiagnosticsConfigurationSnapshot(
-    schemaOptionCount: 55,
+    schemaOptionCount: 59,
     effectiveGeneration: 0,
     attemptGeneration: 0,
     warningCount: 0,
     errorCount: 0,
-    liveOptionCount: 13,
+    liveOptionCount: 14,
     newSessionOptionCount: 42,
+    nextLaunchOptionCount: 3,
   ),
   features: TerminalDiagnosticsFeaturesSnapshot(
     secureInput: TerminalDiagnosticsFeatureState.disabled,

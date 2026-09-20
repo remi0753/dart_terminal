@@ -159,6 +159,7 @@ final class TerminalSettingsInspectorState {
     _ensureOpen();
     _effective = TerminalEffectiveConfigSnapshot.fromSnapshot(
       controller.effectiveSnapshot,
+      publicOnly: true,
     );
     final TerminalConfigSnapshot? attempted = controller.lastAttemptedSnapshot;
     _diagnostics = List<TerminalConfigDiagnostic>.unmodifiable(
@@ -435,6 +436,7 @@ final class TerminalSettingsInspectorState {
       switch (policy) {
         TerminalConfigApplicationPolicy.live => 'live',
         TerminalConfigApplicationPolicy.newSession => 'new-session',
+        TerminalConfigApplicationPolicy.nextLaunch => 'next-launch',
       };
 
   static String _sourceKind(TerminalConfigSourceKind kind) => switch (kind) {

@@ -630,6 +630,7 @@ final class TerminalLocalization {
       switch ((language, policy)) {
         (TerminalLanguage.japanese, 'live') => '即時',
         (TerminalLanguage.japanese, 'new-session') => '新規セッション',
+        (TerminalLanguage.japanese, 'next-launch') => '次回起動',
         _ => policy,
       };
   String settingsSourceKind(String kind) => switch ((language, kind)) {
@@ -1122,6 +1123,10 @@ final Map<String, String> _japaneseSettingsOptionDescriptions =
       'palette-cursor': 'ターミナルのカーソル色。',
       'font-family': 'ターミナルの等幅フォント、または `system`。',
       'font-size': 'ターミナルのフォントサイズ（ポイント）。',
+      'notes': 'ローカルのノート保存領域とターミナルのノート表示を有効にする。',
+      'notes-on-return': '「戻ったとき」に設定したノートの表示を許可する。',
+      'notes-next-prompt': '「次のプロンプト」に設定したノートの表示を許可する。',
+      'notes-font-size': 'ノート本文とエディタのフォントサイズ（論理ポイント）。',
       'font-synthetic-style': '不足している太字・斜体フェイスの合成を許可するか。',
       'font-variation-regular': '通常フェイスに適用するOpenTypeバリエーション座標。',
       'font-variation-bold': '太字フェイスに適用するOpenTypeバリエーション座標。',

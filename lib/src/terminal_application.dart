@@ -5419,6 +5419,13 @@ final class TerminalApplication {
                       TerminalConfigApplicationPolicy.newSession,
                 )
                 .length,
+            nextLaunchOptionCount: schema.options
+                .where(
+                  (TerminalConfigOptionBase option) =>
+                      option.applicationPolicy ==
+                      TerminalConfigApplicationPolicy.nextLaunch,
+                )
+                .length,
           ),
           features: TerminalDiagnosticsFeaturesSnapshot(
             secureInput: secureDiagnosticsState(),
@@ -13092,7 +13099,7 @@ final class TerminalApplication {
           actionDispatches.last.disposition ==
               TerminalActionDispatchDisposition.executed &&
           application.debugLiveObjectCount == nativeHandleBaseline + 6 &&
-          reloadController.effectiveSnapshot.schema.options.length == 55 &&
+          reloadController.effectiveSnapshot.schema.options.length == 59 &&
           settings.state.occurrences
                   .map(
                     (TerminalSettingsOptionOccurrence occurrence) =>

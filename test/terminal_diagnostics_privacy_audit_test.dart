@@ -7,7 +7,7 @@ Future<void> runTerminalDiagnosticsPrivacyAuditTests() async {
   final TerminalDiagnosticsPrivacyAuditResult result =
       await runTerminalDiagnosticsPrivacyAudit(projectRoot: root);
   _expect(
-    result.schemaKeyCount == 190 &&
+    result.schemaKeyCount == 191 &&
         result.ownerCount == 11 &&
         result.topLevelKeyCount == 11,
     'privacy audit covers the frozen schema and every export owner',

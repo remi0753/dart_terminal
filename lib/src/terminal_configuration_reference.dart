@@ -90,7 +90,7 @@ final class TerminalConfigurationReference {
       ..line('      Do not read any configuration file.')
       ..line()
       ..line('Schema options:');
-    for (final TerminalConfigOptionBase option in schema.options) {
+    for (final TerminalConfigOptionBase option in schema.publicOptions) {
       final String repetition = option.isRepeatable
           ? ' Repeatable up to ${option.maximumOccurrences} times.'
           : '';
@@ -177,7 +177,7 @@ final class TerminalConfigurationReference {
         'Repeatability | Description |',
       )
       ..line('| --- | --- | --- | --- | --- | --- | --- |');
-    for (final TerminalConfigOptionBase option in schema.options) {
+    for (final TerminalConfigOptionBase option in schema.publicOptions) {
       writer.line(
         '| ${_code(option.name)} | ${_code('--${option.name}=VALUE')} | '
         '${_code(option.valueSyntax)} | ${_code(_defaultValue(option))} | '
@@ -232,6 +232,7 @@ final class TerminalConfigurationReference {
       switch (policy) {
         TerminalConfigApplicationPolicy.live => 'live',
         TerminalConfigApplicationPolicy.newSession => 'new-session',
+        TerminalConfigApplicationPolicy.nextLaunch => 'next-launch',
       };
 
   static String _repeatability(TerminalConfigOptionBase option) =>

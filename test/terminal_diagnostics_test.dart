@@ -281,6 +281,7 @@ TerminalDiagnosticsSnapshot _snapshot({
     errorCount: 0,
     liveOptionCount: 10,
     newSessionOptionCount: 22,
+    nextLaunchOptionCount: 0,
   ),
   features: TerminalDiagnosticsFeaturesSnapshot(
     secureInput: TerminalDiagnosticsFeatureState.disabled,

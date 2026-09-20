@@ -586,6 +586,7 @@ modify_other_keys
 mouse_encoding
 mouse_tracking
 new_session_options
+next_launch_options
 notifications
 observer_failures
 ordinal

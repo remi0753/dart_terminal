@@ -89,7 +89,9 @@ final class TerminalSettingsDocumentComposer {
         rootText,
         snapshot.schema,
       );
-      final List<TerminalConfigOptionBase> missing = snapshot.schema.options
+      final List<TerminalConfigOptionBase> missing = snapshot
+          .schema
+          .publicOptions
           .where(
             (TerminalConfigOptionBase option) =>
                 !represented.contains(option.name),
@@ -143,7 +145,8 @@ final class TerminalSettingsDocumentComposer {
         '# Nullable and repeatable examples stay disabled until uncommented.',
       )
       ..writeln();
-    for (final TerminalConfigOptionBase option in snapshot.schema.options) {
+    for (final TerminalConfigOptionBase option
+        in snapshot.schema.publicOptions) {
       final String value = _suggestedValue(snapshot, option);
       final bool active = !option.isRepeatable && value != option.valueSyntax;
       if (!active) buffer.write('# ');

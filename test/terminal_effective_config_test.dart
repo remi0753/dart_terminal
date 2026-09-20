@@ -13,7 +13,7 @@ Future<void> runTerminalEffectiveConfigTests() async {
 
 void _testSchemaPresentationIsCompleteAndCanonical() {
   final TerminalConfigSchema schema = TerminalProductConfigSchema.instance;
-  _expect(schema.options.length == 55, 'product schema option count changed');
+  _expect(schema.options.length == 59, 'product schema option count changed');
   for (final TerminalConfigOptionBase option in schema.options) {
     _expect(
       option.valueSyntax.isNotEmpty && option.description.isNotEmpty,
@@ -84,9 +84,13 @@ void _testEffectiveSnapshotAndFormattingAreStableAndEscaped() {
   ).snapshot;
   final TerminalEffectiveConfigSnapshot effective =
       TerminalEffectiveConfigSnapshot.fromSnapshot(snapshot);
+  final TerminalEffectiveConfigSnapshot publicEffective =
+      TerminalEffectiveConfigSnapshot.fromSnapshot(snapshot, publicOnly: true);
   _expect(
     effective.entries.length == snapshot.schema.options.length + 1 &&
-        effective.diagnostics.single.code == 'CFG_DEPRECATED_VALUE',
+        effective.diagnostics.single.code == 'CFG_DEPRECATED_VALUE' &&
+        publicEffective.entries.length == 56 &&
+        publicEffective.entriesFor(TerminalProductConfigSchema.notes).isEmpty,
     'effective view is not complete or lost the migration diagnostic',
   );
 
@@ -139,7 +143,7 @@ void _testEffectiveSnapshotAndFormattingAreStableAndEscaped() {
   _expect(
     output == formatter.format(snapshot) &&
         output.startsWith(
-          'dart-terminal-effective-config version=1 options=55 entries=56 '
+          'dart-terminal-effective-config version=1 options=59 entries=60 '
           'diagnostics=1\n',
         ) &&
         output.endsWith('end\n') &&

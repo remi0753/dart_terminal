@@ -34,8 +34,10 @@ void validateConfigurationReferenceSource(
 }
 
 String configurationReferencePassLine() {
-  final List<TerminalConfigOptionBase> options =
-      TerminalProductConfigSchema.instance.options;
+  final List<TerminalConfigOptionBase> options = TerminalProductConfigSchema
+      .instance
+      .publicOptions
+      .toList(growable: false);
   final int live = options
       .where(
         (TerminalConfigOptionBase option) =>
@@ -45,8 +47,16 @@ String configurationReferencePassLine() {
   final int repeatable = options
       .where((TerminalConfigOptionBase option) => option.isRepeatable)
       .length;
+  final int nextLaunch = options
+      .where(
+        (TerminalConfigOptionBase option) =>
+            option.applicationPolicy ==
+            TerminalConfigApplicationPolicy.nextLaunch,
+      )
+      .length;
   return 'CONFIGURATION_REFERENCE_CHECK_PASS options=${options.length} '
-      'live=$live new_session=${options.length - live} '
+      'live=$live new_session=${options.length - live - nextLaunch} '
+      'next_launch=$nextLaunch '
       'repeatable=$repeatable';
 }
 

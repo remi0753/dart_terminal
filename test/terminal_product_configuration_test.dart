@@ -472,23 +472,36 @@ void _testApplicationPoliciesAndSemanticChangePlan() {
             option.applicationPolicy == TerminalConfigApplicationPolicy.live,
       )
       .toList(growable: false);
+  final List<TerminalConfigOptionBase> nextLaunch = schema.options
+      .where(
+        (TerminalConfigOptionBase option) =>
+            option.applicationPolicy ==
+            TerminalConfigApplicationPolicy.nextLaunch,
+      )
+      .toList(growable: false);
   _expect(
     live.map((TerminalConfigOptionBase option) => option.name).join(',') ==
-            'background-opacity,context-dock-width,quick-terminal-shortcut,quick-terminal-screen,'
+            'background-opacity,notes-font-size,context-dock-width,quick-terminal-shortcut,quick-terminal-screen,'
                 'quick-terminal-animation-duration,quick-terminal-autohide,'
                 'macos-app-intents,macos-notifications,'
                 'macos-applescript,'
                 'macos-secure-input-auto,macos-secure-input-indication,'
                 'macos-option-key,keybind' &&
-        schema.options.length == 55 &&
+        nextLaunch
+                .map((TerminalConfigOptionBase option) => option.name)
+                .join(',') ==
+            'notes,notes-on-return,notes-next-prompt' &&
+        schema.options.length == 59 &&
         schema.options.every(
           (TerminalConfigOptionBase option) =>
               option.applicationPolicy ==
                   TerminalConfigApplicationPolicy.live ||
               option.applicationPolicy ==
-                  TerminalConfigApplicationPolicy.newSession,
+                  TerminalConfigApplicationPolicy.newSession ||
+              option.applicationPolicy ==
+                  TerminalConfigApplicationPolicy.nextLaunch,
         ),
-    'every product option declares its exact live or new-session policy',
+    'every product option declares its exact live, new-session, or next-launch policy',
   );
 
   final TerminalConfigSnapshot previous = TerminalConfigLoader().resolve(
@@ -639,16 +652,17 @@ void _testDefaultsAndSchemaInventory() {
   final TerminalProductConfiguration defaults =
       TerminalProductConfiguration.defaults;
   _expect(
-    TerminalProductConfigSchema.instance.options.length == 55 &&
+    TerminalProductConfigSchema.instance.options.length == 59 &&
         TerminalProductConfigSchema.instance.options
                 .map((TerminalConfigOptionBase option) => option.name)
                 .toSet()
                 .length ==
-            55 &&
+            59 &&
         TerminalProductConfigSchema.instance.options.every(
           (TerminalConfigOptionBase option) => option.description.isNotEmpty,
-        ),
-    'product schema has 55 unique documented options',
+        ) &&
+        TerminalProductConfigSchema.instance.publicOptions.length == 55,
+    'product schema has 59 unique typed options and 55 public options',
   );
   _expect(
     defaults.workingDirectory == null &&
@@ -670,6 +684,10 @@ void _testDefaultsAndSchemaInventory() {
         defaults.palette.ansiColorsExplicit.every((bool value) => !value) &&
         defaults.fontFamily.isEmpty &&
         defaults.fontSize == 14 &&
+        !defaults.notes &&
+        defaults.notesOnReturn &&
+        !defaults.notesNextPrompt &&
+        defaults.notesFontSize == 15 &&
         defaults.fontSyntheticStyle == TerminalConfiguredSyntheticStyle.allow &&
         defaults.fontCatalogConfiguration.isEmpty &&
         defaults.windowWidth == 920 &&
@@ -899,6 +917,10 @@ void _testCompleteFileProfile() {
   config
     ..writeln('font-family = "JetBrains Mono"')
     ..writeln('font-size = 17.5')
+    ..writeln('notes = true')
+    ..writeln('notes-on-return = false')
+    ..writeln('notes-next-prompt = true')
+    ..writeln('notes-font-size = 21')
     ..writeln('font-synthetic-style = deny')
     ..writeln('font-variation-regular = wght=525')
     ..writeln('font-variation-bold = wght=725')
@@ -951,6 +973,10 @@ void _testCompleteFileProfile() {
         profile.palette.ansiColorsExplicit.every((bool value) => value) &&
         profile.fontFamily == 'JetBrains Mono' &&
         profile.fontSize == 17.5 &&
+        profile.notes &&
+        !profile.notesOnReturn &&
+        profile.notesNextPrompt &&
+        profile.notesFontSize == 21 &&
         profile.fontSyntheticStyle == TerminalConfiguredSyntheticStyle.deny &&
         profile.fontCatalogConfiguration.variationCount == 2 &&
         profile.fontCatalogConfiguration.codepointOverrides.single.family ==

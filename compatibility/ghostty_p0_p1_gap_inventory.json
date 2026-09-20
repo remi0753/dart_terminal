@@ -184,19 +184,19 @@
     },
     {
       "path": "lib/src/terminal_config.dart",
-      "sha256": "57663d92eca476eb31b6bbd01c5a683827dbdfa44156d07972870146119a531f"
+      "sha256": "1e64c3dc355e48454c12a7937e981b29ea279addaa59a113175ab6615c60245b"
     },
     {
       "path": "lib/src/terminal_product_configuration.dart",
-      "sha256": "2ddc832ef78673e6cf63474b35e513cb7baa123aa213b46183639565ad36a289"
+      "sha256": "ef1570009176d9ae10b690f6b4d774d05945e5a792c72e02e20824854459e113"
     },
     {
       "path": "lib/src/terminal_diagnostics.dart",
-      "sha256": "d72b586ff6e6261412b1fb2b5f8786121f02165c1c15c0a213cb0339ff17a065"
+      "sha256": "16d17935219e0bdc37fe221f02974b19f14d33a957af0d5dff03bd48647228ec"
     },
     {
       "path": "lib/src/terminal_application.dart",
-      "sha256": "029bf3b60ac9079efe164f4410cddc2e2149583938e920c0027b2e573dbf05b6"
+      "sha256": "495b5e59a475137f42c41bae8d774f4e4d9e4a494f566654a51e1553f13cdef9"
     },
     {
       "path": "lib/src/terminal_input/terminal_prompt_click.dart",
@@ -216,11 +216,11 @@
     },
     {
       "path": "test/terminal_product_configuration_test.dart",
-      "sha256": "109a114ae0ed128d5fff6bad99d53737a913fb5d490c43ec9a1a7c38610b638a"
+      "sha256": "471c625da27fa6c12d3ee14ccc9556c5dd39897274cd37e32e112262a5db7b59"
     },
     {
       "path": "test/terminal_diagnostics_test.dart",
-      "sha256": "9dd1b13bcd1489c6453c6ac257c8518df68f564eab5c2b436b8703eeef90b443"
+      "sha256": "3365af5b68dae4b16504dfbb6859de26aa728d771c5ca5b197ca1d5632c8f73f"
     },
     {
       "path": "docs/phase5/selection-gesture-autoscroll.md",

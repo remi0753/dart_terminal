@@ -32,7 +32,7 @@ void _testUsageAndReferenceAreCompleteAndFresh() {
     'usage is not the ordinary schema-generated product surface',
   );
   for (final TerminalConfigOptionBase option
-      in TerminalProductConfigSchema.instance.options) {
+      in TerminalProductConfigSchema.instance.publicOptions) {
     _expect(
       _occurrences(usage, '--${option.name}=') == 1,
       'usage does not contain ${option.name} exactly once',
@@ -44,6 +44,19 @@ void _testUsageAndReferenceAreCompleteAndFresh() {
             '<code>${const HtmlEscape(HtmlEscapeMode.element).convert(option.valueSyntax)}</code>',
           ),
       'reference does not contain one complete ${option.name} row',
+    );
+  }
+  for (final TerminalConfigOptionBase option in <TerminalConfigOptionBase>[
+    TerminalProductConfigSchema.notes,
+    TerminalProductConfigSchema.notesOnReturn,
+    TerminalProductConfigSchema.notesNextPrompt,
+    TerminalProductConfigSchema.notesFontSize,
+  ]) {
+    _expect(
+      option.exposure == TerminalConfigExposure.internalPreview &&
+          !usage.contains('--${option.name}=') &&
+          !markdown.contains('| <code>${option.name}</code> |'),
+      'internal-preview option ${option.name} leaked into public reference',
     );
   }
   final File committed = File(configurationReferencePath);
@@ -91,13 +104,13 @@ void _testEarlyHelpDoesNotResolveConfiguration() {
 }
 
 void _testEarlyShowConfigUsesTheTypedSnapshot() {
-  final _ReferenceMemoryFileSystem files = _ReferenceMemoryFileSystem(
-    const <String, String>{
-      '/config': 'theme = default\nfont-size = 15\n',
-      '/invalid': 'font-size = enormous\n',
-      '/unavailable': 'font-family = Unavailable Family\n',
-    },
-  );
+  final _ReferenceMemoryFileSystem
+  files = _ReferenceMemoryFileSystem(const <String, String>{
+    '/config':
+        'theme = default\nfont-size = 15\nnotes = true\nnotes-font-size = 24\n',
+    '/invalid': 'font-size = enormous\n',
+    '/unavailable': 'font-family = Unavailable Family\n',
+  });
   final TerminalEarlyExitResolver resolver = TerminalEarlyExitResolver(
     fileSystem: files,
     valueAvailabilityValidator: _ReferenceAvailabilityValidator(),
@@ -124,10 +137,16 @@ void _testEarlyShowConfigUsesTheTypedSnapshot() {
   final String keybind = lines.singleWhere(
     (String line) => line.contains('name="keybind"'),
   );
+  final String notes = lines.singleWhere(
+    (String line) => line.contains('name="notes"'),
+  );
+  final String notesFontSize = lines.singleWhere(
+    (String line) => line.contains('name="notes-font-size"'),
+  );
   _expect(
     result.mode == TerminalEarlyExitMode.showConfig &&
         result.standardOutput.startsWith(
-          'dart-terminal-effective-config version=1 options=55 entries=55 '
+          'dart-terminal-effective-config version=1 options=59 entries=59 '
           'diagnostics=1\nroot path="/config"\n',
         ) &&
         theme.contains('value="system"') &&
@@ -137,6 +156,11 @@ void _testEarlyShowConfigUsesTheTypedSnapshot() {
         fontSize.contains('line=3 column=13') &&
         keybind.contains('value="control+d=unbind"') &&
         keybind.contains('occurrence=1/1') &&
+        notes.contains('value="true"') &&
+        notes.contains('policy=next-launch') &&
+        notes.contains('source=file') &&
+        notesFontSize.contains('value="24"') &&
+        notesFontSize.contains('policy=live') &&
         result.standardOutput.contains(
           'diagnostic severity=warning code="CFG_DEPRECATED_VALUE"',
         ) &&

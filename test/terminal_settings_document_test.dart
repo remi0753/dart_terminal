@@ -55,6 +55,10 @@ void _testCompleteMissingAndSparseDocuments() {
           '# font-codepoint-override = U+<hex>[..U+<hex>]=<family>\n',
         ) &&
         missingDocument.text.contains('# keybind = <modifier+key=target>\n') &&
+        !missingDocument.text.contains('\nnotes =') &&
+        !missingDocument.text.contains('\nnotes-on-return =') &&
+        !missingDocument.text.contains('\nnotes-next-prompt =') &&
+        !missingDocument.text.contains('\nnotes-font-size =') &&
         !missing.files.containsKey(missingDocument.rootPath),
     'missing root is not a complete non-persisted canonical scaffold',
   );

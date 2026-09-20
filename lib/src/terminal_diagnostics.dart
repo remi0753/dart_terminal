@@ -567,6 +567,7 @@ final class TerminalDiagnosticsConfigurationSnapshot {
     required this.errorCount,
     required this.liveOptionCount,
     required this.newSessionOptionCount,
+    required this.nextLaunchOptionCount,
   }) {
     for (final MapEntry<String, int> field in <String, int>{
       'schemaOptionCount': schemaOptionCount,
@@ -576,6 +577,7 @@ final class TerminalDiagnosticsConfigurationSnapshot {
       'errorCount': errorCount,
       'liveOptionCount': liveOptionCount,
       'newSessionOptionCount': newSessionOptionCount,
+      'nextLaunchOptionCount': nextLaunchOptionCount,
     }.entries) {
       _nonnegative(field.value, field.key);
     }
@@ -588,6 +590,7 @@ final class TerminalDiagnosticsConfigurationSnapshot {
   final int errorCount;
   final int liveOptionCount;
   final int newSessionOptionCount;
+  final int nextLaunchOptionCount;
 
   Map<String, Object?> toJson() => <String, Object?>{
     'schema_options': schemaOptionCount,
@@ -597,6 +600,7 @@ final class TerminalDiagnosticsConfigurationSnapshot {
     'diagnostic_errors': errorCount,
     'live_options': liveOptionCount,
     'new_session_options': newSessionOptionCount,
+    'next_launch_options': nextLaunchOptionCount,
   };
 }
 

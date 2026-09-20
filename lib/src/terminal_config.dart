@@ -16,7 +16,13 @@ enum TerminalConfigDiagnosticSeverity { warning, error }
 enum TerminalConfigSourceKind { schemaDefault, file, commandLine }
 
 /// When an accepted reload may publish a changed option to product consumers.
-enum TerminalConfigApplicationPolicy { live, newSession }
+enum TerminalConfigApplicationPolicy { live, newSession, nextLaunch }
+
+/// Whether a typed option is part of the current public configuration UI.
+///
+/// Internal preview options still use the ordinary file/CLI resolver and are
+/// visible in `--show-config`; only generated public catalogs filter them.
+enum TerminalConfigExposure { public, internalPreview }
 
 enum TerminalConfiguredTheme {
   system,
@@ -281,6 +287,7 @@ sealed class TerminalConfigOptionBase {
   String get description;
   String get valueSyntax;
   TerminalConfigApplicationPolicy get applicationPolicy;
+  TerminalConfigExposure get exposure;
   bool get sourceKindAffectsSemantics;
   bool get isRepeatable;
   int? get maximumOccurrences;
@@ -295,6 +302,7 @@ final class TerminalConfigOption<T> extends TerminalConfigOptionBase {
     required this.description,
     required this.valueSyntax,
     required this.applicationPolicy,
+    this.exposure = TerminalConfigExposure.public,
     required this.defaultValue,
     this.sourceKindAffectsSemantics = false,
     required TerminalConfigValueParser<T> parser,
@@ -313,6 +321,9 @@ final class TerminalConfigOption<T> extends TerminalConfigOptionBase {
 
   @override
   final TerminalConfigApplicationPolicy applicationPolicy;
+
+  @override
+  final TerminalConfigExposure exposure;
 
   @override
   final bool sourceKindAffectsSemantics;
@@ -360,6 +371,7 @@ final class TerminalConfigRepeatedOption<T> extends TerminalConfigOptionBase {
     required this.description,
     required this.valueSyntax,
     required this.applicationPolicy,
+    this.exposure = TerminalConfigExposure.public,
     required this.maximumOccurrences,
     required TerminalConfigValueParser<T> parser,
     required TerminalConfigValueFormatter<T> formatter,
@@ -385,6 +397,9 @@ final class TerminalConfigRepeatedOption<T> extends TerminalConfigOptionBase {
 
   @override
   final TerminalConfigApplicationPolicy applicationPolicy;
+
+  @override
+  final TerminalConfigExposure exposure;
 
   @override
   bool get sourceKindAffectsSemantics => false;
@@ -467,6 +482,11 @@ final class TerminalConfigSchema {
 
   final List<TerminalConfigOptionBase> options;
   late final Map<String, TerminalConfigOptionBase> _byName;
+
+  Iterable<TerminalConfigOptionBase> get publicOptions => options.where(
+    (TerminalConfigOptionBase option) =>
+        option.exposure == TerminalConfigExposure.public,
+  );
 
   TerminalConfigOptionBase? optionNamed(String name) => _byName[name];
 }
@@ -652,11 +672,19 @@ final class TerminalConfigChangePlan {
               change.applicationPolicy ==
               TerminalConfigApplicationPolicy.newSession,
         ),
+      ),
+      nextLaunchChanges = List<TerminalConfigChange>.unmodifiable(
+        changes.where(
+          (TerminalConfigChange change) =>
+              change.applicationPolicy ==
+              TerminalConfigApplicationPolicy.nextLaunch,
+        ),
       );
 
   final List<TerminalConfigChange> changes;
   final List<TerminalConfigChange> liveChanges;
   final List<TerminalConfigChange> newSessionChanges;
+  final List<TerminalConfigChange> nextLaunchChanges;
 
   bool get isEmpty => changes.isEmpty;
 
@@ -864,6 +892,53 @@ abstract final class TerminalProductConfigSchema {
         applicationPolicy: TerminalConfigApplicationPolicy.newSession,
         defaultValue: TerminalDefaultTypography.fontSize,
         parser: _parseFontSize,
+        formatter: _formatDouble,
+      );
+
+  static final TerminalConfigOption<bool> notes = TerminalConfigOption<bool>(
+    name: 'notes',
+    description: 'Enable the local Notes store and terminal Note surfaces.',
+    valueSyntax: 'true|false',
+    applicationPolicy: TerminalConfigApplicationPolicy.nextLaunch,
+    exposure: TerminalConfigExposure.internalPreview,
+    defaultValue: false,
+    parser: _parseBoolean,
+    formatter: _formatBoolean,
+  );
+
+  static final TerminalConfigOption<bool> notesOnReturn =
+      TerminalConfigOption<bool>(
+        name: 'notes-on-return',
+        description: 'Allow Notes configured for On Return delivery.',
+        valueSyntax: 'true|false',
+        applicationPolicy: TerminalConfigApplicationPolicy.nextLaunch,
+        exposure: TerminalConfigExposure.internalPreview,
+        defaultValue: true,
+        parser: _parseBoolean,
+        formatter: _formatBoolean,
+      );
+
+  static final TerminalConfigOption<bool> notesNextPrompt =
+      TerminalConfigOption<bool>(
+        name: 'notes-next-prompt',
+        description: 'Allow Notes configured for At Next Prompt delivery.',
+        valueSyntax: 'true|false',
+        applicationPolicy: TerminalConfigApplicationPolicy.nextLaunch,
+        exposure: TerminalConfigExposure.internalPreview,
+        defaultValue: false,
+        parser: _parseBoolean,
+        formatter: _formatBoolean,
+      );
+
+  static final TerminalConfigOption<double> notesFontSize =
+      TerminalConfigOption<double>(
+        name: 'notes-font-size',
+        description: 'Note body and editor font size in logical points.',
+        valueSyntax: '<12..24>',
+        applicationPolicy: TerminalConfigApplicationPolicy.live,
+        exposure: TerminalConfigExposure.internalPreview,
+        defaultValue: 15,
+        parser: _parseNotesFontSize,
         formatter: _formatDouble,
       );
 
@@ -1194,6 +1269,10 @@ abstract final class TerminalProductConfigSchema {
       ...ansiPalette,
       fontFamily,
       fontSize,
+      notes,
+      notesOnReturn,
+      notesNextPrompt,
+      notesFontSize,
       fontSyntheticStyle,
       fontVariationRegular,
       fontVariationBold,
@@ -2206,6 +2285,14 @@ TerminalConfigDecodeResult<double> _parseFontSize(String value) =>
       minimum: 4,
       maximum: 128,
       description: 'font size',
+    );
+
+TerminalConfigDecodeResult<double> _parseNotesFontSize(String value) =>
+    _parseFiniteDouble(
+      value,
+      minimum: 12,
+      maximum: 24,
+      description: 'Notes font size',
     );
 
 TerminalConfigDecodeResult<double> _parseBackgroundOpacity(String value) =>

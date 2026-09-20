@@ -86,6 +86,14 @@ Future<void> _testSearchRenderingAndReloadProjection() async {
       'opening does not project every schema entry and startup diagnostic',
     );
 
+    state.setQuery('notes');
+    _expect(
+      state.results.isEmpty &&
+          state.matchingEntryCount == 0 &&
+          !state.render().contains('notes-font-size'),
+      'internal-preview Notes options leaked into the public Settings inspector',
+    );
+
     state.setQuery('font size command-line');
     final TerminalEffectiveConfigEntry selected = state.selectedEntry!;
     final String fontRendering = state.render();

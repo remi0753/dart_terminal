@@ -8,12 +8,121 @@ void main() => runTerminalConfigTests();
 
 void runTerminalConfigTests() {
   _testSchemaAndZeroConfig();
+  _testNotesTypedConfiguration();
   _testDefaultLocationAndPrecedence();
   _testRepeatableKeybindOccurrences();
   _testDiagnosticsAndRecovery();
   _testResolvedFileValueAvailabilityFallback();
   _testIncludeCycleAndBounds();
   _testTerminalOptionsIntegration();
+}
+
+void _testNotesTypedConfiguration() {
+  final TerminalConfigSnapshot defaults = TerminalConfigLoader().resolve(
+    const <String>['--no-config'],
+    environment: const <String, String>{},
+  ).snapshot;
+  _expect(
+    !defaults.value(TerminalProductConfigSchema.notes) &&
+        defaults.value(TerminalProductConfigSchema.notesOnReturn) &&
+        !defaults.value(TerminalProductConfigSchema.notesNextPrompt) &&
+        defaults.value(TerminalProductConfigSchema.notesFontSize) == 15 &&
+        TerminalProductConfigSchema.notes.applicationPolicy ==
+            TerminalConfigApplicationPolicy.nextLaunch &&
+        TerminalProductConfigSchema.notesOnReturn.applicationPolicy ==
+            TerminalConfigApplicationPolicy.nextLaunch &&
+        TerminalProductConfigSchema.notesNextPrompt.applicationPolicy ==
+            TerminalConfigApplicationPolicy.nextLaunch &&
+        TerminalProductConfigSchema.notesFontSize.applicationPolicy ==
+            TerminalConfigApplicationPolicy.live &&
+        TerminalProductConfigSchema.notes.exposure ==
+            TerminalConfigExposure.internalPreview &&
+        TerminalProductConfigSchema.notesFontSize.exposure ==
+            TerminalConfigExposure.internalPreview,
+    'Notes options retain the frozen initial defaults, policies, and exposure',
+  );
+
+  final _MemoryConfigFileSystem files = _MemoryConfigFileSystem(
+    const <String, String>{
+      '/root': 'include = child\nnotes = true\nnotes-font-size = 12\n',
+      '/child': 'notes = false\nnotes-on-return = false\nnotes-next-prompt = true\nnotes-font-size = 24\n',
+      '/invalid': 'notes = yes\nnotes-on-return = 1\nnotes-next-prompt = TRUE\nnotes-font-size = 11.99\n',
+    },
+  );
+  final TerminalConfigSnapshot configured =
+      TerminalConfigLoader(fileSystem: files).resolve(const <String>[
+        '--config=/root',
+        '--notes-on-return=true',
+        '--notes-font-size=24',
+      ], environment: const <String, String>{}).snapshot;
+  _expect(
+    configured.diagnostics.isEmpty &&
+        configured.value(TerminalProductConfigSchema.notes) &&
+        configured.value(TerminalProductConfigSchema.notesOnReturn) &&
+        configured.value(TerminalProductConfigSchema.notesNextPrompt) &&
+        configured.value(TerminalProductConfigSchema.notesFontSize) == 24 &&
+        configured.resolved(TerminalProductConfigSchema.notes).source.path ==
+            '/root' &&
+        configured
+                .resolved(TerminalProductConfigSchema.notesNextPrompt)
+                .source
+                .path ==
+            '/child' &&
+        configured
+                .resolved(TerminalProductConfigSchema.notesOnReturn)
+                .source
+                .kind ==
+            TerminalConfigSourceKind.commandLine &&
+        configured
+                .resolved(TerminalProductConfigSchema.notesFontSize)
+                .source
+                .line ==
+            3,
+    'Notes options share include/root/CLI priority and exact provenance',
+  );
+  final TerminalConfigSnapshot invalid = TerminalConfigLoader(fileSystem: files)
+      .resolve(const <String>[
+        '--config=/invalid',
+      ], environment: const <String, String>{})
+      .snapshot;
+  _expect(
+    invalid.diagnostics.length == 4 &&
+        invalid.diagnostics.every(
+          (TerminalConfigDiagnostic diagnostic) =>
+              diagnostic.code == 'CFG_INVALID_VALUE',
+        ) &&
+        !invalid.value(TerminalProductConfigSchema.notes) &&
+        invalid.value(TerminalProductConfigSchema.notesOnReturn) &&
+        !invalid.value(TerminalProductConfigSchema.notesNextPrompt) &&
+        invalid.value(TerminalProductConfigSchema.notesFontSize) == 15,
+    'invalid Notes values diagnose independently and recover to safe defaults',
+  );
+  for (final String value in <String>['12', '15', '24']) {
+    final TerminalConfigSnapshot boundary = TerminalConfigLoader().resolve(
+      <String>['--no-config', '--notes-font-size=$value'],
+      environment: const <String, String>{},
+    ).snapshot;
+    _expect(
+      boundary.value(TerminalProductConfigSchema.notesFontSize) ==
+          double.parse(value),
+      'Notes font accepts the inclusive $value point boundary',
+    );
+  }
+  for (final String argument in <String>[
+    '--notes=yes',
+    '--notes-font-size=11.99',
+    '--notes-font-size=24.01',
+    '--notes-font-size=NaN',
+    '--notes-font-size=Infinity',
+  ]) {
+    _expectThrows(
+      () => TerminalConfigLoader().resolve(<String>[
+        '--no-config',
+        argument,
+      ], environment: const <String, String>{}),
+      'invalid Notes CLI value is a usage failure: $argument',
+    );
+  }
 }
 
 void _testRepeatableKeybindOccurrences() {

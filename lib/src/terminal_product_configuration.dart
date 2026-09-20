@@ -161,6 +161,10 @@ final class TerminalProductConfiguration {
     required this.backgroundOpacity,
     required this.fontFamily,
     required this.fontSize,
+    required this.notes,
+    required this.notesOnReturn,
+    required this.notesNextPrompt,
+    required this.notesFontSize,
     required this.fontSyntheticStyle,
     required this.fontCatalogConfiguration,
     required this.windowWidth,
@@ -213,6 +217,12 @@ final class TerminalProductConfiguration {
       TerminalProductConfigSchema.contextDockWidth,
     ),
     fontSize: snapshot.value(TerminalProductConfigSchema.fontSize),
+    notes: snapshot.value(TerminalProductConfigSchema.notes),
+    notesOnReturn: snapshot.value(TerminalProductConfigSchema.notesOnReturn),
+    notesNextPrompt: snapshot.value(
+      TerminalProductConfigSchema.notesNextPrompt,
+    ),
+    notesFontSize: snapshot.value(TerminalProductConfigSchema.notesFontSize),
     fontSyntheticStyle: snapshot.value(
       TerminalProductConfigSchema.fontSyntheticStyle,
     ),
@@ -286,6 +296,10 @@ final class TerminalProductConfiguration {
   final double backgroundOpacity;
   final String fontFamily;
   final double fontSize;
+  final bool notes;
+  final bool notesOnReturn;
+  final bool notesNextPrompt;
+  final double notesFontSize;
   final TerminalConfiguredSyntheticStyle fontSyntheticStyle;
   final TerminalFontCatalogConfiguration fontCatalogConfiguration;
   final double windowWidth;

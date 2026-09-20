@@ -95,12 +95,16 @@ final class TerminalEffectiveConfigSnapshot {
     TerminalConfigSnapshot snapshot, {
     TerminalEffectiveConfigLimits limits =
         const TerminalEffectiveConfigLimits(),
+    bool publicOnly = false,
   }) {
     limits.validate();
     final List<TerminalEffectiveConfigEntry> entries =
         <TerminalEffectiveConfigEntry>[];
     var canonicalCharacters = 0;
-    for (final TerminalConfigOptionBase option in snapshot.schema.options) {
+    final Iterable<TerminalConfigOptionBase> options = publicOnly
+        ? snapshot.schema.publicOptions
+        : snapshot.schema.options;
+    for (final TerminalConfigOptionBase option in options) {
       if (!option.isRepeatable) {
         final TerminalResolvedConfigValue<Object?> resolved = snapshot
             .resolvedOption(option);
@@ -267,6 +271,7 @@ final class TerminalEffectiveConfigFormatter {
       switch (policy) {
         TerminalConfigApplicationPolicy.live => 'live',
         TerminalConfigApplicationPolicy.newSession => 'new-session',
+        TerminalConfigApplicationPolicy.nextLaunch => 'next-launch',
       };
 
   static String _sourceKind(TerminalConfigSourceKind kind) => switch (kind) {
