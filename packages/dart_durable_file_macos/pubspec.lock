@@ -10,13 +10,13 @@ packages:
     source: hosted
     version: "2.13.1"
   code_assets:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: code_assets
-      sha256: cfd4f5f575a49c5f10ca856e9846073f1e6c3ee94912377eea5f6cefc5272941
+      sha256: "828110d598123b5ea96c00c9f3c72105bf79f8ee36c20a39b26209ade421ec57"
       url: "https://pub.dev"
     source: hosted
-    version: "2.0.0"
+    version: "2.1.0"
   collection:
     dependency: transitive
     description:
@@ -33,64 +33,8 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.0.7"
-  dart_appkit:
-    dependency: "direct main"
-    description:
-      path: "../dart_appkit/packages/dart_appkit"
-      relative: true
-    source: path
-    version: "0.1.0-dev.1"
-  dart_durable_file_macos:
-    dependency: "direct main"
-    description:
-      path: "packages/dart_durable_file_macos"
-      relative: true
-    source: path
-    version: "0.1.0-dev.1"
-  dart_macos_runtime:
-    dependency: "direct main"
-    description:
-      path: "../dart_appkit/packages/dart_macos_runtime"
-      relative: true
-    source: path
-    version: "0.1.0-dev.1"
-  dart_process_resource_macos:
-    dependency: "direct main"
-    description:
-      path: "packages/dart_process_resource_macos"
-      relative: true
-    source: path
-    version: "0.1.0-dev.1"
-  dart_pty_macos:
-    dependency: "direct main"
-    description:
-      path: "packages/dart_pty_macos"
-      relative: true
-    source: path
-    version: "0.1.0-dev.1"
-  dart_terminal_app_intents_macos:
-    dependency: "direct main"
-    description:
-      path: "packages/dart_terminal_app_intents_macos"
-      relative: true
-    source: path
-    version: "0.1.0-dev.1"
-  dart_terminal_applescript_macos:
-    dependency: "direct main"
-    description:
-      path: "packages/dart_terminal_applescript_macos"
-      relative: true
-    source: path
-    version: "0.1.0-dev.1"
-  dart_terminal_renderer_macos:
-    dependency: "direct main"
-    description:
-      path: "packages/dart_terminal_renderer_macos"
-      relative: true
-    source: path
-    version: "0.1.0-dev.1"
   ffi:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: ffi
       sha256: "6d7fd89431262d8f3125e81b50d3847a091d846eafcd4fdb88dd06f36d705a45"
@@ -114,7 +58,7 @@ packages:
     source: hosted
     version: "2.2.0"
   hooks:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: hooks
       sha256: eaac480a35ec0814146c2c48d96aaa829e0e44a7662c88ae84c9edf4bc35651f
@@ -138,13 +82,13 @@ packages:
     source: hosted
     version: "1.19.0"
   native_toolchain_c:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: native_toolchain_c
-      sha256: "9d233b6f2d9c52e1a2b5fbe70451d2c10ac674d3bb419d0ec8de14989d437c26"
+      sha256: "90eaad8059ebc2004a63810a4696ea9acdb02473e47ed3b6b3bafb100ac77e31"
       url: "https://pub.dev"
     source: hosted
-    version: "0.19.4"
+    version: "0.19.5"
   path:
     dependency: transitive
     description:
@@ -157,10 +101,10 @@ packages:
     dependency: transitive
     description:
       name: platform
-      sha256: "5d6b1b0036a5f331ebc77c850ebc8506cbc1e9416c27e59b439f917a902a4984"
+      sha256: a36d119c13416516a7b5913fbe8af8531e11633d784c550b2125f76c758524ec
       url: "https://pub.dev"
     source: hosted
-    version: "3.1.6"
+    version: "3.2.0"
   process:
     dependency: transitive
     description:

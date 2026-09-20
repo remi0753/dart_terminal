@@ -8,6 +8,8 @@ environment:
 dependencies:
   dart_appkit:
     path: ../dart_appkit/packages/dart_appkit
+  dart_durable_file_macos:
+    path: packages/dart_durable_file_macos
   dart_macos_runtime:
     path: ../dart_appkit/packages/dart_macos_runtime
   dart_process_resource_macos:

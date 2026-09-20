@@ -43,7 +43,7 @@
   "evidence_sources": [
     {
       "path": "Makefile",
-      "sha256": "fa162f3502ee81441836b2a6f8b1a97afc04273d99dfe829edea959bcb8f283d"
+      "sha256": "f3b0fc8364eb40fde6ea94bf15dfb4023c4c5fa5bc4b4b354605b837e72e52b4"
     },
     {
       "path": "test/corpus/applications/matrix_v1.json",
