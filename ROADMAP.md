@@ -77,6 +77,11 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
   - [x] startup reconciliationとQuick Terminal singleton bindingを実装する
   - [x] ordered persistence、rollback、crash acceptanceを完了する
 - [ ] CM-05 application-root Note authorityを実装する
+  （[`cm-05-application-root-note-authority.md`](docs/contextual-memory/cm-05-application-root-note-authority.md)
+  を参照して実施する）
+  - [x] store lifecycleとserial durable mutation authorityを実装する
+  - [ ] bounded topology、focus、prompt ingressを実装する
+  - [ ] projection acknowledgement、teardown、reopen acceptanceを完了する
 - [ ] CM-06 typed configurationとdisabled lifecycleを実装する
 - [ ] CM-07 unified window interaction authorityへ既存input ownerを統合する
 - [ ] CM-08 native Note presentation capabilityを実装する
