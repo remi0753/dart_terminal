@@ -55,7 +55,7 @@
       "sources": [
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "b15febea4ab74fa166292af68cfe469cbbfe2535094c12896c6ba1d0da1f9690"
+          "sha256": "a8ac4f599be92c210346b35b39a128c1c70375e3b383969b2fa684cbef8c674d"
         },
         {
           "path": "lib/src/terminal_renderer/terminal_screen_metal_compositor.dart",
@@ -215,7 +215,7 @@
         },
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "b15febea4ab74fa166292af68cfe469cbbfe2535094c12896c6ba1d0da1f9690"
+          "sha256": "a8ac4f599be92c210346b35b39a128c1c70375e3b383969b2fa684cbef8c674d"
         }
       ],
       "unit_tests": [
@@ -256,7 +256,7 @@
         },
         {
           "path": "lib/src/terminal_context_dock_directory.dart",
-          "sha256": "1c89aa1a40a8b26d94069991ac7519da7530c1b77012a40626070124140193ca"
+          "sha256": "f1d6f9eb81a94b6dafb481a25dc4ed2a12bbfb95e50223ea4c10ff6d0a9cc2ee"
         },
         {
           "path": "lib/src/terminal_directory_snapshot.dart",
@@ -275,7 +275,7 @@
         {
           "path": "test/terminal_context_dock_test.dart",
           "entrypoint": "runTerminalContextDockTests",
-          "sha256": "d0d400c8041dfb0dbb0e033fb4928ce78d439b32f8cee22e3dcdd999b5e1e971"
+          "sha256": "e4e83432babfbafe6bf3c0450c58adb9ad0b9e5e24225c8b8f66a4ffcc046a88"
         },
         {
           "path": "test/terminal_directory_snapshot_test.dart",

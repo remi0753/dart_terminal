@@ -3528,6 +3528,32 @@ final class TerminalApplication {
       });
     }
 
+    bool contextDockCanRetainDirectoryDuringUnpresentedRetarget(
+      TerminalWindowId windowId,
+    ) {
+      final TerminalWindowState? logicalWindow = state.windowForId(windowId);
+      final TerminalNativeHierarchyAdapter? nativeHierarchy = hierarchy;
+      if (logicalWindow == null ||
+          logicalWindow.role != TerminalWindowRole.standard ||
+          state.activeWindow?.id != windowId ||
+          nativeHierarchy == null ||
+          nativeHierarchy.isDisposed ||
+          !application.isActive) {
+        return false;
+      }
+      return !state.windows.any((TerminalWindowState candidate) {
+        if (candidate.id == windowId) return false;
+        final Window? candidateWindow = nativeHierarchy.windowForTab(
+          candidate.selectedTabId,
+        );
+        return candidateWindow != null &&
+            !candidateWindow.isDisposed &&
+            !candidateWindow.isClosed &&
+            candidateWindow.isVisible &&
+            candidateWindow.isFocused;
+      });
+    }
+
     TerminalContextDockPathTarget? contextDockPathTarget(
       TerminalWindowId windowId,
       PaneId paneId,
@@ -4671,6 +4697,8 @@ final class TerminalApplication {
         canDisplayDirectory: contextDockCanDisplayDirectoryPane,
         canRetainDirectoryWhileUnpresented:
             contextDockCanRetainDirectoryWhileUnpresented,
+        canRetainDirectoryDuringUnpresentedRetarget:
+            contextDockCanRetainDirectoryDuringUnpresentedRetarget,
         invalidateRetainedDirectory: (PaneId paneId) {
           contextDockDirectoryController?.invalidateRetainedSnapshot(paneId);
         },
@@ -8538,12 +8566,16 @@ final class TerminalApplication {
       bool Function() predicate,
       String message, {
       Duration timeout = const Duration(seconds: 10),
+      String Function()? failureDetails,
     }) async {
       final Stopwatch deadline = Stopwatch()..start();
       while (!predicate() && deadline.elapsed < timeout) {
         await Future<void>.delayed(const Duration(milliseconds: 5));
       }
-      _expectLifecycle(predicate(), message);
+      _expectLifecycle(
+        predicate(),
+        failureDetails == null ? message : '$message; ${failureDetails()}',
+      );
     }
 
     void injectViewEvent(
@@ -10765,6 +10797,186 @@ final class TerminalApplication {
         'Close did not cleanly release the split session',
       );
 
+      reconcile();
+      await waitFor(
+        () =>
+            contextDockDirectory.hasRetainedSnapshot(initialPaneId) &&
+            contextDockDirectory.activeOperationCount == 0,
+        'tab-focus Directory fixture did not start from a settled snapshot',
+      );
+      final String? tabFocusRetainedRoot = contextDockDirectory
+          .snapshotForWindow(initialWindow.id)
+          ?.workingDirectory;
+      initialPane.insertText(
+        "printf '\\r\\n__DT_TAB_FOCUS_JOB__\\r\\n'; /bin/cat; "
+        "printf '\\r\\n__DT_TAB_FOCUS_DONE__\\r\\n'",
+      );
+      await initialPane.submit();
+      await _waitForAsciiMarker(initialSession, '__DT_TAB_FOCUS_JOB__');
+      await waitFor(
+        () =>
+            contextDockProcess
+                .snapshotForWindow(initialWindow.id)
+                ?.process
+                ?.executablePath
+                ?.endsWith('/cat') ==
+            true,
+        'tab-focus fixture did not enter Process Inspector',
+      );
+      final int tabFocusWriteBaseline = writeEnqueuedCounts[initialPaneId] ?? 0;
+      await dispatch(TerminalActionId.newTab);
+      await waitFor(
+        () =>
+            state.tabCount == 2 &&
+            state.paneCount == 2 &&
+            sessions.length == 2 &&
+            owners.length == 2 &&
+            hierarchy.paneResourceCount == 2 &&
+            allSessions.length == 3 &&
+            initialWindow.selectedTabId != initialTab.id,
+        'tab-focus fixture did not create and select its temporary tab',
+      );
+      final TerminalTabState tabFocusOtherTab = initialWindow.selectedTab;
+      final PaneId tabFocusOtherPaneId = tabFocusOtherTab.focusedPaneId;
+      final TerminalSession tabFocusOtherSession =
+          sessions[tabFocusOtherPaneId]!;
+      final Window tabFocusOtherWindow = hierarchy.windowForTab(
+        tabFocusOtherTab.id,
+      )!;
+      await _waitForAsciiMarker(tabFocusOtherSession, prompt);
+      _injectFocusEventForTesting(
+        application,
+        contextDockWindow,
+        isFocused: false,
+        monotonicNanoseconds: eventTimestamp++,
+      );
+      _injectFocusEventForTesting(
+        application,
+        tabFocusOtherWindow,
+        isFocused: true,
+        monotonicNanoseconds: eventTimestamp++,
+      );
+      await waitFor(
+        () {
+          reconcile();
+          final TerminalContextDockContentSnapshot? content = contextDockProcess
+              .snapshotForWindow(initialWindow.id);
+          return initialWindow.selectedTabId == tabFocusOtherTab.id &&
+              contextDockProcess.canRetainDirectoryPane(initialPaneId) &&
+              contextDockDirectory.hasRetainedSnapshot(initialPaneId) &&
+              content?.paneId == tabFocusOtherPaneId &&
+              content?.mode ==
+                  TerminalContextDockContentMode.directoryNavigator &&
+              content?.process == null;
+        },
+        'another tab did not freeze the process pane without projecting its details',
+        failureDetails: () {
+          final TerminalContextDockContentSnapshot? content = contextDockProcess
+              .snapshotForWindow(initialWindow.id);
+          final Window? nativeTab = hierarchy.windowForTab(tabFocusOtherTab.id);
+          return 'selected=${initialWindow.selectedTabId == tabFocusOtherTab.id} '
+              'process_retained=${contextDockProcess.canRetainDirectoryPane(initialPaneId)} '
+              'directory_retained=${contextDockDirectory.hasRetainedSnapshot(initialPaneId)} '
+              'content_pane=${content?.paneId == tabFocusOtherPaneId} '
+              'content_mode=${content?.mode.name ?? 'null'} '
+              'content_process=${content?.process != null} '
+              'application_active=${application.isActive} '
+              'native_visible=${nativeTab?.isVisible ?? false} '
+              'native_focused=${nativeTab?.isFocused ?? false}';
+        },
+      );
+      await dispatch(TerminalActionId.selectPreviousTab);
+      _injectFocusEventForTesting(
+        application,
+        tabFocusOtherWindow,
+        isFocused: false,
+        monotonicNanoseconds: eventTimestamp++,
+      );
+      _injectFocusEventForTesting(
+        application,
+        contextDockWindow,
+        isFocused: true,
+        monotonicNanoseconds: eventTimestamp++,
+      );
+      await waitFor(() {
+        reconcile();
+        menu.refresh();
+        final TerminalContextDockContentSnapshot? content = contextDockProcess
+            .snapshotForWindow(initialWindow.id);
+        return initialWindow.selectedTabId == initialTab.id &&
+            content?.mode == TerminalContextDockContentMode.foregroundJob &&
+            content?.process?.executablePath?.endsWith('/cat') == true &&
+            contentItem.isEnabled &&
+            contextDockDirectory.hasRetainedSnapshot(initialPaneId);
+      }, 'returning to the process tab did not restore the Directory toggle');
+      contentItem.performAction();
+      await waitFor(
+        () =>
+            contextDockProcess.snapshotForWindow(initialWindow.id)?.mode ==
+                TerminalContextDockContentMode.directoryNavigator &&
+            contextDockDirectory
+                    .snapshotForWindow(initialWindow.id)
+                    ?.workingDirectory ==
+                tabFocusRetainedRoot &&
+            contextDockState
+                .snapshotForWindow(initialWindow.id)!
+                .navigatorOwnsInput,
+        'tab-focus round trip could not project the retained Directory',
+      );
+      _expectLifecycle(
+        (writeEnqueuedCounts[initialPaneId] ?? 0) == tabFocusWriteBaseline,
+        'tab focus and retained Directory toggle wrote to the foreground PTY',
+      );
+      contentItem.performAction();
+      await waitFor(
+        () =>
+            contextDockProcess.snapshotForWindow(initialWindow.id)?.mode ==
+            TerminalContextDockContentMode.foregroundJob,
+        'tab-focus Directory did not return to Process Inspector',
+      );
+      initialPane.sendEndOfFile();
+      await _waitForAsciiMarker(initialSession, '__DT_TAB_FOCUS_DONE__');
+      await waitFor(
+        () =>
+            initialPane.processSnapshot().disposition ==
+            TerminalPaneProcessDisposition.idleShell,
+        'tab-focus foreground fixture did not return to its shell',
+      );
+      await dispatch(TerminalActionId.selectNextTab);
+      _injectFocusEventForTesting(
+        application,
+        contextDockWindow,
+        isFocused: false,
+        monotonicNanoseconds: eventTimestamp++,
+      );
+      _injectFocusEventForTesting(
+        application,
+        tabFocusOtherWindow,
+        isFocused: true,
+        monotonicNanoseconds: eventTimestamp++,
+      );
+      await waitFor(
+        () => initialWindow.selectedTabId == tabFocusOtherTab.id,
+        'tab-focus fixture did not return to its temporary tab for cleanup',
+      );
+      await dispatch(TerminalActionId.closeWindow);
+      await waitFor(
+        () =>
+            state.tabCount == 1 &&
+            state.paneCount == 1 &&
+            sessions.length == 1 &&
+            owners.length == 1 &&
+            hierarchy.paneResourceCount == 1 &&
+            allSessions.length == 3 &&
+            initialWindow.selectedTabId == initialTab.id &&
+            sessions.containsKey(initialPaneId),
+        'Close did not remove only the focused temporary tab',
+      );
+      _expectLifecycle(
+        tabFocusOtherSession.shutdownResult?.isClean == true,
+        'Close did not cleanly release the temporary tab session',
+      );
+
       await prepareExactPasteReader(
         initialPane,
         initialSession,
@@ -10902,7 +11114,7 @@ final class TerminalApplication {
             contextDockProcess.isDisposed &&
             contextDockProcess.activeOperationCount == 0 &&
             contextDockProcess.activeTimerCount == 0 &&
-            allSessions.length == 4 &&
+            allSessions.length == 5 &&
             allSessions.every(
               (TerminalSession session) =>
                   session.shutdownResult?.isClean == true,
@@ -10921,10 +11133,11 @@ final class TerminalApplication {
         'navigator_privacy=true navigator_accessibility=true '
         'process_inspector=true process_pipeline=true process_input=true '
         'process_shell_owned=true process_short=true process_elapsed=true '
+        'tab_focus=true '
         'quick_look=true services_selection=true service_confirmation=true '
         'service_exact=true drop_text_exact=true drop_files_exact=true '
         'folder_tabs=true folder_windows=true cwd_exact=true focus=true '
-        'close=true sessions_clean=4 text_clients=0 native_handles=0',
+        'close=true sessions_clean=5 text_clients=0 native_handles=0',
       );
     } finally {
       if (fixtureRoot.existsSync()) {

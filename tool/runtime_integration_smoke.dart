@@ -2503,12 +2503,13 @@ Future<void> _runNativeContent(_Options options, _Invocation invocation) async {
           r'navigator_privacy=true '
           r'navigator_accessibility=true process_inspector=true '
           r'process_pipeline=true process_input=true process_shell_owned=true '
-          r'process_short=true process_elapsed=true quick_look=true '
+          r'process_short=true process_elapsed=true tab_focus=true '
+          r'quick_look=true '
           r'services_selection=true '
           r'service_confirmation=true service_exact=true '
           r'drop_text_exact=true drop_files_exact=true folder_tabs=true '
           r'folder_windows=true cwd_exact=true focus=true close=true '
-          r'sessions_clean=4 text_clients=0 native_handles=0$',
+          r'sessions_clean=5 text_clients=0 native_handles=0$',
           multiLine: true,
         ).allMatches(observation.stdoutText).length ==
         1,

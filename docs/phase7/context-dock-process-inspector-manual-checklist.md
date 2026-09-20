@@ -55,9 +55,9 @@ architecture、Developer JIT／Release AOT、pass/failとcontent-freeな失敗�
 - [ ] ECHO-offのProcess Inspector表示中に別applicationへfocusを移して戻っても、同じjobなら
   Control-Shift-Command-Nで保持treeへ切り替わる。非active中にDirectory内容を投影せず、session／PGIDが
   変わった場合は古いtreeを表示しない。
-- [ ] foreground jobのpaneから同じtab内の別split paneへ移動中は、旧paneのprocess詳細／poll／filesystem operationを
-  持たない。元paneへ戻った時、同じsession／PGIDならProcess Inspectorから保持treeへ切り替えられる。
-  別tab／windowへの移動、pane close、session／PGID変更後は古いtreeを表示しない。
+- [ ] foreground jobのpaneから同じwindow内の別split pane／tabへ移動中は、旧paneのprocess詳細／poll／filesystem
+  operationを持たない。元paneへ戻った時、同じsession／PGIDならProcess Inspectorから保持treeへ切り替えられる。
+  別windowへの移動、tab／pane close、app非active中の別tab cache、session／PGID変更後は古いtreeを表示しない。
 - [ ] Option-Shift-CはProcess Inspector表示中もDockだけを開閉し、foreground commandを停止・変更しない。
 - [ ] View > Show Process Arguments（日本語: プロセスの引数を表示）のcheckを外すとargvだけが非表示となり、
   process名、実行ファイル、PID／PGID、経過時間は維持される。Shift-Command-Pから同じactionを検索し、
@@ -77,8 +77,8 @@ architecture、Developer JIT／Release AOT、pass/failとcontent-freeな失敗�
   Process Inspector表示中のNavigator shortcutは入力を奪わない。Control-Shift-Command-Nで明示的にDirectoryへ
   切り替えた時だけNavigatorがinputを所有し、path挿入は引き続き拒否する。
 - [ ] command実行中に別pane、tab、windowへfocusを移すと、Dockは新しいfocused paneだけを反映し、旧jobの
-  executable／argvを表示しない。同じtab内のsplit pane round trip用に保持するのは非投影のtreeと照合identityだけで、
-  app非active中や別pane表示中にprocess詳細を保持・再表示しない。
+  executable／argvを表示しない。同じwindow内のsplit pane／tab round trip用に保持するのは非投影のtreeと
+  照合identityだけで、app非active中や別pane／tab表示中にprocess詳細を保持・再表示しない。
 - [ ] pipeline leaderが先に終了する、process数が上限を超える、権限によりpath／argvの一部が読めない場合も、
   UIは操作可能なままpartial／omittedを表示し、Directoryの`unknown`とは混同しない。
 - [ ] tab/window close、Dock hide、app Quit後にpoll timer、process observation、PTY、native text view、

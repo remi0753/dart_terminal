@@ -4,7 +4,7 @@
   "status": "closed-no-actionable-p0-p1",
   "matrix": {
     "path": "FEATURE_MATRIX.md",
-    "sha256": "1a4c257479b308822d2157c03faeb6146d178c404d2f38bf0d9da9924c5355c2",
+    "sha256": "2a49526bf05fb794a39e0929575016b19661fd32257b5248c0ddd93f3e396d76",
     "pinned_ghostty_revision": "d4d8f62262cb1a974a7d2470d5f79f811fab15e4",
     "pinned_archive_sha256": "3111538f70b1a7fed43646395906724db9ef92eb85d66410c5bce2067ad2b7d2"
   },
@@ -52,7 +52,7 @@
     },
     {
       "path": "compatibility/regression_coverage_report.json",
-      "sha256": "2fc27ba8f98ac034fdde696b818d3bbcf782af2fb6ccaa27819cb94ac5ef51d2"
+      "sha256": "31815e52d67ccd000bbef0064537bf67c4bf7be3fec7143b31897f0cc453a9f5"
     },
     {
       "path": "benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json",
@@ -196,7 +196,7 @@
     },
     {
       "path": "lib/src/terminal_application.dart",
-      "sha256": "b15febea4ab74fa166292af68cfe469cbbfe2535094c12896c6ba1d0da1f9690"
+      "sha256": "a8ac4f599be92c210346b35b39a128c1c70375e3b383969b2fa684cbef8c674d"
     },
     {
       "path": "lib/src/terminal_input/terminal_prompt_click.dart",
@@ -228,7 +228,7 @@
     },
     {
       "path": "tool/runtime_integration_smoke.dart",
-      "sha256": "8e364c17b44f9a4557192b5dd1523b3222801d51a4301b87c6d0794da0ce5033"
+      "sha256": "2fc9043022baf92d94ec3cb454e4eb5ab9341006f92afbba0f6ede2ddefba747"
     }
   ],
   "totals": {
@@ -1000,7 +1000,7 @@
       "phase": "7",
       "acceptance_sha256": "405189b9538a5132e8ca2b2288832bdd3be67e091acf30f2aec1cd906ae99258",
       "pinned_evidence_sha256": "b6b0f3edd037019a97d7dcfb8d94bc13a7e1f70fea01526d5d364aa94342de32",
-      "current_sha256": "d01350db37050e81d24011708491d74a1cc7f1cd77d6a20b19470a416f950be6",
+      "current_sha256": "20b48d36d58775775ffc7a26039974df58e3a979569d1f58b801a68c984b31fd",
       "classification": "accepted",
       "gap_ids": []
     },
@@ -1210,7 +1210,7 @@
       "phase": "10/11",
       "acceptance_sha256": "15113678b1ed92459a5e9cb4d2c430d6a5b1984617427b8d4513424a0f6e3eff",
       "pinned_evidence_sha256": "c377a08303c995412b0c9a161cf08a6386fd834a68b477c5edb3200e1061a23a",
-      "current_sha256": "d80ac0f262f449f5def7973dc43f3b6160e1e7dee3e9869d9efc84ebef07621b",
+      "current_sha256": "e9beb36a6220c76c15ef252895984e9c782d1fc51d99602dd5b9a529b25c3edd",
       "classification": "accepted",
       "gap_ids": []
     },

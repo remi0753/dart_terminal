@@ -117,10 +117,10 @@ effective padding originをboundedなread-only text areaとしてVoiceOverにも
   1回とする。shell builtinは推測したargvを出さず実行中statusだけを示す。ECHO-offやmanual／automatic
   Secure Keyboard Entry中もprocess情報を表示し、入力保護とは独立させる。app非active時はprocessの
   path／argvとpollを即時破棄するが、同じvisible window／pane／session／PGIDへ戻るapplication focus round tripと、
-  同じselected tab内のsplit pane focus round tripに限り、command前のDirectory snapshotと照合用job identityを
-  非投影のまま凍結保持する。別split paneをfocused中は旧paneのprocess詳細／poll／filesystem operationを持たず、
-  元paneへ戻った時にsession／PGIDを再検証する。Dock非表示、別window／tabへのfocus変更、pane close、
-  session／PGID変更では保持snapshotも破棄する。終了後はfreshな
+  同じwindow内のsplit pane／tab focus round tripに限り、command前のDirectory snapshotと照合用job identityを
+  非投影のまま凍結保持する。別pane／tabをfocused中は旧paneのprocess詳細／poll／filesystem operationを持たず、
+  元paneへ戻った時にsession／PGIDを再検証する。Dock非表示、別windowへのfocus変更、tab／pane close、
+  app非active中の別tab cache、session／PGID変更では保持snapshotも破棄する。終了後はfreshな
   Directory Navigatorへ戻る。実行中もControl-Shift-Command-NでDirectory Navigatorへ切り替えるとMove modeへ
   focusし、矢印／Page移動、folder展開・折り畳み、Search／Go To／Move、hidden切替、手動refreshを通常時と同じ
   bounded operationとして使える。同じ操作で同一jobのProcess Inspectorへ戻り、terminal inputも復元する。

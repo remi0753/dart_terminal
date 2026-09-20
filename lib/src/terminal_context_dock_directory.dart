@@ -257,7 +257,7 @@ final class TerminalContextDockDirectoryController {
       );
 
   /// Drops a frozen snapshot whose pane, session, or foreground-job authority
-  /// changed while its native window or split pane was not presenting it.
+  /// changed while its native window, tab, or split pane was not presenting it.
   void invalidateRetainedSnapshot(PaneId paneId) {
     if (_isDisposed) return;
     var changed = false;
@@ -831,7 +831,7 @@ final class TerminalContextDockDirectoryController {
   }
 
   /// Moves a command-start snapshot out of the single visible window slot
-  /// while another split pane owns the Context Dock. Parked snapshots are
+  /// while another pane or tab owns the Context Dock. Parked snapshots are
   /// immutable and operation-free until the same pane becomes focused again.
   bool _retargetWindow(TerminalContextDockWindowSnapshot dock) {
     final _TerminalContextDockDirectoryWindowState? current =
@@ -841,13 +841,8 @@ final class TerminalContextDockDirectoryController {
       _windows.remove(dock.windowId);
       final TerminalPaneLocation? priorLocation = applicationState
           .locationForPane(current.paneId);
-      final TerminalWindowState? logicalWindow = applicationState.windowForId(
-        dock.windowId,
-      );
-      final bool sameSelectedTab =
-          priorLocation?.windowId == dock.windowId &&
-          priorLocation?.tabId == logicalWindow?.selectedTabId;
-      if (sameSelectedTab &&
+      final bool sameWindow = priorLocation?.windowId == dock.windowId;
+      if (sameWindow &&
           _readCanRetainPane(current.paneId) &&
           !current.privacyRestricted &&
           current.resolution?.isAvailable == true &&
