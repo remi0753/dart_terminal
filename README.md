@@ -63,4 +63,5 @@ make RUNTIME_ARCH=arm64 developer-jit-run
 - [Keybindings and actions](docs/reference/keybindings-and-actions.md)
 - [Terminal inspector and local diagnostics](docs/reference/terminal-diagnostics.md)
 - [Feature status](FEATURE_MATRIX.md)
-- [Development roadmap](ROADMAP.md)
+- [Current product-design roadmap](ROADMAP.md)
+- [Archived terminal-emulator release roadmap](docs/archive/terminal-emulator-release-roadmap.md)

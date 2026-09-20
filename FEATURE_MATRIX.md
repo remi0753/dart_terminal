@@ -1,6 +1,6 @@
 # Dart Terminal feature matrix
 
-最終更新: 2026-09-19<br>
+最終更新: 2026-09-20<br>
 比較基準: [`ghostty-org/ghostty@d4d8f62262cb1a974a7d2470d5f79f811fab15e4`](https://github.com/ghostty-org/ghostty/tree/d4d8f62262cb1a974a7d2470d5f79f811fab15e4)  
 対象: macOS 14 以降、Flutter 不使用<br>
 主要実機 baseline: Apple M1/arm64
@@ -19,7 +19,10 @@ Ghostty の互換性判断と同じく、挙動が競合する場合は原則と
 2. protocol を定義した terminal の実挙動
 3. 広く採用された de facto behavior
 
-優先度は `ROADMAP.md` と同じである。
+優先度と Phase は、完了済みの
+[`terminal emulator release roadmap`](docs/archive/terminal-emulator-release-roadmap.md)
+と同じである。現在の設計作業順序は、この履歴とは別に root の
+[`ROADMAP.md`](ROADMAP.md) で管理する。
 
 - **P0**: daily-driver alpha に必須
 - **P1**: rich beta と Ghostty クラス評価に必須
