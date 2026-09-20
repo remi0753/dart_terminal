@@ -293,6 +293,7 @@ final class TerminalIncidentPresenter {
     required TerminalIncidentFocusTargetProvider focusTarget,
     TerminalLocalization? localization,
     TerminalIncidentSaveDestinationChooser? chooseSaveDestination,
+    this.onVisibilityChanged,
     this.onError,
   }) : _focusTarget = focusTarget,
        _localization = localization ?? TerminalLocalization.english,
@@ -306,6 +307,7 @@ final class TerminalIncidentPresenter {
   final TerminalIncidentFocusTargetProvider _focusTarget;
   final TerminalLocalization _localization;
   final TerminalIncidentSaveDestinationChooser _chooseSaveDestination;
+  final void Function(bool isPresented)? onVisibilityChanged;
   final void Function(Object error, StackTrace stackTrace)? onError;
 
   Window? _window;
@@ -392,6 +394,7 @@ final class TerminalIncidentPresenter {
       window
         ..show()
         ..makeFirstResponder(view);
+      onVisibilityChanged?.call(true);
     } on Object {
       controller.removeListener(_render);
       unawaited(subscription?.cancel());
@@ -572,6 +575,7 @@ final class TerminalIncidentPresenter {
             _terminalResponderRestoreCount++;
           }
         }
+        if (window != null) onVisibilityChanged?.call(false);
         completion.complete();
       } on Object catch (error, stackTrace) {
         completion.completeError(error, stackTrace);

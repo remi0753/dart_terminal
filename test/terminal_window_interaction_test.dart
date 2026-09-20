@@ -10,6 +10,7 @@ Future<void> runTerminalWindowInteractionTests() async {
   await _testHierarchyStaleFallbackAndWindowLifecycle();
   await _testContextDockUsesSharedAuthorityProjection();
   await _testInputFamilyRoutingAndGestureNoReplay();
+  await _testSystemSurfaceCoordinatorLifecycle();
   await _testBoundedDeterministicOwnerSequence();
 }
 
@@ -615,6 +616,62 @@ Future<void> _testContextDockUsesSharedAuthorityProjection() async {
   await application.shutdown();
 }
 
+Future<void> _testSystemSurfaceCoordinatorLifecycle() async {
+  final List<_InteractionFakeSession> sessions = <_InteractionFakeSession>[];
+  final TerminalApplicationState application = TerminalApplicationState();
+  final TerminalWindowState window = await application.createWindow(
+    _configuration(sessions),
+  );
+  final TerminalWindowInteractionAuthority authority =
+      TerminalWindowInteractionAuthority(application);
+  final TerminalWindowSystemSurfaceCoordinator coordinator =
+      TerminalWindowSystemSurfaceCoordinator(authority);
+  final Object palette = Object();
+  final Object settings = Object();
+  final Object duplicateByValueA = _EqualSystemSurfaceIdentity();
+  final Object duplicateByValueB = _EqualSystemSurfaceIdentity();
+
+  _expect(
+    coordinator.present(palette, window.id) &&
+        coordinator.present(settings, window.id) &&
+        coordinator.present(duplicateByValueA, window.id) &&
+        coordinator.present(duplicateByValueB, window.id) &&
+        coordinator.activeSurfaceCount == 4 &&
+        authority.snapshotForWindow(window.id)!.owner.kind ==
+            TerminalWindowInteractionOwnerKind.systemSurface,
+    'opaque system presenters share one priority owner using identity keys',
+  );
+  _expect(
+    coordinator.dismiss(settings) &&
+        coordinator.dismiss(palette) &&
+        coordinator.dismiss(duplicateByValueA) &&
+        authority.snapshotForWindow(window.id)!.owner.kind ==
+            TerminalWindowInteractionOwnerKind.systemSurface &&
+        coordinator.dismiss(duplicateByValueB) &&
+        coordinator.activeSurfaceCount == 0 &&
+        authority.snapshotForWindow(window.id)!.owner.kind ==
+            TerminalWindowInteractionOwnerKind.terminal,
+    'only the final system dismissal explicitly restores terminal ownership',
+  );
+  _expect(
+    !coordinator.dismiss(Object()),
+    'a stale system dismissal cannot change the terminal owner',
+  );
+
+  final Object closingSurface = Object();
+  coordinator.present(closingSurface, window.id);
+  await application.removeWindow(window.id);
+  coordinator.synchronize();
+  _expect(
+    coordinator.activeSurfaceCount == 0 &&
+        authority.snapshotForWindow(window.id) == null,
+    'window close releases opaque system leases without restoring stale state',
+  );
+  coordinator.dispose();
+  authority.dispose();
+  await application.shutdown();
+}
+
 TerminalPaneConfiguration _configuration(
   List<_InteractionFakeSession> sessions,
 ) => TerminalPaneConfiguration(
@@ -717,6 +774,14 @@ final class _InteractionFakeSession implements TerminalPaneSession {
       cleanupCompleted: true,
     );
   }
+}
+
+final class _EqualSystemSurfaceIdentity {
+  @override
+  bool operator ==(Object other) => other is _EqualSystemSurfaceIdentity;
+
+  @override
+  int get hashCode => 1;
 }
 
 void _expect(bool condition, String message) {

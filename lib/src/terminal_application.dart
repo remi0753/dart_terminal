@@ -174,6 +174,7 @@ final class TerminalOptions {
     this.runtimeDesktopSignalsTest = false,
     this.runtimeOsc52Test = false,
     this.runtimeNativeContentTest = false,
+    this.runtimeWindowInteractionTest = false,
     this.runtimeQuickTerminalTest = false,
     this.runtimeSecureKeyboardEntryTest = false,
     this.runtimeAppleScriptTest = false,
@@ -239,6 +240,7 @@ final class TerminalOptions {
     var runtimeDesktopSignalsTest = false;
     var runtimeOsc52Test = false;
     var runtimeNativeContentTest = false;
+    var runtimeWindowInteractionTest = false;
     var runtimeQuickTerminalTest = false;
     var runtimeSecureKeyboardEntryTest = false;
     var runtimeAppleScriptTest = false;
@@ -367,6 +369,15 @@ final class TerminalOptions {
           );
         }
         runtimeNativeContentTest = true;
+        continue;
+      }
+      if (argument == '--runtime-window-interaction-test') {
+        if (runtimeWindowInteractionTest) {
+          throw const FormatException(
+            '--runtime-window-interaction-test may only be supplied once',
+          );
+        }
+        runtimeWindowInteractionTest = true;
         continue;
       }
       if (argument == '--runtime-quick-terminal-test') {
@@ -600,6 +611,40 @@ final class TerminalOptions {
         selectedEnvironment['DT_RUNTIME_NATIVE_CONTENT_TEST'] != '1') {
       throw const FormatException(
         'native content test requires the integration-test gate',
+      );
+    }
+    if (runtimeWindowInteractionTest &&
+        selectedEnvironment['DT_RUNTIME_WINDOW_INTERACTION_TEST'] != '1') {
+      throw const FormatException(
+        'window interaction test requires the integration-test gate',
+      );
+    }
+    if (runtimeWindowInteractionTest &&
+        (selectedScenario != RuntimeLifecycleScenario.normal ||
+            autoCloseAfter != null ||
+            runtimeResourceStress ||
+            runtimeShutdownFaultInjection ||
+            runtimePtyExitFaultInjection ||
+            runtimeTerminalDisplayTest ||
+            runtimeClipboardTest ||
+            runtimeNativeHierarchyTest ||
+            runtimeUserActionsTest ||
+            runtimeConfigurationTest ||
+            runtimeThemeTest ||
+            runtimeShellIntegrationTest ||
+            runtimeDesktopSignalsTest ||
+            runtimeOsc52Test ||
+            runtimeNativeContentTest ||
+            runtimeQuickTerminalTest ||
+            runtimeSecureKeyboardEntryTest ||
+            runtimeAppleScriptTest ||
+            runtimeSystemAutomationTest ||
+            runtimeDiagnosticsTest ||
+            runtimePerformanceTest ||
+            runtimeRestorationTest ||
+            selectedShellExitTest != RuntimeShellExitTestScenario.none)) {
+      throw const FormatException(
+        'window interaction test cannot be combined with another runtime test',
       );
     }
     if (runtimeNativeContentTest &&
@@ -1022,6 +1067,7 @@ final class TerminalOptions {
       runtimeDesktopSignalsTest: runtimeDesktopSignalsTest,
       runtimeOsc52Test: runtimeOsc52Test,
       runtimeNativeContentTest: runtimeNativeContentTest,
+      runtimeWindowInteractionTest: runtimeWindowInteractionTest,
       runtimeQuickTerminalTest: runtimeQuickTerminalTest,
       runtimeSecureKeyboardEntryTest: runtimeSecureKeyboardEntryTest,
       runtimeAppleScriptTest: runtimeAppleScriptTest,
@@ -1069,6 +1115,7 @@ final class TerminalOptions {
   final bool runtimeDesktopSignalsTest;
   final bool runtimeOsc52Test;
   final bool runtimeNativeContentTest;
+  final bool runtimeWindowInteractionTest;
   final bool runtimeQuickTerminalTest;
   final bool runtimeSecureKeyboardEntryTest;
   final bool runtimeAppleScriptTest;
@@ -1168,6 +1215,7 @@ final class TerminalApplication {
         options.runtimeDesktopSignalsTest ||
         options.runtimeOsc52Test ||
         options.runtimeNativeContentTest ||
+        options.runtimeWindowInteractionTest ||
         options.runtimeQuickTerminalTest ||
         options.runtimeSecureKeyboardEntryTest ||
         options.runtimeAppleScriptTest ||
@@ -1201,6 +1249,7 @@ final class TerminalApplication {
         runDesktopSignalAcceptance: options.runtimeDesktopSignalsTest,
         runOsc52Acceptance: options.runtimeOsc52Test,
         runNativeContentAcceptance: options.runtimeNativeContentTest,
+        runWindowInteractionAcceptance: options.runtimeWindowInteractionTest,
         runQuickTerminalAcceptance: options.runtimeQuickTerminalTest,
         runSecureKeyboardEntryAcceptance:
             options.runtimeSecureKeyboardEntryTest,
@@ -2742,6 +2791,7 @@ final class TerminalApplication {
     bool runDesktopSignalAcceptance = false,
     bool runOsc52Acceptance = false,
     bool runNativeContentAcceptance = false,
+    bool runWindowInteractionAcceptance = false,
     bool runQuickTerminalAcceptance = false,
     bool runSecureKeyboardEntryAcceptance = false,
     bool runAppleScriptAcceptance = false,
@@ -2813,6 +2863,13 @@ final class TerminalApplication {
     TerminalContextDockState? contextDockState;
     TerminalWindowInteractionAuthority? windowInteractionAuthority;
     TerminalWindowInteractionRouter? windowInteractionRouter;
+    TerminalWindowSystemSurfaceCoordinator? windowSystemSurfaceCoordinator;
+    final Object commandPaletteSystemSurface = Object();
+    final Object settingsSystemSurface = Object();
+    final Object diagnosticsSystemSurface = Object();
+    final Object incidentSystemSurface = Object();
+    final Object updateSystemSurface = Object();
+    final Object osc52SystemSurface = Object();
     TerminalContextDockProcessController? contextDockProcessController;
     final Set<PaneId> directoryObservableProcessPaneIds = <PaneId>{};
     TerminalContextDockDirectoryController? contextDockDirectoryController;
@@ -2879,6 +2936,7 @@ final class TerminalApplication {
     final Map<PaneId, TerminalKeyRouteResult> lastKeyRoutes =
         <PaneId, TerminalKeyRouteResult>{};
     final Map<PaneId, int> keyRouteCounts = <PaneId, int>{};
+    final Map<PaneId, int> focusReportCounts = <PaneId, int>{};
     final Map<PaneId, int> nativeContentWriteEnqueuedCounts = <PaneId, int>{};
     final List<TerminalExternalPasteResult> nativeContentPasteResults =
         <TerminalExternalPasteResult>[];
@@ -2898,6 +2956,40 @@ final class TerminalApplication {
       asynchronousError ??= error;
       asynchronousStackTrace ??= stackTrace;
       if (!closed.isCompleted) closed.completeError(error, stackTrace);
+    }
+
+    TerminalWindowInteractionRouteTarget routeWindowInput(
+      PaneId paneId,
+      TerminalWindowInteractionInputFamily family,
+    ) {
+      final TerminalPaneLocation? location = state.locationForPane(paneId);
+      final TerminalWindowInteractionRouter? router = windowInteractionRouter;
+      if (location == null || router == null || router.isDisposed) {
+        return TerminalWindowInteractionRouteTarget.stale;
+      }
+      return router
+          .route(windowId: location.windowId, paneId: paneId, family: family)
+          .target;
+    }
+
+    void updateSystemSurfaceInteraction(Object identity, bool isPresented) {
+      try {
+        final TerminalWindowSystemSurfaceCoordinator? coordinator =
+            windowSystemSurfaceCoordinator;
+        if (coordinator == null || coordinator.isDisposed) return;
+        final bool accepted;
+        if (isPresented) {
+          final TerminalWindowState? window = state.activeWindow;
+          accepted = window != null && coordinator.present(identity, window.id);
+        } else {
+          accepted = coordinator.dismiss(identity);
+        }
+        if (!accepted) {
+          throw StateError('system surface interaction transition rejected');
+        }
+      } on Object catch (error, stackTrace) {
+        recordAsynchronousError(error, stackTrace);
+      }
     }
 
     final TerminalOsc52Coordinator osc52Coordinator = TerminalOsc52Coordinator(
@@ -3017,6 +3109,7 @@ final class TerminalApplication {
                   runDesktopSignalAcceptance ||
                   runOsc52Acceptance ||
                   runNativeContentAcceptance ||
+                  runWindowInteractionAcceptance ||
                   runQuickTerminalAcceptance ||
                   runSecureKeyboardEntryAcceptance ||
                   runAppleScriptAcceptance ||
@@ -3081,6 +3174,7 @@ final class TerminalApplication {
                     },
                 nativeObserver: (TerminalSessionNativeObservation observation) {
                   if ((runNativeContentAcceptance ||
+                          runWindowInteractionAcceptance ||
                           runUserActionAcceptance ||
                           runConfigurationAcceptance) &&
                       observation.event.stage ==
@@ -3234,9 +3328,17 @@ final class TerminalApplication {
           TerminalTextInputEventRouter(
             clientId: client.clientId,
             onRawKeyDown: (TerminalKeyEvent event) {
+              if (routeWindowInput(
+                    pane.id,
+                    TerminalWindowInteractionInputFamily.rawKey,
+                  ) !=
+                  TerminalWindowInteractionRouteTarget.terminal) {
+                return;
+              }
               if (runUserActionAcceptance ||
                   runConfigurationAcceptance ||
                   runOsc52Acceptance ||
+                  runWindowInteractionAcceptance ||
                   runDiagnosticsAcceptance) {
                 terminalInputDeliveryCount++;
               }
@@ -3259,6 +3361,14 @@ final class TerminalApplication {
                   required int selectionLocation,
                   required int selectionLength,
                 }) {
+                  if (routeWindowInput(
+                        pane.id,
+                        TerminalWindowInteractionInputFamily.ime,
+                      ) !=
+                      TerminalWindowInteractionRouteTarget.terminal) {
+                    surface.clearPreedit(generation: generation);
+                    return;
+                  }
                   surface.updatePreedit(
                     generation: generation,
                     text: text,
@@ -3270,9 +3380,17 @@ final class TerminalApplication {
               surface.clearPreedit(generation: generation);
             },
             onCommit: (String text) {
+              if (routeWindowInput(
+                    pane.id,
+                    TerminalWindowInteractionInputFamily.ime,
+                  ) !=
+                  TerminalWindowInteractionRouteTarget.terminal) {
+                return;
+              }
               if (runUserActionAcceptance ||
                   runConfigurationAcceptance ||
                   runOsc52Acceptance ||
+                  runWindowInteractionAcceptance ||
                   runDiagnosticsAcceptance) {
                 terminalInputDeliveryCount++;
               }
@@ -3342,6 +3460,13 @@ final class TerminalApplication {
             ViewServicesTextReceivedEvent event,
           ) {
             if (!identical(owners[pane.id], owner)) return;
+            if (routeWindowInput(
+                  pane.id,
+                  TerminalWindowInteractionInputFamily.servicesText,
+                ) !=
+                TerminalWindowInteractionRouteTarget.terminal) {
+              return;
+            }
             final TerminalExternalContentResult result =
                 TerminalExternalContentAdmission.text(
                   event.text,
@@ -3366,6 +3491,14 @@ final class TerminalApplication {
         ..addNativeContentSubscription(
           view.onDropPerformed.listen((ViewDropPerformedEvent event) {
             if (!identical(owners[pane.id], owner)) return;
+            final TerminalWindowInteractionInputFamily inputFamily =
+                event.content is DroppedPlainText
+                ? TerminalWindowInteractionInputFamily.plainTextDrop
+                : TerminalWindowInteractionInputFamily.richOrFileDrop;
+            if (routeWindowInput(pane.id, inputFamily) !=
+                TerminalWindowInteractionRouteTarget.terminal) {
+              return;
+            }
             final TerminalExternalContentResult result =
                 switch (event.content) {
                   DroppedPlainText(:final text) =>
@@ -3422,7 +3555,14 @@ final class TerminalApplication {
         onAlternateScreenInput: pane.sendInput,
       );
       focusReporters[pane.id] = TerminalFocusReporter(
-        onTerminalReport: pane.sendInput,
+        onTerminalReport: (Uint8List bytes) {
+          focusReportCounts.update(
+            pane.id,
+            (int count) => count + 1,
+            ifAbsent: () => 1,
+          );
+          pane.sendInput(bytes);
+        },
       );
       hyperlinkControllers[pane.id] = TerminalHyperlinkInteractionController(
         viewport: session.terminalScreenSet.viewport,
@@ -3886,6 +4026,8 @@ final class TerminalApplication {
       hierarchyReconciliationInProgress = true;
       try {
         contextDockState?.synchronize(state);
+        windowSystemSurfaceCoordinator?.synchronize();
+        windowInteractionRouter?.synchronizeGestures();
         contextDockProcessController?.synchronize();
         enforceContextDockPrivacy();
         contextDockDirectoryController?.synchronize();
@@ -4033,6 +4175,13 @@ final class TerminalApplication {
           final _TerminalHierarchyProductPane? owner = owners[paneId];
           final TerminalPaneLayoutRect? rectangle = owner?.layout;
           if (owner == null || rectangle == null) return;
+          if (routeWindowInput(
+                paneId,
+                TerminalWindowInteractionInputFamily.mouse,
+              ) !=
+              TerminalWindowInteractionRouteTarget.terminal) {
+            return;
+          }
           if (event.kind == AppKitMouseEventKind.down &&
               paneId != tab.focusedPaneId) {
             state
@@ -4127,6 +4276,13 @@ final class TerminalApplication {
           final _TerminalHierarchyProductPane? owner = owners[paneId];
           final TerminalPaneLayoutRect? rectangle = owner?.layout;
           if (owner == null || rectangle == null) return;
+          if (routeWindowInput(
+                paneId,
+                TerminalWindowInteractionInputFamily.scroll,
+              ) !=
+              TerminalWindowInteractionRouteTarget.terminal) {
+            return;
+          }
           cancelHyperlinkInteraction(tab);
           final TerminalScreenSet screens = sessions[paneId]!.terminalScreenSet;
           final TerminalScreen screen = screens.activeScreen;
@@ -4146,6 +4302,13 @@ final class TerminalApplication {
                 nativeHierarchy.windowForTab(tabId)?.backingScaleFactor ?? 1,
           );
         case AppKitKeyEvent():
+          if (routeWindowInput(
+                tab.focusedPaneId,
+                TerminalWindowInteractionInputFamily.rawKey,
+              ) !=
+              TerminalWindowInteractionRouteTarget.contextDock) {
+            return;
+          }
           final TerminalContextDockKeyController? keys =
               contextDockKeyController;
           if (keys == null) break;
@@ -4318,6 +4481,8 @@ final class TerminalApplication {
       contextDockPresenter = null;
       contextDockState?.dispose();
       contextDockState = null;
+      windowSystemSurfaceCoordinator?.dispose();
+      windowSystemSurfaceCoordinator = null;
       windowInteractionRouter?.dispose();
       windowInteractionRouter = null;
       windowInteractionAuthority?.dispose();
@@ -4344,6 +4509,13 @@ final class TerminalApplication {
       required TerminalPasteConfirmationGate confirmationGate,
       required int sourceIdentity,
     }) async {
+      if (routeWindowInput(
+            pane.id,
+            TerminalWindowInteractionInputFamily.cutPasteSelectAll,
+          ) !=
+          TerminalWindowInteractionRouteTarget.terminal) {
+        return;
+      }
       final int invocationMicros = pasteClock.elapsedMicroseconds;
       TerminalPastePlan plan;
       try {
@@ -4361,7 +4533,12 @@ final class TerminalApplication {
       }
       if (!pane.isLive ||
           !identical(state.paneForId(pane.id), pane) ||
-          !identical(activePane(), pane)) {
+          !identical(activePane(), pane) ||
+          routeWindowInput(
+                pane.id,
+                TerminalWindowInteractionInputFamily.cutPasteSelectAll,
+              ) !=
+              TerminalWindowInteractionRouteTarget.terminal) {
         return;
       }
       final TerminalPasteApprovalResult approval = confirmationGate.evaluate(
@@ -4414,6 +4591,29 @@ final class TerminalApplication {
     }
 
     externalPasteController = TerminalExternalPasteController<PaneId>(
+      canSubmit: (PaneId paneId, TerminalExternalContent content) {
+        final TerminalWindowInteractionInputFamily family = switch ((
+          content.kind,
+          content.textSource,
+        )) {
+          (
+            TerminalExternalContentKind.text,
+            TerminalExternalTextSource.service,
+          ) =>
+            TerminalWindowInteractionInputFamily.servicesText,
+          (TerminalExternalContentKind.text, TerminalExternalTextSource.drop) =>
+            TerminalWindowInteractionInputFamily.plainTextDrop,
+          (
+            TerminalExternalContentKind.text,
+            TerminalExternalTextSource.appleScript,
+          ) =>
+            TerminalWindowInteractionInputFamily.automationWrite,
+          (TerminalExternalContentKind.filePaths, _) =>
+            TerminalWindowInteractionInputFamily.richOrFileDrop,
+        };
+        return routeWindowInput(paneId, family) ==
+            TerminalWindowInteractionRouteTarget.terminal;
+      },
       resolveTarget: (PaneId paneId) {
         final TerminalPane? pane = state.paneForId(paneId);
         if (pane == null ||
@@ -4600,6 +4800,9 @@ final class TerminalApplication {
           TerminalWindowInteractionAuthority(state);
       windowInteractionAuthority = createdInteractionAuthority;
       windowInteractionRouter = TerminalWindowInteractionRouter(
+        createdInteractionAuthority,
+      );
+      windowSystemSurfaceCoordinator = TerminalWindowSystemSurfaceCoordinator(
         createdInteractionAuthority,
       );
 
@@ -5002,6 +5205,8 @@ final class TerminalApplication {
         },
         approve: osc52Coordinator.approve,
         deny: osc52Coordinator.deny,
+        onVisibilityChanged: (bool isPresented) =>
+            updateSystemSurfaceInteraction(osc52SystemSurface, isPresented),
         onError: recordAsynchronousError,
         localization: localization,
       );
@@ -5573,6 +5778,11 @@ final class TerminalApplication {
                 '${diagnosticsExportSelectionIndex++}.json',
               )
             : null,
+        onVisibilityChanged: (bool isPresented) =>
+            updateSystemSurfaceInteraction(
+              diagnosticsSystemSurface,
+              isPresented,
+            ),
         onError: recordAsynchronousError,
       );
       TerminalIncidentFocusTarget? activeIncidentTarget() {
@@ -5608,6 +5818,8 @@ final class TerminalApplication {
                 );
               }
             : null,
+        onVisibilityChanged: (bool isPresented) =>
+            updateSystemSurfaceInteraction(incidentSystemSurface, isPresented),
         onError: recordAsynchronousError,
       );
       TerminalUpdateFocusTarget? activeUpdateTarget() {
@@ -5625,6 +5837,8 @@ final class TerminalApplication {
         controller: updateController,
         focusTarget: activeUpdateTarget,
         localization: localization,
+        onVisibilityChanged: (bool isPresented) =>
+            updateSystemSurfaceInteraction(updateSystemSurface, isPresented),
         onError: recordAsynchronousError,
       );
       dispatcher = TerminalActionDispatcher(
@@ -5768,11 +5982,22 @@ final class TerminalApplication {
             id: TerminalActionId.copy,
             isAvailable: () {
               final TerminalWindowState? window = state.activeWindow;
+              final PaneId? paneId = window?.selectedTab.focusedPaneId;
+              if (paneId == null) return false;
+              final TerminalWindowInteractionRouteTarget route =
+                  routeWindowInput(
+                    paneId,
+                    TerminalWindowInteractionInputFamily.copy,
+                  );
               final TerminalContextDockWindowSnapshot? dock = window == null
                   ? null
                   : createdContextDockState.snapshotForWindow(window.id);
-              if (dock?.navigatorOwnsInput == true) {
+              if (route == TerminalWindowInteractionRouteTarget.contextDock &&
+                  dock?.navigatorOwnsInput == true) {
                 return createdPathHandoff.snapshotForWindow(window!.id).canCopy;
+              }
+              if (route != TerminalWindowInteractionRouteTarget.terminal) {
+                return false;
               }
               final TerminalSelectionText? selected = activeSelection()
                   ?.selectedText();
@@ -5782,15 +6007,26 @@ final class TerminalApplication {
             },
             handler: () {
               final TerminalWindowState? window = state.activeWindow;
+              final PaneId? paneId = window?.selectedTab.focusedPaneId;
+              if (paneId == null) return;
+              final TerminalWindowInteractionRouteTarget route =
+                  routeWindowInput(
+                    paneId,
+                    TerminalWindowInteractionInputFamily.copy,
+                  );
               final TerminalContextDockWindowSnapshot? dock = window == null
                   ? null
                   : createdContextDockState.snapshotForWindow(window.id);
-              if (dock?.navigatorOwnsInput == true) {
+              if (route == TerminalWindowInteractionRouteTarget.contextDock &&
+                  dock?.navigatorOwnsInput == true) {
                 final TerminalContextDockPathHandoffResult result =
                     createdPathHandoff.copyPath(window!.id);
                 if (runNativeContentAcceptance) {
                   contextDockPathHandoffResults.add(result);
                 }
+                return;
+              }
+              if (route != TerminalWindowInteractionRouteTarget.terminal) {
                 return;
               }
               final TerminalSelectionText? selected = activeSelection()
@@ -5805,7 +6041,13 @@ final class TerminalApplication {
             id: TerminalActionId.paste,
             isAvailable: () {
               final TerminalPane? pane = activePane();
-              return pane != null && !pane.pasteInProgress;
+              return pane != null &&
+                  !pane.pasteInProgress &&
+                  routeWindowInput(
+                        pane.id,
+                        TerminalWindowInteractionInputFamily.cutPasteSelectAll,
+                      ) ==
+                      TerminalWindowInteractionRouteTarget.terminal;
             },
             handler: paste,
           ),
@@ -5914,6 +6156,11 @@ final class TerminalApplication {
           onReloaded: (TerminalActionDispatchResult result) {
             if (runConfigurationAcceptance) actionDispatches.add(result);
           },
+          onVisibilityChanged: (bool isPresented) =>
+              updateSystemSurfaceInteraction(
+                settingsSystemSurface,
+                isPresented,
+              ),
           onError: recordAsynchronousError,
           accessibilityPresentation:
               applicationAccessibilityProjection!.presentation,
@@ -5972,6 +6219,11 @@ final class TerminalApplication {
             recordAsynchronousError(result.error!, result.stackTrace!);
           }
         },
+        onVisibilityChanged: (bool isPresented) =>
+            updateSystemSurfaceInteraction(
+              commandPaletteSystemSurface,
+              isPresented,
+            ),
         onError: recordAsynchronousError,
         localization: localization,
       );
@@ -6183,6 +6435,30 @@ final class TerminalApplication {
           terminalInputDeliveryCount: () => terminalInputDeliveryCount,
           reconcile: reconcileInteractiveHierarchy,
           exportDirectory: diagnosticsExportDirectory!,
+          closed: closed,
+          prompt: acceptancePrompt.trimRight(),
+        );
+      } else if (runWindowInteractionAcceptance) {
+        await _exerciseWindowInteractionProduct(
+          application: application,
+          state: state,
+          hierarchy: createdHierarchy,
+          dispatcher: dispatcher,
+          sessions: sessions,
+          allSessions: allSessions,
+          owners: owners,
+          contextDockState: createdContextDockState,
+          palette: installedPalette,
+          quickTerminal: createdQuickTerminal,
+          secureKeyboardEntry: createdSecureKeyboardEntry,
+          authority: createdInteractionAuthority,
+          router: windowInteractionRouter!,
+          systemSurfaces: windowSystemSurfaceCoordinator!,
+          focusReportCounts: focusReportCounts,
+          keyRouteCounts: keyRouteCounts,
+          writeEnqueuedCounts: nativeContentWriteEnqueuedCounts,
+          terminalInputDeliveryCount: () => terminalInputDeliveryCount,
+          reconcile: reconcileInteractiveHierarchy,
           closed: closed,
           prompt: acceptancePrompt.trimRight(),
         );
@@ -8480,6 +8756,475 @@ final class TerminalApplication {
       'tcc_untouched=true stable_ids=true input_exact=true focus=true '
       'close_terminal=true close_tab=true close_window=true stale=true '
       'disable=true reenable=true resumed=10 rejected=1 sessions_clean=4 '
+      'text_clients=0 native_handles=0',
+    );
+  }
+
+  static Future<void> _exerciseWindowInteractionProduct({
+    required AppKitApplication application,
+    required TerminalApplicationState state,
+    required TerminalNativeHierarchyAdapter hierarchy,
+    required TerminalActionDispatcher dispatcher,
+    required Map<PaneId, TerminalSession> sessions,
+    required List<TerminalSession> allSessions,
+    required Map<PaneId, _TerminalHierarchyProductPane> owners,
+    required TerminalContextDockState contextDockState,
+    required TerminalCommandPalettePresenter palette,
+    required TerminalQuickTerminalController quickTerminal,
+    required TerminalSecureKeyboardEntryController secureKeyboardEntry,
+    required TerminalWindowInteractionAuthority authority,
+    required TerminalWindowInteractionRouter router,
+    required TerminalWindowSystemSurfaceCoordinator systemSurfaces,
+    required Map<PaneId, int> focusReportCounts,
+    required Map<PaneId, int> keyRouteCounts,
+    required Map<PaneId, int> writeEnqueuedCounts,
+    required int Function() terminalInputDeliveryCount,
+    required void Function() reconcile,
+    required Completer<void> closed,
+    required String prompt,
+  }) async {
+    Future<void> waitFor(
+      bool Function() predicate,
+      String message, {
+      Duration timeout = const Duration(seconds: 10),
+    }) async {
+      final Stopwatch deadline = Stopwatch()..start();
+      while (!predicate() && deadline.elapsed < timeout) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      _expectLifecycle(predicate(), message);
+    }
+
+    Future<void> dispatch(TerminalActionId id) async {
+      await waitFor(
+        () => dispatcher.snapshot(id).isEnabled,
+        'window interaction action ${id.stableName} did not become enabled',
+      );
+      final TerminalActionDispatchResult result = await dispatcher.dispatch(id);
+      _expectLifecycle(
+        result.disposition == TerminalActionDispatchDisposition.executed,
+        'window interaction action ${id.stableName} did not execute',
+      );
+    }
+
+    void expectRoutes({
+      required TerminalWindowId windowId,
+      required PaneId paneId,
+      required TerminalWindowInteractionRouteTarget Function(
+        TerminalWindowInteractionInputFamily family,
+      )
+      expected,
+      required String stage,
+    }) {
+      for (final TerminalWindowInteractionInputFamily family
+          in TerminalWindowInteractionInputFamily.values) {
+        final TerminalWindowInteractionRouteTarget actual = router
+            .route(windowId: windowId, paneId: paneId, family: family)
+            .target;
+        _expectLifecycle(
+          actual == expected(family),
+          '$stage routed ${family.name} to ${actual.name}',
+        );
+      }
+    }
+
+    TerminalWindowInteractionRouteTarget terminalRoute(
+      TerminalWindowInteractionInputFamily family,
+    ) => family == TerminalWindowInteractionInputFamily.menuKeyEquivalent
+        ? TerminalWindowInteractionRouteTarget.applicationAction
+        : TerminalWindowInteractionRouteTarget.terminal;
+
+    TerminalWindowInteractionRouteTarget contextDockRoute(
+      TerminalWindowInteractionInputFamily family,
+    ) => switch (family) {
+      TerminalWindowInteractionInputFamily.menuKeyEquivalent =>
+        TerminalWindowInteractionRouteTarget.applicationAction,
+      TerminalWindowInteractionInputFamily.automationWrite =>
+        TerminalWindowInteractionRouteTarget.terminal,
+      _ => TerminalWindowInteractionRouteTarget.contextDock,
+    };
+
+    TerminalWindowInteractionRouteTarget noteRailRoute(
+      TerminalWindowInteractionInputFamily family,
+    ) => switch (family) {
+      TerminalWindowInteractionInputFamily.menuKeyEquivalent =>
+        TerminalWindowInteractionRouteTarget.applicationAction,
+      TerminalWindowInteractionInputFamily.automationWrite =>
+        TerminalWindowInteractionRouteTarget.interactionBusy,
+      TerminalWindowInteractionInputFamily.ime ||
+      TerminalWindowInteractionInputFamily.cutPasteSelectAll ||
+      TerminalWindowInteractionInputFamily.servicesText ||
+      TerminalWindowInteractionInputFamily.plainTextDrop ||
+      TerminalWindowInteractionInputFamily.richOrFileDrop =>
+        TerminalWindowInteractionRouteTarget.consumed,
+      _ => TerminalWindowInteractionRouteTarget.noteRail,
+    };
+
+    _expectLifecycle(
+      state.windowCount == 1 &&
+          state.tabCount == 1 &&
+          state.paneCount == 1 &&
+          hierarchy.nativeWindowCount == 1 &&
+          hierarchy.paneResourceCount == 1 &&
+          sessions.length == 1 &&
+          owners.length == 1 &&
+          authority.windowCount == 1 &&
+          systemSurfaces.activeSurfaceCount == 0,
+      'window interaction product did not start in a clean 1/1/1 hierarchy',
+    );
+    final TerminalWindowState ordinaryWindow = state.windows.single;
+    final TerminalTabState ordinaryTab = ordinaryWindow.selectedTab;
+    final PaneId ordinaryPaneId = ordinaryTab.focusedPaneId;
+    final TerminalSession ordinarySession = sessions[ordinaryPaneId]!;
+    final _TerminalHierarchyProductPane ordinaryOwner = owners[ordinaryPaneId]!;
+    final Window ordinaryNative = hierarchy.windowForTab(ordinaryTab.id)!;
+    await _waitForAsciiMarker(ordinarySession, prompt);
+    if (!application.isActive) {
+      appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+        application.eventProtocolVersion,
+        30,
+        0,
+        0,
+        23000000,
+        0,
+        true,
+      ]);
+    }
+    if (!ordinaryNative.isFocused) {
+      _injectFocusEventForTesting(
+        application,
+        ordinaryNative,
+        isFocused: true,
+        monotonicNanoseconds: 23000500,
+      );
+    }
+    await waitFor(
+      () =>
+          application.isActive &&
+          ordinaryNative.isVisible &&
+          ordinaryNative.isFocused,
+      'ordinary terminal did not become the focused interaction target',
+    );
+    expectRoutes(
+      windowId: ordinaryWindow.id,
+      paneId: ordinaryPaneId,
+      expected: terminalRoute,
+      stage: 'terminal owner',
+    );
+
+    const String focusReady = '__DT_WINDOW_INTERACTION_FOCUS_READY__';
+    ordinaryOwner.pane.insertText(
+      "printf '\\033[?1004h\\r\\n$focusReady\\r\\n'",
+    );
+    await ordinaryOwner.pane.submit();
+    await _waitForAsciiMarker(ordinarySession, focusReady);
+    await _waitForAsciiMarker(ordinarySession, prompt);
+    _expectLifecycle(
+      ordinarySession.terminalScreenSet.focusReportingMode,
+      'DEC 1004 focus reporting was not enabled by the real PTY fixture',
+    );
+
+    final int focusReportBaseline = focusReportCounts[ordinaryPaneId] ?? 0;
+    await dispatch(TerminalActionId.searchFilesAndFolders);
+    await waitFor(() {
+      final TerminalContextDockWindowSnapshot? dock = contextDockState
+          .snapshotForWindow(ordinaryWindow.id);
+      return dock?.navigatorOwnsInput == true &&
+          ordinaryNative.keyEventRouting == KeyEventRouting.dartOnly &&
+          authority.snapshotForWindow(ordinaryWindow.id)?.owner.kind ==
+              TerminalWindowInteractionOwnerKind.contextDock;
+    }, 'Context Dock did not acquire the shared window interaction authority');
+    expectRoutes(
+      windowId: ordinaryWindow.id,
+      paneId: ordinaryPaneId,
+      expected: contextDockRoute,
+      stage: 'Context Dock owner',
+    );
+
+    final int inputBaseline = terminalInputDeliveryCount();
+    final int keyRouteBaseline = keyRouteCounts[ordinaryPaneId] ?? 0;
+    final int writeBaseline = writeEnqueuedCounts[ordinaryPaneId] ?? 0;
+    final TerminalTextInputRouteResult dockKey = ordinaryOwner.textRouter.route(
+      TerminalTextInputKeyEvent(
+        clientId: ordinaryOwner.client.clientId,
+        generation: ordinaryOwner.textRouter.lastGeneration + 1,
+        monotonicNanoseconds: 23001000,
+        kind: TerminalTextInputKeyKind.down,
+        keyCode: 0,
+        modifiers: const ModifierKeys(0),
+        isRepeat: false,
+        characters: 'a',
+        charactersIgnoringModifiers: 'a',
+      ),
+    );
+    final TerminalTextInputRouteResult dockPreedit = ordinaryOwner.textRouter
+        .route(
+          TerminalTextInputPreeditEvent(
+            clientId: ordinaryOwner.client.clientId,
+            generation: ordinaryOwner.textRouter.lastGeneration + 1,
+            monotonicNanoseconds: 23002000,
+            text: '隔離',
+            selection: const TerminalTextInputRange(2, 0),
+            replacement: TerminalTextInputRange.notFound,
+          ),
+        );
+    final TerminalTextInputRouteResult dockCommit = ordinaryOwner.textRouter
+        .route(
+          TerminalTextInputCommitEvent(
+            clientId: ordinaryOwner.client.clientId,
+            generation: ordinaryOwner.textRouter.lastGeneration + 1,
+            monotonicNanoseconds: 23003000,
+            text: '__DT_FORBIDDEN_DOCK_COMMIT__',
+            replacement: TerminalTextInputRange.notFound,
+          ),
+        );
+    _expectLifecycle(
+      dockKey.disposition == TerminalTextInputRouteDisposition.rawKey &&
+          dockPreedit.disposition ==
+              TerminalTextInputRouteDisposition.preedit &&
+          dockCommit.disposition ==
+              TerminalTextInputRouteDisposition.committed &&
+          !ordinaryOwner.textRouter.isCompositionActive &&
+          terminalInputDeliveryCount() == inputBaseline &&
+          (keyRouteCounts[ordinaryPaneId] ?? 0) == keyRouteBaseline &&
+          (writeEnqueuedCounts[ordinaryPaneId] ?? 0) == writeBaseline,
+      'Context Dock ownership leaked raw or IME input into the terminal',
+    );
+
+    await dispatch(TerminalActionId.focusTerminal);
+    await waitFor(
+      () =>
+          contextDockState
+                  .snapshotForWindow(ordinaryWindow.id)
+                  ?.navigatorOwnsInput ==
+              false &&
+          ordinaryNative.keyEventRouting == KeyEventRouting.appKitOnly &&
+          authority.snapshotForWindow(ordinaryWindow.id)?.owner.kind ==
+              TerminalWindowInteractionOwnerKind.terminal,
+      'terminal did not reacquire the shared window interaction authority',
+    );
+    _expectLifecycle(
+      (focusReportCounts[ordinaryPaneId] ?? 0) == focusReportBaseline,
+      'same-window Context Dock transfer emitted a DEC 1004 focus report',
+    );
+
+    final int responderBaseline = palette.terminalResponderRestoreCount;
+    await dispatch(TerminalActionId.openCommandPalette);
+    await waitFor(
+      () =>
+          palette.isOpen &&
+          systemSurfaces.activeSurfaceCount == 1 &&
+          authority.snapshotForWindow(ordinaryWindow.id)?.owner.kind ==
+              TerminalWindowInteractionOwnerKind.systemSurface,
+      'command palette did not acquire the system-surface owner',
+    );
+    expectRoutes(
+      windowId: ordinaryWindow.id,
+      paneId: ordinaryPaneId,
+      expected: (_) => TerminalWindowInteractionRouteTarget.systemSurface,
+      stage: 'system surface owner',
+    );
+    await palette.dismiss();
+    await waitFor(
+      () =>
+          !palette.isOpen &&
+          systemSurfaces.activeSurfaceCount == 0 &&
+          palette.terminalResponderRestoreCount == responderBaseline + 1 &&
+          authority.snapshotForWindow(ordinaryWindow.id)?.owner.kind ==
+              TerminalWindowInteractionOwnerKind.terminal,
+      'system-surface dismissal did not restore the terminal responder',
+    );
+
+    final TerminalSecureKeyboardEntryStatus secureBefore =
+        secureKeyboardEntry.status;
+    final TerminalWindowInteractionTransferResult noteRequested = authority
+        .requestOwner(
+          TerminalWindowInteractionOwner.noteRail(
+            windowId: ordinaryWindow.id,
+            paneId: ordinaryPaneId,
+            surfaceGeneration: 1,
+          ),
+        );
+    _expectLifecycle(
+      noteRequested.disposition ==
+              TerminalWindowInteractionTransferDisposition.requested &&
+          authority.confirm(noteRequested.request!).disposition ==
+              TerminalWindowInteractionTransferDisposition.confirmed,
+      'future Note rail test owner could not acquire interaction authority',
+    );
+    expectRoutes(
+      windowId: ordinaryWindow.id,
+      paneId: ordinaryPaneId,
+      expected: noteRailRoute,
+      stage: 'future Note rail owner',
+    );
+    final int noteInputBaseline = terminalInputDeliveryCount();
+    final int noteKeyBaseline = keyRouteCounts[ordinaryPaneId] ?? 0;
+    final int noteWriteBaseline = writeEnqueuedCounts[ordinaryPaneId] ?? 0;
+    ordinaryOwner.textRouter.route(
+      TerminalTextInputKeyEvent(
+        clientId: ordinaryOwner.client.clientId,
+        generation: ordinaryOwner.textRouter.lastGeneration + 1,
+        monotonicNanoseconds: 23004000,
+        kind: TerminalTextInputKeyKind.down,
+        keyCode: 11,
+        modifiers: const ModifierKeys(0),
+        isRepeat: false,
+        characters: 'b',
+        charactersIgnoringModifiers: 'b',
+      ),
+    );
+    ordinaryOwner.textRouter.route(
+      TerminalTextInputCommitEvent(
+        clientId: ordinaryOwner.client.clientId,
+        generation: ordinaryOwner.textRouter.lastGeneration + 1,
+        monotonicNanoseconds: 23005000,
+        text: '__DT_FORBIDDEN_NOTE_COMMIT__',
+        replacement: TerminalTextInputRange.notFound,
+      ),
+    );
+    _expectLifecycle(
+      terminalInputDeliveryCount() == noteInputBaseline &&
+          (keyRouteCounts[ordinaryPaneId] ?? 0) == noteKeyBaseline &&
+          (writeEnqueuedCounts[ordinaryPaneId] ?? 0) == noteWriteBaseline &&
+          secureKeyboardEntry.status.hasSameProjection(secureBefore),
+      'future Note ownership leaked terminal input or changed secure input',
+    );
+    final TerminalWindowInteractionTransferResult terminalRequested = authority
+        .requestTerminal(ordinaryWindow.id);
+    _expectLifecycle(
+      terminalRequested.disposition ==
+              TerminalWindowInteractionTransferDisposition.requested &&
+          authority.confirm(terminalRequested.request!).disposition ==
+              TerminalWindowInteractionTransferDisposition.confirmed &&
+          secureKeyboardEntry.status.hasSameProjection(secureBefore),
+      'future Note owner did not return explicitly to the terminal',
+    );
+    expectRoutes(
+      windowId: ordinaryWindow.id,
+      paneId: ordinaryPaneId,
+      expected: terminalRoute,
+      stage: 'terminal owner after future Note',
+    );
+
+    await dispatch(TerminalActionId.toggleQuickTerminal);
+    await waitFor(
+      () =>
+          quickTerminal.lifecycle.visibility ==
+              TerminalQuickTerminalVisibility.visible &&
+          state.quickTerminalWindow != null &&
+          state.windowCount == 2 &&
+          authority.windowCount == 2,
+      'Quick Terminal did not join the shared interaction authority',
+    );
+    final TerminalWindowState quickWindow = state.quickTerminalWindow!;
+    final PaneId quickPaneId = quickWindow.selectedTab.focusedPaneId;
+    await _waitForAsciiMarker(sessions[quickPaneId]!, prompt);
+    _expectLifecycle(
+      authority.snapshotForWindow(quickWindow.id)?.owner.kind ==
+          TerminalWindowInteractionOwnerKind.terminal,
+      'Quick Terminal did not start with its terminal as interaction owner',
+    );
+    expectRoutes(
+      windowId: quickWindow.id,
+      paneId: quickPaneId,
+      expected: terminalRoute,
+      stage: 'Quick Terminal owner',
+    );
+    await dispatch(TerminalActionId.toggleQuickTerminal);
+    await waitFor(
+      () =>
+          quickTerminal.lifecycle.visibility ==
+              TerminalQuickTerminalVisibility.hidden &&
+          state.activeWindowId == ordinaryWindow.id &&
+          authority.windowCount == 2,
+      'hiding Quick Terminal did not restore the ordinary window owner',
+    );
+
+    final Set<TerminalWindowId> retainedWindowIds = state.windowIds.toSet();
+    await dispatch(TerminalActionId.newWindow);
+    await waitFor(
+      () =>
+          state.windowCount == 3 &&
+          hierarchy.nativeWindowCount == 3 &&
+          authority.windowCount == 3 &&
+          state.activeWindow != null &&
+          !retainedWindowIds.contains(state.activeWindow!.id),
+      'new ordinary window was not registered with interaction authority',
+    );
+    final TerminalWindowState firstCreatedWindow = state.activeWindow!;
+    final PaneId firstCreatedPaneId =
+        firstCreatedWindow.selectedTab.focusedPaneId;
+    final TerminalSession firstCreatedSession = sessions[firstCreatedPaneId]!;
+    await _waitForAsciiMarker(firstCreatedSession, prompt);
+    await dispatch(TerminalActionId.closeWindow);
+    await waitFor(
+      () =>
+          state.windowForId(firstCreatedWindow.id) == null &&
+          state.windowCount == 2 &&
+          authority.windowCount == 2 &&
+          firstCreatedSession.shutdownResult?.isClean == true,
+      'closed window retained an interaction or session owner',
+    );
+
+    await dispatch(TerminalActionId.newWindow);
+    await waitFor(
+      () =>
+          state.windowCount == 3 &&
+          authority.windowCount == 3 &&
+          state.activeWindow != null &&
+          state.activeWindow!.id != firstCreatedWindow.id &&
+          !retainedWindowIds.contains(state.activeWindow!.id),
+      'reopened window reused a stale interaction identity',
+    );
+    final TerminalWindowState reopenedWindow = state.activeWindow!;
+    final PaneId reopenedPaneId = reopenedWindow.selectedTab.focusedPaneId;
+    final TerminalSession reopenedSession = sessions[reopenedPaneId]!;
+    await _waitForAsciiMarker(reopenedSession, prompt);
+    _expectLifecycle(
+      authority.snapshotForWindow(reopenedWindow.id)?.owner.kind ==
+          TerminalWindowInteractionOwnerKind.terminal,
+      'reopened window did not receive a fresh terminal owner',
+    );
+    await dispatch(TerminalActionId.closeWindow);
+    await waitFor(
+      () =>
+          state.windowForId(reopenedWindow.id) == null &&
+          state.windowCount == 2 &&
+          authority.windowCount == 2 &&
+          reopenedSession.shutdownResult?.isClean == true,
+      'reopened window did not release its interaction owner on close',
+    );
+    reconcile();
+
+    await dispatch(TerminalActionId.quitApplication);
+    if (!closed.isCompleted) {
+      await dispatch(TerminalActionId.quitApplication);
+    }
+    await closed.future.timeout(const Duration(seconds: 15));
+    await Future<void>.delayed(Duration.zero);
+    _expectLifecycle(
+      state.isDisposed &&
+          hierarchy.isDisposed &&
+          quickTerminal.isDisposed &&
+          secureKeyboardEntry.isDisposed &&
+          authority.isDisposed &&
+          router.isDisposed &&
+          systemSurfaces.isDisposed &&
+          allSessions.length == 4 &&
+          allSessions.every(
+            (TerminalSession session) =>
+                session.shutdownResult?.isClean == true,
+          ) &&
+          debugLiveTerminalTextInputClientCount() == 0 &&
+          application.debugLiveObjectCount == 0,
+      'window interaction acceptance did not release all product owners',
+    );
+    stdout.writeln(
+      'TERMINAL_WINDOW_INTERACTION_TEST exactly_one=true responder=true '
+      'raw=true ime=true input_matrix=true system_surface=true '
+      'future_note=true focus_report_delta=0 secure=true '
+      'quick_terminal=true close_reopen=true sessions_clean=4 '
       'text_clients=0 native_handles=0',
     );
   }

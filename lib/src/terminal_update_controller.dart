@@ -266,6 +266,7 @@ final class TerminalUpdatePresenter {
     required this.controller,
     required TerminalUpdateFocusTargetProvider focusTarget,
     TerminalLocalization? localization,
+    this.onVisibilityChanged,
     this.onError,
   }) : _focusTarget = focusTarget,
        _localization = localization ?? TerminalLocalization.english;
@@ -275,6 +276,7 @@ final class TerminalUpdatePresenter {
   final TerminalUpdateController controller;
   final TerminalUpdateFocusTargetProvider _focusTarget;
   final TerminalLocalization _localization;
+  final void Function(bool isPresented)? onVisibilityChanged;
   final void Function(Object error, StackTrace stackTrace)? onError;
 
   Window? _window;
@@ -338,6 +340,7 @@ final class TerminalUpdatePresenter {
       window
         ..show()
         ..makeFirstResponder(view);
+      onVisibilityChanged?.call(true);
     } on Object {
       controller.removeListener(_render);
       unawaited(subscription?.cancel());
@@ -477,6 +480,7 @@ final class TerminalUpdatePresenter {
             _terminalResponderRestoreCount++;
           }
         }
+        if (window != null) onVisibilityChanged?.call(false);
         completion.complete();
       } on Object catch (error, stackTrace) {
         completion.completeError(error, stackTrace);

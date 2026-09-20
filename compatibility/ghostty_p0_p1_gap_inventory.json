@@ -196,7 +196,7 @@
     },
     {
       "path": "lib/src/terminal_application.dart",
-      "sha256": "b765d433d5b336cf66fafd89a268be09fb33a8e1819ed6e2e696fca8fe7c358d"
+      "sha256": "57a2196a03338be273d55324b80298344570ca1366a0d89904b5036c0a9f3241"
     },
     {
       "path": "lib/src/terminal_input/terminal_prompt_click.dart",
@@ -228,7 +228,7 @@
     },
     {
       "path": "tool/runtime_integration_smoke.dart",
-      "sha256": "34623becb4e24ab6b84a13d748308326a5159e58c8b24c6f54db308f78c8d257"
+      "sha256": "73bb90c1e67c3bdf38d470faf047ddb8be62447c58a37ae6d81752e08ee5984a"
     }
   ],
   "totals": {

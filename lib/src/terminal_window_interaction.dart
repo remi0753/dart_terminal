@@ -488,6 +488,147 @@ final class TerminalWindowInteractionRouter {
   }
 }
 
+/// Binds native system-surface presentation lifecycles to the one logical
+/// owner without retaining presenter content or constructing an owner stack.
+///
+/// A presenter calls [present] only after acquiring its native responder and
+/// [dismiss] only after restoring the terminal responder. Multiple concurrent
+/// system surfaces in one terminal window share one priority owner; the last
+/// dismissal returns explicitly to the currently focused terminal.
+final class TerminalWindowSystemSurfaceCoordinator {
+  TerminalWindowSystemSurfaceCoordinator(this.authority);
+
+  static const int maximumActiveSurfaces = 32;
+
+  final TerminalWindowInteractionAuthority authority;
+  final List<_TerminalWindowSystemSurfaceLease> _leases =
+      <_TerminalWindowSystemSurfaceLease>[];
+  var _nextSurfaceGeneration = 1;
+  var _isDisposed = false;
+
+  int get activeSurfaceCount => _leases.length;
+  bool get isDisposed => _isDisposed;
+
+  bool present(Object identity, TerminalWindowId windowId) {
+    _ensureAlive();
+    final _TerminalWindowSystemSurfaceLease? existing = _leaseFor(identity);
+    if (existing != null) return existing.windowId == windowId;
+    if (_leases.length >= maximumActiveSurfaces) return false;
+    authority.synchronize();
+    if (authority.snapshotForWindow(windowId) == null) return false;
+    final bool alreadyPresented = _leases.any(
+      (_TerminalWindowSystemSurfaceLease lease) => lease.windowId == windowId,
+    );
+    if (!alreadyPresented) {
+      final int generation = _takeSurfaceGeneration();
+      final TerminalWindowInteractionTransferResult requested = authority
+          .requestOwner(
+            TerminalWindowInteractionOwner.systemSurface(
+              windowId: windowId,
+              surfaceGeneration: generation,
+            ),
+          );
+      if (requested.disposition ==
+          TerminalWindowInteractionTransferDisposition.requested) {
+        if (authority.confirm(requested.request!).disposition !=
+            TerminalWindowInteractionTransferDisposition.confirmed) {
+          return false;
+        }
+      } else if (requested.disposition !=
+          TerminalWindowInteractionTransferDisposition.noChange) {
+        return false;
+      }
+    }
+    if (authority.snapshotForWindow(windowId)?.owner.kind !=
+        TerminalWindowInteractionOwnerKind.systemSurface) {
+      return false;
+    }
+    _leases.add(
+      _TerminalWindowSystemSurfaceLease(identity: identity, windowId: windowId),
+    );
+    return true;
+  }
+
+  bool dismiss(Object identity) {
+    _ensureAlive();
+    final int index = _leases.indexWhere(
+      (_TerminalWindowSystemSurfaceLease lease) =>
+          identical(lease.identity, identity),
+    );
+    if (index < 0) return false;
+    final TerminalWindowId windowId = _leases.removeAt(index).windowId;
+    if (_leases.any(
+      (_TerminalWindowSystemSurfaceLease lease) => lease.windowId == windowId,
+    )) {
+      return true;
+    }
+    authority.synchronize();
+    final TerminalWindowInteractionSnapshot? snapshot = authority
+        .snapshotForWindow(windowId);
+    if (snapshot == null ||
+        snapshot.owner.kind !=
+            TerminalWindowInteractionOwnerKind.systemSurface) {
+      return true;
+    }
+    final TerminalWindowInteractionTransferResult requested = authority
+        .requestTerminal(windowId);
+    if (requested.disposition ==
+        TerminalWindowInteractionTransferDisposition.noChange) {
+      return true;
+    }
+    return requested.disposition ==
+            TerminalWindowInteractionTransferDisposition.requested &&
+        authority.confirm(requested.request!).disposition ==
+            TerminalWindowInteractionTransferDisposition.confirmed;
+  }
+
+  void synchronize() {
+    _ensureAlive();
+    authority.synchronize();
+    _leases.removeWhere(
+      (_TerminalWindowSystemSurfaceLease lease) =>
+          authority.snapshotForWindow(lease.windowId) == null,
+    );
+  }
+
+  void dispose() {
+    if (_isDisposed) return;
+    _isDisposed = true;
+    _leases.clear();
+  }
+
+  _TerminalWindowSystemSurfaceLease? _leaseFor(Object identity) {
+    for (final _TerminalWindowSystemSurfaceLease lease in _leases) {
+      if (identical(lease.identity, identity)) return lease;
+    }
+    return null;
+  }
+
+  int _takeSurfaceGeneration() {
+    if (_nextSurfaceGeneration >
+        TerminalWindowInteractionLimits.maximumGeneration) {
+      throw StateError('system surface generation exhausted');
+    }
+    return _nextSurfaceGeneration++;
+  }
+
+  void _ensureAlive() {
+    if (_isDisposed) {
+      throw StateError('system surface coordinator is disposed');
+    }
+  }
+}
+
+final class _TerminalWindowSystemSurfaceLease {
+  const _TerminalWindowSystemSurfaceLease({
+    required this.identity,
+    required this.windowId,
+  });
+
+  final Object identity;
+  final TerminalWindowId windowId;
+}
+
 /// Sole product authority for logical input ownership in every native window.
 ///
 /// This class does not move native focus. Callers request a transfer, acquire

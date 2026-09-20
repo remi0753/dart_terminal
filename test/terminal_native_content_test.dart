@@ -501,6 +501,24 @@ Future<void> _testExternalPasteLifecycle() async {
         harness.writes.isEmpty,
     'a target with an active paste fails closed',
   );
+  harness
+    ..busy = false
+    ..writes.clear();
+  var admissionCount = 0;
+  final TerminalExternalPasteController<int> admissionController =
+      TerminalExternalPasteController<int>(
+        canSubmit: (_, _) => ++admissionCount == 1,
+        resolveTarget: harness.resolve,
+        monotonicMicros: () => harness.clockMicros++,
+      );
+  _expect(
+    (await admissionController.submit(7, safe)).disposition ==
+            TerminalExternalPasteDisposition.staleTarget &&
+        admissionCount == 2 &&
+        harness.writes.isEmpty,
+    'external paste admission is revalidated after asynchronous planning',
+  );
+  admissionController.dispose();
   controller.dispose();
   controller.dispose();
   _expect(

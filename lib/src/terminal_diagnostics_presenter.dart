@@ -95,6 +95,7 @@ final class TerminalDiagnosticsPresenter {
     TerminalDiagnosticsAtomicWriter? writer,
     TerminalDiagnosticsSaveDestinationChooser? chooseSaveDestination,
     this.onExported,
+    this.onVisibilityChanged,
     this.onError,
   }) : _focusTarget = focusTarget,
        _localization = localization ?? TerminalLocalization.english,
@@ -110,6 +111,7 @@ final class TerminalDiagnosticsPresenter {
   final TerminalDiagnosticsAtomicWriter _writer;
   final TerminalDiagnosticsSaveDestinationChooser _chooseSaveDestination;
   final TerminalDiagnosticsPresentationExportObserver? onExported;
+  final void Function(bool isPresented)? onVisibilityChanged;
   final TerminalDiagnosticsPresentationErrorObserver? onError;
 
   Window? _window;
@@ -183,6 +185,7 @@ final class TerminalDiagnosticsPresenter {
       window
         ..show()
         ..makeFirstResponder(view);
+      onVisibilityChanged?.call(true);
     } on Object {
       _stopCapture();
       unawaited(subscription?.cancel());
@@ -436,6 +439,7 @@ final class TerminalDiagnosticsPresenter {
             _terminalResponderRestoreCount++;
           }
         }
+        if (window != null) onVisibilityChanged?.call(false);
         completion.complete();
       } on Object catch (error, stackTrace) {
         completion.completeError(error, stackTrace);

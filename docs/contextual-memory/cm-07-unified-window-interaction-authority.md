@@ -1,7 +1,7 @@
 # CM-07 unified window interaction authority
 
 日付: 2026-09-21
-状態: 実装中
+状態: 完了
 
 ## 目的
 
@@ -185,3 +185,74 @@ owner終了eventをterminalへreplayしない。
 - Product rootはshared authorityを所有するが、system presenterのpresent/dismissとterminal raw/IME callbackでのroute assertionは
   まだreal runtime acceptanceへ固定していない。次はfocused product scenarioを追加し、native first responder、DEC 1004、Secure Input、
   Quick Terminal、close/reopenをDeveloper JIT/Release AOTで確認する。
+
+## 2026-09-21: 第3サブタスク着手
+
+### 現在地と実装方針
+
+- 着手前にROADMAPを再確認し、先頭未完了がCM-07第3サブタスクであること、完了条件がterminal responder復帰、同一pane内
+  owner transferのDEC 1004 delta 0、Context Dock/Quick Terminal/Secure Input/close/reopenのDeveloper JIT・Release AOT
+  focused acceptanceであることを確認した。
+- 既存のnative-content、Quick Terminal、Secure Keyboard Entry各suiteを個別に再利用する案は、機能自体の回帰は検証できても、
+  同じshared authority generationと実callbackのfail-closedを一つの実行で証明できないため不採用とした。Native-content suiteへ
+  追加する案も、長時間のDirectory/process fixtureとauthority invariantを一体化して失敗原因を曖昧にするため不採用とした。
+- 専用のgated product acceptanceを追加し、ordinary product composition rootのauthority/routerを直接使ってContext Dockのnative
+  responder、system surfaceのopen/dismiss、rogue terminal raw/IME callback遮断、DEC 1004、Quick Terminal、Secure Input、window
+  close/reopenを一続きに検証する。
+- System surfaceはpresenter別booleanを持たせず、opaqueなsurface identityだけをbounded coordinatorへ通知する。最後のsurfaceが閉じ、
+  presenterがterminal responderを復帰した後にterminal ownerへ明示transferする。複数surfaceをowner stackとして復元しない。
+- Terminal inputの実経路はshared routerのdecisionを境界で確認する。Raw key/IME、Services/drop/AppleScript、paste、mouse、scrollは
+  terminal targetのときだけ既存処理へ進め、transition/stale/他ownerではqueue/replayせず終了する。Note surface/bodyは実装しない。
+- `dart_appkit`には製品owner、pane、Note、acceptance flagを追加しない。必要なnative操作は既存の汎用APIを
+  `dart_terminal`側から呼び、全パラメータをproduct compositionから注入する。
+
+### 実機fixtureで判明した事項
+
+- Developer JIT の初回実行では、LaunchServices によるapplication active化だけでは通常ウインドウの
+  `WindowFocusChangedEvent`が保証されず、受け入れ開始条件がタイムアウトした。
+- 製品owner遷移に入る前のfixture不足であり、既存のQuick Terminal実機受け入れと同じテスト専用native focus eventを
+  一度だけ注入して、activeかつfocusedの確定状態から測定を始める。
+- Release AOTの初回実行では、prompt表示直後にContext Dockの非同期観測状態がaction registryへ反映される前に
+  `search-files-and-folders`をdispatchし、一時的なdisabledで停止した。JIT/AOTで同じsettled stateを測るため、専用fixtureの
+  共通dispatchはactionがenabledになるまで待ってから一度だけ実行する。入力やactionのreplayは行わない。
+
+## 2026-09-21: 第3サブタスク完了
+
+### 実装結果
+
+- Product rootで一つだけ生成するauthority/routerに、terminal text input、Context Dock native key、copy/paste、Services、drop、
+  mouse、scroll、AppleScript external pasteの実callback境界を接続した。Ownerが対象でない場合は処理を終了し、queue/replayしない。
+- Command Palette、Settings、Diagnostics、Incident、Update、OSC 52の各presenterへcontent-freeなvisibility callbackを追加した。
+  Product-owned `TerminalWindowSystemSurfaceCoordinator`は最大32個のopaque identityだけを保持し、同じwindowの複数surfaceを一つの
+  system ownerとして扱う。最後の通常dismissでterminal responder復帰後にcurrent terminalへ明示transferする。
+- External pasteには汎用的なadmission callbackを注入できるようにし、planning前後の両方でauthorityを再確認する。Stale ownerは既存の
+  `staleTarget`でfail closedとなり、Services/drop/AppleScript/file pathの内容や製品固有identityをcontrollerへ保持しない。
+- `--runtime-window-interaction-test`と環境gate、専用integration suite/Make targetを追加した。1/1/1 hierarchyからDEC 1004を有効化し、
+  Context Dock移譲、12 input family matrix、rogue raw/IME zero-delivery、terminal復帰、system surface responder復帰、future Note rail
+  test double、Secure Input projection不変、Quick Terminal、window close/reopen、4 session cleanupを一続きで検証する。
+- Future Note検証はcontent-free owner identityだけをauthorityへ渡し、native Note surface、card、editor、store、bodyは実装していない。
+  `dart_appkit`には本タスクの変更を加えていない。
+
+### 検証結果
+
+- `dart format`: 369 filesで変更0。
+- `dart analyze`: repository全体issue 0。
+- `terminal_window_interaction_test.dart`: system surface identity/lifecycle、close同期、terminal復帰を含めpass。
+- `terminal_native_content_test.dart`: external paste admissionのplanning後再検証とzero writeを含めpass。
+- `dart test/run_tests.dart`: pass。Note store acceptanceはcommit p95 145,461 us、primitive p95 19,011 us、
+  contention/recovery/privacyすべてpass。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: pass。全format/analyze/unit/native capability/privacy/security/
+  compatibility/release gateを完走。Note store 20 runsはcommit p95 147,017 us、primitive p95 17,371 us。
+- `make RUNTIME_ARCH=arm64 runtime-window-interaction-integration`: Developer JITとRelease AOTを連続pass。
+  最終実行はそれぞれ2,334 msと988 msで、両方ともDEC 1004 delta 0、4 clean sessions、text client/native handle 0を確認した。
+- Phase 7 acceptance、Ghostty gap inventory、release-candidate daily-use matrixを依存順で再生成した。受け入れ件数・gap数は不変で、
+  変更されたsource fingerprintだけを更新した。
+- `git diff --check`: pass。Authority/testにNote ID/body/text/path/timestamp/checkpoint/command field 0。
+  隣接`dart_appkit`は着手前からの3変更ファイルのみで、本タスクによる変更0。
+
+### 後続への境界
+
+- CM-08は本authorityの`noteRail` ownerとconsumed gesture identityを使ってnative presentation capabilityを実装する。
+  Owner storageやsystem surface stackを別に追加しない。
+- CM-09でeditor/AX interactionを接続する際も、native focus取得後に同じgeneration-bound requestをconfirmし、stale eventをterminalへ
+  replayしない。Note本文やdraftはauthority/routerへ格納しない。

@@ -546,6 +546,7 @@ final class TerminalSettingsInspectorPresenter {
     required TerminalSettingsInspectorReload reload,
     TerminalSettingsEditorLimits limits = const TerminalSettingsEditorLimits(),
     this.onReloaded,
+    this.onVisibilityChanged,
     this.onError,
     this.runtimeStatus,
     TerminalLocalization? localization,
@@ -570,6 +571,7 @@ final class TerminalSettingsInspectorPresenter {
   final TerminalSettingsInspectorFocusTargetProvider _focusTarget;
   final TerminalSettingsInspectorReload _reload;
   final TerminalSettingsInspectorReloadObserver? onReloaded;
+  final void Function(bool isPresented)? onVisibilityChanged;
   final TerminalSettingsInspectorErrorObserver? onError;
   final TerminalSettingsRuntimeStatusProvider? runtimeStatus;
   final TerminalLocalization _localization;
@@ -695,6 +697,7 @@ final class TerminalSettingsInspectorPresenter {
       window
         ..show()
         ..makeFirstResponder(editor);
+      onVisibilityChanged?.call(true);
     } on Object {
       unawaited(subscription?.cancel());
       if (window != null && !window.isDisposed) {
@@ -1097,6 +1100,7 @@ final class TerminalSettingsInspectorPresenter {
             _terminalResponderRestoreCount++;
           }
         }
+        if (window != null) onVisibilityChanged?.call(false);
         completion.complete();
       } on Object catch (error, stackTrace) {
         completion.completeError(error, stackTrace);

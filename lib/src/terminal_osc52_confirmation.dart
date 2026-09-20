@@ -35,6 +35,7 @@ final class TerminalOsc52ConfirmationPresenter {
     required TerminalOsc52ConfirmationFocusTargetProvider focusTarget,
     required TerminalOsc52ConfirmationResolver approve,
     required TerminalOsc52ConfirmationResolver deny,
+    this.onVisibilityChanged,
     TerminalOsc52ConfirmationErrorHandler? onError,
     TerminalLocalization? localization,
   }) : _focusTarget = focusTarget,
@@ -46,6 +47,7 @@ final class TerminalOsc52ConfirmationPresenter {
   final TerminalOsc52ConfirmationFocusTargetProvider _focusTarget;
   final TerminalOsc52ConfirmationResolver _approve;
   final TerminalOsc52ConfirmationResolver _deny;
+  final void Function(bool isPresented)? onVisibilityChanged;
   final TerminalOsc52ConfirmationErrorHandler? _onError;
   final TerminalLocalization _localization;
 
@@ -102,7 +104,10 @@ final class TerminalOsc52ConfirmationPresenter {
       _subscription = subscription;
       _presented = pending;
       _render();
-      window.show();
+      window
+        ..show()
+        ..makeFirstResponder(view);
+      onVisibilityChanged?.call(true);
     } on Object {
       unawaited(subscription?.cancel());
       if (window != null && !window.isDisposed) {
@@ -274,6 +279,7 @@ final class TerminalOsc52ConfirmationPresenter {
             _terminalResponderRestoreCount++;
           }
         }
+        if (window != null) onVisibilityChanged?.call(false);
         completion.complete();
       } on Object catch (error, stackTrace) {
         completion.completeError(error, stackTrace);

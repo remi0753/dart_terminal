@@ -120,6 +120,7 @@ final class TerminalCommandPalettePresenter {
     required Window terminalWindow,
     required View terminalView,
     this.onDispatched,
+    this.onVisibilityChanged,
     this.onError,
     TerminalLocalization? localization,
   }) : _focusTarget = (() => TerminalCommandPaletteFocusTarget(
@@ -135,6 +136,7 @@ final class TerminalCommandPalettePresenter {
     required this.dispatcher,
     required TerminalCommandPaletteFocusTargetProvider focusTarget,
     this.onDispatched,
+    this.onVisibilityChanged,
     this.onError,
     TerminalLocalization? localization,
   }) : _focusTarget = focusTarget,
@@ -147,6 +149,7 @@ final class TerminalCommandPalettePresenter {
   final TerminalCommandPaletteFocusTargetProvider _focusTarget;
   final TerminalLocalization _localization;
   final TerminalCommandPaletteDispatchObserver? onDispatched;
+  final void Function(bool isPresented)? onVisibilityChanged;
   final TerminalCommandPaletteErrorObserver? onError;
   final TerminalCommandPaletteState state;
 
@@ -214,7 +217,10 @@ final class TerminalCommandPalettePresenter {
       _subscription = subscription;
       state.open();
       _render();
-      window.show();
+      window
+        ..show()
+        ..makeFirstResponder(view);
+      onVisibilityChanged?.call(true);
     } on Object {
       unawaited(subscription?.cancel());
       if (window != null && !window.isDisposed) {
@@ -417,6 +423,7 @@ final class TerminalCommandPalettePresenter {
             _terminalResponderRestoreCount++;
           }
         }
+        if (window != null) onVisibilityChanged?.call(false);
         completion.complete();
       } on Object catch (error, stackTrace) {
         completion.completeError(error, stackTrace);

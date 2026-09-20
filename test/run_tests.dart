@@ -1643,6 +1643,45 @@ void _testOptions() {
     ),
     'native content and OSC 52 tests are mutually exclusive',
   );
+  final TerminalOptions windowInteractionTestOptions = _parseOptions(
+    const <String>['--runtime-window-interaction-test'],
+    environment: const <String, String>{
+      'DT_RUNTIME_WINDOW_INTERACTION_TEST': '1',
+    },
+  );
+  _expect(
+    windowInteractionTestOptions.runtimeWindowInteractionTest,
+    'gated unified window interaction product test',
+  );
+  _expectThrows(
+    () => _parseOptions(const <String>['--runtime-window-interaction-test']),
+    'window interaction product test gate',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-window-interaction-test',
+        '--runtime-window-interaction-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_WINDOW_INTERACTION_TEST': '1',
+      },
+    ),
+    'duplicate window interaction product test option',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-window-interaction-test',
+        '--runtime-native-content-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_WINDOW_INTERACTION_TEST': '1',
+        'DT_RUNTIME_NATIVE_CONTENT_TEST': '1',
+      },
+    ),
+    'window interaction and native content tests are mutually exclusive',
+  );
   final TerminalOptions appleScriptTestOptions = _parseOptions(
     const <String>['--runtime-applescript-test'],
     environment: const <String, String>{'DT_RUNTIME_APPLESCRIPT_TEST': '1'},

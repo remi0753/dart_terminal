@@ -441,17 +441,23 @@ final class TerminalExternalPasteResult {
 
 typedef TerminalExternalPasteTargetResolver<T> =
     TerminalExternalPasteTarget? Function(T identity);
+typedef TerminalExternalPasteAdmission<T> = bool Function(
+  T identity,
+  TerminalExternalContent content,
+);
 
 /// Applies ordinary paste planning, confirmation, and transport to native data.
 final class TerminalExternalPasteController<T> {
   factory TerminalExternalPasteController({
     required TerminalExternalPasteTargetResolver<T> resolveTarget,
+    TerminalExternalPasteAdmission<T>? canSubmit,
     TerminalPasteConfirmationGate? confirmationGate,
     int Function()? monotonicMicros,
   }) {
     final Stopwatch clock = Stopwatch()..start();
     return TerminalExternalPasteController._(
       resolveTarget,
+      canSubmit ?? _alwaysAdmit,
       confirmationGate ?? TerminalPasteConfirmationGate(),
       monotonicMicros ?? () => clock.elapsedMicroseconds,
     );
@@ -459,11 +465,13 @@ final class TerminalExternalPasteController<T> {
 
   TerminalExternalPasteController._(
     this._resolveTarget,
+    this._canSubmit,
     this._confirmationGate,
     this._monotonicMicros,
   );
 
   final TerminalExternalPasteTargetResolver<T> _resolveTarget;
+  final TerminalExternalPasteAdmission<T> _canSubmit;
   final TerminalPasteConfirmationGate _confirmationGate;
   final int Function() _monotonicMicros;
   bool _disposed = false;
@@ -497,6 +505,11 @@ final class TerminalExternalPasteController<T> {
     T targetIdentity,
     TerminalExternalContent content,
   ) async {
+    if (!_canSubmit(targetIdentity, content)) {
+      return const TerminalExternalPasteResult(
+        TerminalExternalPasteDisposition.staleTarget,
+      );
+    }
     final TerminalExternalPasteTarget? initial = _resolveTarget(targetIdentity);
     if (initial == null) {
       return const TerminalExternalPasteResult(
@@ -525,7 +538,8 @@ final class TerminalExternalPasteController<T> {
         TerminalExternalPasteDisposition.tooLarge,
       );
     }
-    final TerminalExternalPasteTarget? current = _disposed
+    final TerminalExternalPasteTarget? current =
+        _disposed || !_canSubmit(targetIdentity, content)
         ? null
         : _resolveTarget(targetIdentity);
     if (current == null || !identical(current.identity, initial.identity)) {
@@ -589,6 +603,8 @@ final class TerminalExternalPasteController<T> {
       3,
     (TerminalExternalContentKind.filePaths, _) => 4,
   };
+
+  static bool _alwaysAdmit<T>(T _, TerminalExternalContent __) => true;
 }
 
 /// Bounded admission shared by Services and the terminal drop destination.

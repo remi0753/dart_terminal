@@ -88,12 +88,12 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
   - [x] typed optionと露出制御を実装する
   - [x] `nextLaunch` reloadとlive Note projectionを実装する
   - [x] composition-root disabled lifecycleと受け入れを完了する
-- [ ] CM-07 unified window interaction authorityへ既存input ownerを統合する
+- [x] CM-07 unified window interaction authorityへ既存input ownerを統合する
   （[`cm-07-unified-window-interaction-authority.md`](docs/contextual-memory/cm-07-unified-window-interaction-authority.md)
   を参照して実施する）
   - [x] generation-bound pure authorityとfuture Note owner contractを実装する
   - [x] Context Dock、system surface、input family routingをauthorityへ統合する
-  - [ ] responder、focus report、両runtime受け入れを完了する
+  - [x] responder、focus report、両runtime受け入れを完了する
 - [ ] CM-08 native Note presentation capabilityを実装する
 - [ ] CM-09 native Note editor、intent、accessibility interactionを実装する
 - [ ] CM-10 S1 Basic memoryをproductへ統合する

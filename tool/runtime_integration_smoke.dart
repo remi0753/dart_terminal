@@ -41,6 +41,7 @@ enum _Suite {
   desktopSignals,
   osc52,
   nativeContent,
+  windowInteraction,
   quickTerminal,
   secureKeyboardEntry,
   diagnostics,
@@ -59,6 +60,7 @@ enum _Suite {
     _Suite.desktopSignals => 'desktop-signals',
     _Suite.osc52 => 'osc52',
     _Suite.nativeContent => 'native-content',
+    _Suite.windowInteraction => 'window-interaction',
     _Suite.appleScript => 'applescript',
     _Suite.systemAutomation => 'system-automation',
     _Suite.quickTerminal => 'quick-terminal',
@@ -184,7 +186,8 @@ _Options _parseOptions(List<String> arguments) {
         throw const _SmokeException(
           '--suite must be smoke, display, hierarchy, actions, restoration, '
           'configuration, theme, shell-integration, desktop-signals, '
-          'osc52, native-content, applescript, system-automation, quick-terminal, '
+          'osc52, native-content, window-interaction, applescript, '
+          'system-automation, quick-terminal, '
           'secure-keyboard-entry, diagnostics, performance, clipboard, lifecycle, traffic, resource, '
           'fault, or all',
         );
@@ -475,6 +478,7 @@ Future<_ProcessObservation> _launch(
   final List<String> invocationArguments = invocation.arguments(<String>[
     // Non-Dock acceptance fixtures retain their full-width terminal geometry.
     if (!applicationArguments.contains('--runtime-native-content-test') &&
+        !applicationArguments.contains('--runtime-window-interaction-test') &&
         !applicationArguments.contains('--help') &&
         !applicationArguments.contains('--show-config'))
       '--context-dock-visible=false',
@@ -2584,6 +2588,83 @@ Future<void> _runNativeContent(_Options options, _Invocation invocation) async {
   );
 }
 
+Future<void> _runWindowInteraction(
+  _Options options,
+  _Invocation invocation,
+) async {
+  final _ProcessObservation observation = await _launch(
+    options,
+    invocation,
+    const <String>[
+      '--no-config',
+      '--shell-integration=none',
+      '--context-dock-visible=true',
+      '--quick-terminal-animation-duration=0',
+      '--runtime-window-interaction-test',
+    ],
+    environment: const <String, String>{
+      'DT_RUNTIME_WINDOW_INTERACTION_TEST': '1',
+    },
+    timeout: const Duration(seconds: 60),
+    activateAfterLaunch: true,
+  );
+  _expect(
+    observation.status == 0,
+    'window interaction application exited with status '
+    '${observation.status}; stdout=${observation.stdoutText.trim()} '
+    'stderr=${observation.stderrText.trim()}',
+  );
+  _expect(
+    observation.stderrText.trim().isEmpty,
+    'window interaction application wrote unexpected stderr: '
+    '${observation.stderrText.trim()}',
+  );
+  _expect(
+    RegExp(
+          r'^TERMINAL_WINDOW_INTERACTION_TEST exactly_one=true '
+          r'responder=true raw=true ime=true input_matrix=true '
+          r'system_surface=true future_note=true focus_report_delta=0 '
+          r'secure=true quick_terminal=true close_reopen=true '
+          r'sessions_clean=4 text_clients=0 native_handles=0$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'ordinary product omitted exact unified window interaction acceptance',
+  );
+  _expect(
+    RegExp(
+              r'^TERMINAL_SESSION_SHUTDOWN pane=[1-4] session=[1-4]:1 '
+              r'process_id=[1-9][0-9]* disposition=clean '
+              r'termination_observed=true cleanup_completed=true$',
+              multiLine: true,
+            ).allMatches(observation.stdoutText).length ==
+            4 &&
+        RegExp(
+              r'^TERMINAL_PANE_OWNER_SHUTDOWN pane_count=2 disposition=clean$',
+              multiLine: true,
+            ).allMatches(observation.stdoutText).length ==
+            1 &&
+        observation.stdoutText.contains('Dart Terminal shut down cleanly.'),
+    'window interaction product did not cleanly release four sessions',
+  );
+  _expect(
+    !observation.stdoutText.contains('TERMINAL_TEXT_INPUT_OVERFLOW') &&
+        !observation.stdoutText.contains('HIERARCHY_MISMATCH'),
+    'window interaction product leaked or overflowed terminal input',
+  );
+  _expectWorkerProcessContract(
+    observation,
+    scenario: 'normal',
+    expectedCount: 1,
+  );
+  stdout.writeln(
+    'RUNTIME_WINDOW_INTERACTION_INTEGRATION_PASS '
+    'mode=${options.mode.name} '
+    'launch_architecture=${options.launchArchitecture ?? 'native'} '
+    'elapsed_ms=${observation.elapsed.inMilliseconds}',
+  );
+}
+
 Future<void> _runQuickTerminal(_Options options, _Invocation invocation) async {
   final _ProcessObservation observation = await _launch(
     options,
@@ -4452,6 +4533,10 @@ Future<void> main(List<String> arguments) async {
     }
     if (options.suite == _Suite.nativeContent || options.suite == _Suite.all) {
       await _runNativeContent(options, invocation);
+    }
+    if (options.suite == _Suite.windowInteraction ||
+        options.suite == _Suite.all) {
+      await _runWindowInteraction(options, invocation);
     }
     if (options.suite == _Suite.quickTerminal || options.suite == _Suite.all) {
       await _runQuickTerminal(options, invocation);

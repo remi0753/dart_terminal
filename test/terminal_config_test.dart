@@ -857,6 +857,28 @@ working-directory = /from-file
     runtimeNativeContent.runtimeNativeContentTest,
     'TerminalOptions admits the isolated native content acceptance gate',
   );
+  final TerminalOptions runtimeWindowInteraction = TerminalOptions.parse(
+    const <String>[
+      '--no-config',
+      '--context-dock-visible=true',
+      '--runtime-window-interaction-test',
+    ],
+    environment: const <String, String>{
+      'DT_RUNTIME_WINDOW_INTERACTION_TEST': '1',
+    },
+    configFileSystem: files,
+    runtimeWorkerCommand: const RuntimeLifecycleWorkerCommand(
+      executable: '/usr/bin/true',
+    ),
+  );
+  _expect(
+    runtimeWindowInteraction.runtimeWindowInteractionTest &&
+        runtimeWindowInteraction.effectiveConfiguration!.value(
+              TerminalProductConfigSchema.contextDockVisible,
+            ) ==
+            true,
+    'TerminalOptions admits isolated window interaction acceptance',
+  );
   final TerminalOptions runtimeAppleScript = TerminalOptions.parse(
     const <String>['--no-config', '--runtime-applescript-test'],
     environment: const <String, String>{'DT_RUNTIME_APPLESCRIPT_TEST': '1'},
