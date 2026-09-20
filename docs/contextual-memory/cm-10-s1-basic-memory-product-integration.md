@@ -564,6 +564,50 @@ explicit exportをdurable authorityに接続する。Default-offではentry/surf
   artifactとAppKit includeへ接続し、5 suiteのinstrumentation/content-free markerを再度成立させる。
 - その完了後に、元から予定していた「hidden create/open actionとlocalized menu/palette projectionを接続する」へ進む。
 
+## 2026-09-21: Notes native sanitizer harness追随着手
+
+- ROADMAPを再確認し、先頭未完了が「Notes native sanitizer harnessをcurrent composition contractへ追随させる」であることを確認した。
+- 目的は、product sanitizer gateが現行Notes native capability testを通常のnative gateと同じ依存関係でcompile/runし、Notes overlayの
+  renderer identity compositionもASan/UBSan下で検証できる状態へ戻すことである。
+- 範囲は`tool/native_sanitizer_gate.dart`のsuite orchestrationとNotes compile/run引数だけとする。製品ABI、Notes/renderer実装、
+  `dart_appkit`、sanitizerの判定基準やsuite数は変更しない。
+- 原因はNotes headerが汎用native-extension ABIをincludeし、capability testがrenderer headerとRTLD_LOCAL renderer dylib pathを要求するように
+  なった一方、sanitizer harnessだけが旧依存のまま`-I Notes`と引数0でbuild/runしていたことである。
+- Notes専用に別rendererを再compileする案は、同じgate内で既に生成済みのinstrumented renderer artifactと差が生じるため不採用とする。
+  Renderer suiteのlibrary artifactを明示的にNotes suiteへ渡し、AppKit bridge/renderer/Notes includeを通常native targetと同じ順で追加する。
+- 完了条件はNotes sanitizer testがrenderer dylibを一引数でloadし、5 suiteすべてのASan/UBSan artifact audit、`terminal-notes-acceptance`、
+  full gate、`dart_appkit`変更0が成功することである。
+
+## 2026-09-21: Notes native sanitizer harness追随完了
+
+### 実装と判断
+
+- Sanitizer orchestrationでrenderer suiteのartifact listを保持し、kindが`library`のexact 1件をNotes suiteへ明示的に渡すようにした。
+  Notes suiteは別rendererを生成せず、同じrunで先にASan/UBSan instrumentationされたrenderer dylibをRTLD_LOCAL composition fixtureへ使う。
+- Notes library compileへ汎用AppKit native-extension includeを、capability harness compileへAppKit、Notes、rendererの3 include rootを追加した。
+  Harness実行にはrenderer dylib pathを唯一の引数として渡し、通常`terminal-notes-native-test`と同じ現行contractを満たした。
+- Suite数5、artifact数11、ASan/UBSan marker判定、timeout、bounded diagnostic、product/native ABIは変更していない。
+  `dart_appkit`にも変更を加えていない。
+
+### 検証
+
+- `dart analyze tool/native_sanitizer_gate.dart`: issue 0。
+- 最初の`make product-native-sanitizer`はNotesへ到達する前にPTY timing/stress assertionが一度だけ失敗した。同じsource/build条件で再実行し、
+  PTY、renderer、AppleScript、App Intents ABI/perform、Notesの全suiteが成功した。11 artifactすべてにASan marker、5 owner中必要な9 artifactに
+  UBSan markerを確認し、`PRODUCT_NATIVE_SANITIZER_PASS suites=5 artifacts=11`となった。
+- `make terminal-notes-acceptance`: 成功。Native/Dart codec、native asset、Developer JIT/Release AOT host、capability audit、5-suite sanitizer、
+  両runtime window interactionを完走し、`TERMINAL_NOTES_ACCEPTANCE_PASS ... modes=2 geometry_delta=0 terminal_bytes=0 native_owners=0`を確認した。
+- 最初のfull gateはtool source hashを追跡するrelease-candidate matrixのfreshnessだけで停止した。正規Ghostty/release generatorを実行し、
+  matrixのsanitizer tool SHA-256だけを更新した。再実行した`CI=true DART_SUPPRESS_ANALYTICS=true make test`は377 filesのformat変更0、
+  root/package analyze issue 0、全native/product/store/security/privacy/compatibility/distribution gateを完走し、`dart_terminal tests passed`となった。
+- `git diff --check`: 成功。隣接`dart_appkit`は着手前から存在する3 fileだけで、このtaskによる変更は0。
+
+### 次への引き継ぎ
+
+- 次の先頭未完了taskは「hidden create/open actionとlocalized menu/palette projectionを接続する」である。
+- Notes actionは既存のDart Terminal action registry/menu/paletteへ追加し、generic AppKitへNote固有actionを追加しない。Visibilityはhidden/internal
+  `notes=true`かつ利用可能なsurface ownerへ限定する。
+
 ## 2026-09-21: S1 mutation/Detached/export/action task分割
 
 - ROADMAPを再確認し、先頭未完了がCM-10の「S1 mutation、Detached、export、localized actionを接続する」であることを確認した。

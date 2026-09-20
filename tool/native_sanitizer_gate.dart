@@ -126,10 +126,20 @@ final class _NativeSanitizerGate {
     Directory(_path('clang-module-cache')).createSync(recursive: true);
     final List<_InstrumentedArtifact> artifacts = <_InstrumentedArtifact>[];
     artifacts.addAll(await _runPtySuite());
-    artifacts.addAll(await _runRendererSuite());
+    final List<_InstrumentedArtifact> rendererArtifacts =
+        await _runRendererSuite();
+    artifacts.addAll(rendererArtifacts);
     artifacts.addAll(await _runAppleScriptSuite());
     artifacts.addAll(await _runAppIntentsSuite());
-    artifacts.addAll(await _runNotesSuite());
+    artifacts.addAll(
+      await _runNotesSuite(
+        rendererArtifacts
+            .singleWhere(
+              (_InstrumentedArtifact artifact) => artifact.kind == 'library',
+            )
+            .path,
+      ),
+    );
 
     var undefinedArtifacts = 0;
     final Set<String> ownersWithUndefinedInstrumentation = <String>{};
@@ -415,10 +425,16 @@ final class _NativeSanitizerGate {
     ];
   }
 
-  Future<List<_InstrumentedArtifact>> _runNotesSuite() async {
+  Future<List<_InstrumentedArtifact>> _runNotesSuite(
+    String rendererLibrary,
+  ) async {
     final String native = _projectPath(
       'packages/dart_terminal_notes_macos/native',
     );
+    final String rendererNative = _projectPath(
+      'packages/dart_terminal_renderer_macos/native',
+    );
+    final String bridgeInclude = _appkitPath('native/bridge/include');
     final String library = _path('libdart_terminal_notes_macos.dylib');
     final String tests = _path('terminal_notes_capability_tests');
     await _compile(clang, <String>[
@@ -426,6 +442,7 @@ final class _NativeSanitizerGate {
       '-fobjc-arc',
       '-fblocks',
       '-dynamiclib',
+      '-I$bridgeInclude',
       '-I$native',
       '$native/TerminalNotesPlugin.m',
       '-framework',
@@ -441,7 +458,9 @@ final class _NativeSanitizerGate {
       '-std=c++20',
       '-fobjc-arc',
       '-fblocks',
+      '-I$bridgeInclude',
       '-I$native',
+      '-I$rendererNative',
       '$native/test/TerminalNotesCapabilityTests.mm',
       library,
       '-framework',
@@ -452,12 +471,9 @@ final class _NativeSanitizerGate {
       '-o',
       tests,
     ], 'Notes sanitizer tests');
-    await _expectSuitePass(
-      'Notes',
-      tests,
-      const <String>[],
-      'terminal Notes native codec tests passed',
-    );
+    await _expectSuitePass('Notes', tests, <String>[
+      rendererLibrary,
+    ], 'terminal Notes native codec tests passed');
     return <_InstrumentedArtifact>[
       _InstrumentedArtifact('notes', 'library', library),
       _InstrumentedArtifact('notes', 'harness', tests),

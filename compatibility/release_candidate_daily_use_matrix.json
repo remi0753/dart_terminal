@@ -99,7 +99,7 @@
     },
     {
       "path": "tool/native_sanitizer_gate.dart",
-      "sha256": "19b7b98c43112bab55452da7f1f8296bd912ca3a95d96439d1d514e8424cf523"
+      "sha256": "e9bb55a87c15a08574ffbe2601e4446e981dba94a25fb00e6be4101abacc28dd"
     },
     {
       "path": "tool/runtime_integration_smoke.dart",
