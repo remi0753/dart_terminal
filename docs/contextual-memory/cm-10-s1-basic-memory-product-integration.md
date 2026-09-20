@@ -219,3 +219,66 @@ explicit exportをdurable authorityに接続する。Default-offではentry/surf
   topologyを実装する。
 - Renderer recoveryでcomposition identityが変わる場合は、topology ownerが旧hostからdetachし、新identityへ
   reattachする。Native surfaceやrendererにpersistent Note/Context identityを持たせない。
+
+## 2026-09-21: Production authority/topology lifecycle着手
+
+- ROADMAPを再確認し、先頭未完了がCM-10第2サブタスク内の
+  「production Note subsystemのauthority/topology lifecycleを実装する」であることを確認した。
+- `TerminalNoteCompositionRoot`、`TerminalNoteAuthority`、store worker、restoration binding、native adapter、renderer
+  composition identityを再確認し、この段階ではapplication hierarchyへ接続せず、production factoryとtopology ownerを
+  完結させる。
+- Application自身がstore worker、authority、native surfaceを個別に所有する案は、close/renderer recovery/quitの順序を
+  複数箇所へ分散させるため不採用とした。`TerminalNoteProductSubsystem`を唯一のproduct topology ownerとし、storeと
+  authorityはadmission後に一度だけ起動、native surfaceはpane rendererのattach時まで生成しない。
+- Native surfaceを全pane分eager生成する案はdefault-off/hidden surfaceのresource 0とlazy owner条件に反するため不採用とした。
+  Pane bindingとnative surface ownershipを分離し、pane/Quick Terminal topologyだけを先にauthorityへ登録する。
+- Renderer recoveryでsurfaceを破棄して新規生成する案は、surface generationとdraft/selectionのvolatile continuityを失うため
+  不採用とした。同じadapterを旧hostからdetachして新しいopaque renderer identityへreattachし、失敗時はauthority projectionを
+  collapsed/non-eligibleへfail-closeした上で再試行可能なownerを保持する。
+- Store/native failureの詳細をapplication capabilityへ漏らす案は不採用とした。起動結果は既存の固定分類だけへ写像し、
+  topology resultもbody、ID、path、timestampを含まない。
+- Topology操作は単一のserial tailへ投入し、pane bind/close、surface attach/update/detach、shutdownの所有権変更を順序付ける。
+  Shutdown要求後の未着手操作は受理せず、authority stopとnative owner解放をsingle-flightで行う。
+- Direct injectionでもschema外のNote font、authority generation、timestampを受理しない。Native reattach failure後にauthority側も
+  surfaceを拒否した場合はlocal mapから除外してadapterを破棄し、authority/nativeの片側だけにownerを残さない。
+- Focused format/analyze/adapter/product topology testは成功した。最初のfull `make test`は既存の正規freshness gateにより
+  `compatibility/release_candidate_daily_use_matrix.json`のsource hashがstaleとして停止した。Acceptance内容を変更せず、
+  正規generatorでhash chainを更新してから全回帰を再実行する。
+
+## 2026-09-21: Production authority/topology lifecycle完了
+
+### 実装
+
+- `TerminalNoteProductSubsystem.start`をproduction factoryとして追加した。Enabled admission後にnative capabilityを初期化し、
+  environmentからstore locationを解決してreal worker/authorityを一度だけ起動する。Disabled branchは既存composition rootの
+  手前でfactory自体を呼ばない。Recovery、upgrade、lock contention、その他の起動失敗は固定application capabilityへ分類する。
+- Initial standard paneとQuick Terminal singletonをauthorityへbindし、pane topologyとnative surface ownershipを分離した。
+  Native channelはrenderer surface attach時だけ生成するため、store/authorityのeager ownerとsurfaceのlazy ownerを混同しない。
+- Bind/close/attach/update/detach/shutdownを一つのserial topology tailへ集約した。Surface attachはrenderer host、layout、authorityの
+  順で行い、closeはsurface detach後にcontextをretireする。Shutdownはsingle-flightでauthority/store/native ownerを全解放する。
+- Renderer identity/generationが変わった場合は同じadapterとauthority surface generationをdetach/reattachする。Native failureは
+  authority projectionをcollapsed/non-eligibleにして再試行可能にし、authority側も拒否した場合はadapterを破棄して片側ownerを
+  残さない。Layout failure、duplicate/stale、invalid timestampもtyped resultでfail closedにした。
+- Live configurationは12..24ptのNote fontだけを再projectionし、terminal grid、drawable、PTY geometryを変更しない。
+  Launch-fixed flagの直接変更とschema外入力はnative/store ownershipを得る前、またはprojection変更前に拒否する。
+- Existing native adapterへrenderer attach/detach seamを追加し、disposeはdetach failure後も必ずnative destroyを行う。
+  `dart_appkit`へDart Terminal固有型・operation・codeは追加していない。
+
+### 検証
+
+- Focused format: 6 file、変更0。Focused analyze: product subsystem/native adapter/test、issue 0。
+- Focused tests: projection adapter teardownとreal filesystem workerを使うproduction subsystem lifecycleが成功。2 initial pane、
+  Quick Terminal、concurrent bind、lazy surface、renderer recovery/retry、live font、invalid launch-fixed change、failed attach、
+  detach/close、single-flight shutdown、product/authority/worker/native owner baseline復帰を検証した。
+- 正規generatorで`release_candidate_daily_use_matrix.json`の`test/run_tests.dart` source hashだけを更新した。
+  再実行した`CI=true DART_SUPPRESS_ANALYTICS=true make test`はnative packages、actual Notes capability、store real filesystem、
+  security stress、compatibility、distributionを含めて`dart_terminal tests passed`。Full runで検出したbarrel export ordering infoを
+  修正後、root `dart analyze`はissue 0。
+- `make RUNTIME_ARCH=arm64 developer-jit-audit release-aot-audit`: 両runtimeで成功し、`capabilities=3`のexact bundleを維持した。
+- `git diff --check`: 成功。隣接`dart_appkit`の差分は着手前から存在する3 fileだけで、本作業による変更は0。
+
+### 次への引き継ぎ
+
+- Product subsystemはまだ`TerminalApplication`から生成・駆動されていない。次はcomposition rootをapplication startupへ接続し、
+  pane/Quick Terminal renderer lifecycle、window interaction adapter、live font reload、ordered teardownをproduction eventへ結ぶ。
+- Mutation/action/exportは後続サブタスクの範囲であり、この段階ではnative intentをpollせず、S2/S3 trigger deliveryも開始しない。

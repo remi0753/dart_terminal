@@ -111,7 +111,7 @@
     },
     {
       "path": "test/run_tests.dart",
-      "sha256": "9987cf19f78b6430d0b42312f8b34123c1d05a864ed14cf47b35cf697012a7bb"
+      "sha256": "e000b2c1d9a219e368478227331fdb53d4cc75f7551434d861fa8d64b946e666"
     },
     {
       "path": "tool/release_candidate_daily_use.dart",

@@ -112,7 +112,10 @@ Future<void> _testNativeIntentResultAndTeardown() async {
   await adapter.dispose();
   await adapter.dispose();
   _expect(
-    channel.layoutCount == 1 && channel.disposeCount == 1 && adapter.isDisposed,
+    channel.layoutCount == 1 &&
+        channel.detachCount == 1 &&
+        channel.disposeCount == 1 &&
+        adapter.isDisposed,
     'layout is bounded and teardown is idempotent',
   );
   var threw = false;
@@ -169,7 +172,19 @@ final class _FakeNativeChannel implements TerminalNoteNativeSurfaceChannel {
   TerminalNotesNativeIntent? intent;
   TerminalNotesNativeResult? result;
   int layoutCount = 0;
+  int detachCount = 0;
   int disposeCount = 0;
+
+  @override
+  TerminalNotesAttachDisposition attachToRenderer({
+    required int rendererHandle,
+    required int rendererGeneration,
+  }) => TerminalNotesAttachDisposition.attached;
+
+  @override
+  void detachFromHost() {
+    detachCount++;
+  }
 
   @override
   TerminalNotesApplyDisposition apply(TerminalNotesProjection projection) {

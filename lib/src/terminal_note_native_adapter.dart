@@ -18,6 +18,13 @@ abstract interface class TerminalNoteNativeSurfaceChannel {
 
   bool focus(TerminalNotesNativeFocusTarget target);
 
+  TerminalNotesAttachDisposition attachToRenderer({
+    required int rendererHandle,
+    required int rendererGeneration,
+  });
+
+  void detachFromHost();
+
   void updateLayout({
     required double paneWidth,
     required double paneHeight,
@@ -48,6 +55,18 @@ final class TerminalNoteFfiSurfaceChannel
 
   @override
   bool focus(TerminalNotesNativeFocusTarget target) => surface.focus(target);
+
+  @override
+  TerminalNotesAttachDisposition attachToRenderer({
+    required int rendererHandle,
+    required int rendererGeneration,
+  }) => surface.attachToRenderer(
+    rendererHandle: rendererHandle,
+    rendererGeneration: rendererGeneration,
+  );
+
+  @override
+  void detachFromHost() => surface.detachFromHost();
 
   @override
   void updateLayout({
@@ -157,6 +176,22 @@ final class TerminalNoteNativeSurfaceAdapter
     return _channel.focus(target);
   }
 
+  TerminalNotesAttachDisposition attachToRenderer({
+    required int rendererHandle,
+    required int rendererGeneration,
+  }) {
+    _ensureLive();
+    return _channel.attachToRenderer(
+      rendererHandle: rendererHandle,
+      rendererGeneration: rendererGeneration,
+    );
+  }
+
+  void detachFromHost() {
+    _ensureLive();
+    _channel.detachFromHost();
+  }
+
   void updateLayout({
     required double paneWidth,
     required double paneHeight,
@@ -178,7 +213,13 @@ final class TerminalNoteNativeSurfaceAdapter
     _disposed = true;
     _lastAuthorityProjection = null;
     _lastNativeProjection = null;
-    _channel.dispose();
+    try {
+      _channel.detachFromHost();
+    } on Object {
+      // Native destruction remains mandatory after a failed detach.
+    } finally {
+      _channel.dispose();
+    }
   }
 
   void _ensureLive() {
