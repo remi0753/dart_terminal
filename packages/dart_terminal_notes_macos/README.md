@@ -21,3 +21,16 @@ accepted projection intact.
 Application capability registration and Dart Terminal model adaptation are
 intentionally deferred to product composition. Package tests load the code
 asset directly, so this package can be verified before manifest registration.
+
+The native surface is an AppKit child overlay with a 44×44 point trailing
+badge hit target, an optional 240–360 point rail, and at most 32 materialized
+card views. Cards use the six canonical opaque light/dark sRGB palettes,
+fixed status shapes, an eight-line preview, and bounded 12–24 point body text.
+Small panes retain a non-content badge and never expose a rail. Hidden,
+background, and collapsed card bodies are omitted from the accessibility tree.
+
+`dtn_surface_attach_to_host` is a native-to-native composition seam; its
+opaque `NSView` pointer must never cross Dart FFI. Dart can update bounded
+layout and read content-free geometry/appearance snapshots. Actual host
+attachment remains product composition work and does not require any
+Dart-Terminal-specific API in `dart_appkit`.

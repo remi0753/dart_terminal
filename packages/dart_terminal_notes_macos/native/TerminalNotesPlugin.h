@@ -7,6 +7,9 @@
 #define DTN_ABI_VERSION 1u
 #define DTN_PROJECTION_VERSION 1u
 #define DTN_SNAPSHOT_VERSION 1u
+#define DTN_LAYOUT_VERSION 1u
+#define DTN_PRESENTATION_SNAPSHOT_VERSION 1u
+#define DTN_CARD_PRESENTATION_SNAPSHOT_VERSION 1u
 #define DTN_PROJECTION_MAGIC 0x31504e44u
 #define DTN_PROJECTION_HEADER_BYTES 128u
 #define DTN_CARD_RECORD_BYTES 32u
@@ -25,6 +28,8 @@ typedef enum DtnStatus {
   DTN_STATUS_UNSUPPORTED_VERSION = 2,
   DTN_STATUS_STALE = 3,
   DTN_STATUS_INTERNAL = 4,
+  DTN_STATUS_WRONG_THREAD = 5,
+  DTN_STATUS_NOT_FOUND = 6,
 } DtnStatus;
 
 typedef enum DtnVisibility {
@@ -102,12 +107,93 @@ typedef struct DtnSurfaceSnapshotV1 {
   uint32_t reserved[7];
 } DtnSurfaceSnapshotV1;
 
+enum {
+  DTN_PRESENTATION_BADGE_VISIBLE = 1u << 0,
+  DTN_PRESENTATION_RAIL_VISIBLE = 1u << 1,
+  DTN_PRESENTATION_SMALL_PANE = 1u << 2,
+  DTN_PRESENTATION_OPAQUE_CARDS = 1u << 3,
+  DTN_PRESENTATION_CARD_SHADOWS = 1u << 4,
+  DTN_PRESENTATION_READY_CUE = 1u << 5,
+  DTN_PRESENTATION_REDUCED_MOTION = 1u << 6,
+  DTN_PRESENTATION_DIFFERENTIATE_WITHOUT_COLOR = 1u << 7,
+  DTN_PRESENTATION_INCREASE_CONTRAST = 1u << 8,
+  DTN_PRESENTATION_DARK = 1u << 9,
+  DTN_PRESENTATION_SYSTEM_BADGE_VISIBLE = 1u << 10,
+};
+
+typedef struct DtnLayoutV1 {
+  uint32_t struct_size;
+  uint32_t version;
+  double pane_width;
+  double pane_height;
+  double backing_scale;
+  double requested_rail_width;
+  uint32_t reserved[8];
+} DtnLayoutV1;
+
+typedef struct DtnPresentationSnapshotV1 {
+  uint32_t struct_size;
+  uint32_t version;
+  uint64_t projection_generation;
+  double pane_width;
+  double pane_height;
+  double backing_scale;
+  double badge_hit_x;
+  double badge_hit_y;
+  double badge_hit_width;
+  double badge_hit_height;
+  double badge_visual_x;
+  double badge_visual_y;
+  double badge_visual_width;
+  double badge_visual_height;
+  double rail_x;
+  double rail_y;
+  double rail_width;
+  double rail_height;
+  double first_card_x;
+  double first_card_y;
+  double first_card_width;
+  double first_card_height;
+  uint32_t flags;
+  uint32_t materialized_card_count;
+  uint32_t accessibility_node_count;
+  uint32_t accessibility_body_count;
+  uint32_t first_surface_rgba;
+  uint32_t first_accent_rgba;
+  uint32_t body_text_rgba;
+  uint32_t animation_milliseconds;
+  uint32_t body_font_millipoints;
+  uint32_t reserved[7];
+} DtnPresentationSnapshotV1;
+
+typedef struct DtnCardPresentationSnapshotV1 {
+  uint32_t struct_size;
+  uint32_t version;
+  uint32_t index;
+  uint32_t order;
+  uint32_t color;
+  uint32_t status;
+  uint32_t due;
+  uint32_t visible_line_limit;
+  uint32_t surface_rgba;
+  uint32_t accent_rgba;
+  uint32_t body_text_rgba;
+  uint32_t non_color_cue;
+  double x;
+  double y;
+  double width;
+  double height;
+  uint32_t reserved[8];
+} DtnCardPresentationSnapshotV1;
+
 #if defined(__cplusplus)
 extern "C" {
 #endif
 
 __attribute__((visibility("default"))) uint32_t dtn_abi_version(void);
 
+// Surface lifecycle, projection, layout, snapshot, and composition calls are
+// AppKit process-main-thread only. Wrong-thread calls fail without mutation.
 __attribute__((visibility("default"))) DtnSurface* dtn_surface_create(void);
 
 __attribute__((visibility("default"))) int32_t dtn_surface_apply_projection(
@@ -115,6 +201,29 @@ __attribute__((visibility("default"))) int32_t dtn_surface_apply_projection(
 
 __attribute__((visibility("default"))) int32_t dtn_surface_snapshot(
     DtnSurface* surface, DtnSurfaceSnapshotV1* snapshot);
+
+__attribute__((visibility("default"))) int32_t dtn_surface_update_layout(
+    DtnSurface* surface, const DtnLayoutV1* layout);
+
+__attribute__((visibility("default"))) int32_t
+dtn_surface_presentation_snapshot(
+    DtnSurface* surface, DtnPresentationSnapshotV1* snapshot);
+
+__attribute__((visibility("default"))) int32_t
+dtn_surface_card_presentation_snapshot(
+    DtnSurface* surface, uint32_t index,
+    DtnCardPresentationSnapshotV1* snapshot);
+
+// Native-to-native composition seam. The returned view is unretained and must
+// never cross Dart FFI. attach consumes neither object.
+__attribute__((visibility("default"))) void* dtn_surface_native_view(
+    DtnSurface* surface);
+
+__attribute__((visibility("default"))) int32_t dtn_surface_attach_to_host(
+    DtnSurface* surface, void* host_view);
+
+__attribute__((visibility("default"))) int32_t dtn_surface_detach_from_host(
+    DtnSurface* surface);
 
 __attribute__((visibility("default"))) void dtn_surface_destroy(
     DtnSurface* surface);

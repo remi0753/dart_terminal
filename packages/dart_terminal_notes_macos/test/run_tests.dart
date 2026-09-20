@@ -3,6 +3,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:dart_terminal_notes_macos/dart_terminal_notes_macos.dart';
+import 'package:dart_terminal_notes_macos/testing.dart';
 
 void main() {
   _testCanonicalRoundTrip();
@@ -10,6 +11,7 @@ void main() {
   _testBounds();
   _testMalformedPackets();
   _testDeterministicFuzz();
+  _testSurfaceFacade();
   stdout.writeln('terminal Notes Dart codec tests passed');
 }
 
@@ -243,6 +245,156 @@ void _testDeterministicFuzz() {
     } on TerminalNotesProjectionException {
       // Expected for arbitrary or non-canonical bytes.
     }
+  }
+}
+
+void _testSurfaceFacade() {
+  final _FakeBindings bindings = _FakeBindings();
+  final TerminalNotesNativeSurface surface = TerminalNotesNativeSurface(
+    bindings: bindings,
+  );
+  _expect(
+    surface.apply(_projection()) == TerminalNotesApplyDisposition.accepted,
+    'typed surface apply',
+  );
+  surface.updateLayout(
+    paneWidth: 640,
+    paneHeight: 480,
+    backingScale: 2,
+    requestedRailWidth: 320,
+  );
+  final TerminalNotesNativePresentation presentation = surface.presentation;
+  _expect(
+    bindings.layout == (640.0, 480.0, 2.0, 320.0) &&
+        presentation.railVisible &&
+        presentation.opaqueCards &&
+        presentation.rail.width == 320,
+    'typed presentation snapshot',
+  );
+  final TerminalNotesNativeCardPresentation card = surface.cardPresentation(0);
+  _expect(
+    card.color == TerminalNotesColor.yellow &&
+        card.status == TerminalNotesStatus.active &&
+        card.nonColorCue &&
+        card.visibleLineLimit == 8,
+    'typed card snapshot',
+  );
+  surface.dispose();
+  surface.dispose();
+  _expect(surface.isDisposed && bindings.destroyCount == 1, 'typed disposal');
+}
+
+final class _FakeBindings implements TerminalNotesNativeBindings {
+  final Object handle = Object();
+  (double, double, double, double)? layout;
+  int destroyCount = 0;
+
+  @override
+  int get abiVersion => 1;
+
+  @override
+  int get liveSurfaceCount => destroyCount == 0 ? 1 : 0;
+
+  @override
+  Object createSurface() => handle;
+
+  @override
+  int applyProjection(Object handle, Uint8List bytes) {
+    _expect(identical(handle, this.handle), 'fake apply handle');
+    TerminalNotesProjectionCodec.decode(bytes);
+    return 0;
+  }
+
+  @override
+  TerminalNotesNativeRawSnapshot snapshot(Object handle) =>
+      TerminalNotesNativeRawSnapshot(
+        paneId: 11,
+        surfaceGeneration: 7,
+        projectionGeneration: 3,
+        storeRevision: BigInt.one,
+        acceptedProjectionCount: 1,
+        rejectedProjectionCount: 0,
+        activeCount: 2,
+        dueCount: 1,
+        projectedCardCount: 2,
+        materializedCardCount: 2,
+        packetBytes: 1,
+        visibility: 1,
+        presentationEligible: true,
+        initialized: true,
+        readyCue: true,
+        darkAppearance: false,
+        increaseContrast: false,
+        differentiateWithoutColor: false,
+        reduceMotion: false,
+        systemBadgeVisible: false,
+        featureState: 2,
+        surfaceState: 1,
+        section: 0,
+        editorMode: 0,
+        messageKey: 0,
+        pageStart: 0,
+        totalCount: 2,
+        bodyFontMilliPoints: 15000,
+      );
+
+  @override
+  int updateLayout(
+    Object handle, {
+    required double paneWidth,
+    required double paneHeight,
+    required double backingScale,
+    required double requestedRailWidth,
+  }) {
+    layout = (paneWidth, paneHeight, backingScale, requestedRailWidth);
+    return 0;
+  }
+
+  @override
+  TerminalNotesNativePresentationRawSnapshot presentationSnapshot(
+    Object handle,
+  ) => TerminalNotesNativePresentationRawSnapshot(
+    projectionGeneration: 3,
+    paneWidth: 640,
+    paneHeight: 480,
+    backingScale: 2,
+    badgeHit: (x: 588, y: 218, width: 44, height: 44),
+    badgeVisual: (x: 588, y: 226, width: 44, height: 28),
+    rail: (x: 308, y: 12, width: 320, height: 456),
+    firstCard: (x: 320, y: 74, width: 284, height: 88),
+    flags: (1 << 1) | (1 << 3) | (1 << 4),
+    materializedCardCount: 2,
+    accessibilityNodeCount: 11,
+    accessibilityBodyCount: 2,
+    firstSurfaceRgba: 0xfff3a6ff,
+    firstAccentRgba: 0x7a5a00ff,
+    bodyTextRgba: 0x1f1f1fff,
+    animationMilliseconds: 140,
+    bodyFontMilliPoints: 15000,
+  );
+
+  @override
+  TerminalNotesNativeCardPresentationRawSnapshot cardPresentationSnapshot(
+    Object handle,
+    int index,
+  ) => TerminalNotesNativeCardPresentationRawSnapshot(
+    index: index,
+    order: 0,
+    color: 1,
+    status: 0,
+    due: false,
+    visibleLineLimit: 8,
+    surfaceRgba: 0xfff3a6ff,
+    accentRgba: 0x7a5a00ff,
+    bodyTextRgba: 0x1f1f1fff,
+    nonColorCue: true,
+    frame: (x: 320, y: 74, width: 284, height: 88),
+  );
+
+  @override
+  void destroySurface(Object handle) {
+    _expect(identical(handle, this.handle), 'fake destroy handle');
+    destroyCount++;
   }
 }
 

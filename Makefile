@@ -545,6 +545,7 @@ $(TERMINAL_NOTES_TEST_BINARY): $(TERMINAL_NOTES_PLUGIN_LIBRARY) \
 		-I$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native \
 		$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native/test/TerminalNotesCapabilityTests.mm \
 		$(TERMINAL_NOTES_PLUGIN_LIBRARY) \
+		-framework AppKit -framework Foundation \
 		-Wl,-rpath,$(PRODUCT_NATIVE_TEST_BUILD_DIR) -o $@
 
 terminal-notes-native-test: terminal-notes-contract-check \

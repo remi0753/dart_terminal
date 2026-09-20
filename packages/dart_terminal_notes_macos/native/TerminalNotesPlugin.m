@@ -1,11 +1,13 @@
 #import "TerminalNotesPlugin.h"
 
+#include <math.h>
 #include <stdbool.h>
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 
-#import <Foundation/Foundation.h>
+#import <AppKit/AppKit.h>
+#import <QuartzCore/QuartzCore.h>
 
 static const uint8_t kDtnProjectionFlagPresentationEligible = 1u << 0;
 static const uint8_t kDtnProjectionKnownFlags = 0x7fu;
@@ -33,8 +35,461 @@ typedef struct DtnParsedProjection {
   uint32_t projection_flags;
 } DtnParsedProjection;
 
+static const uint32_t kDtnLightSurfaces[6] = {
+    0xf5f5f3ffu, 0xfff3a6ffu, 0xdcebffffu,
+    0xddf4dcffu, 0xfaddeaffu, 0xe8deffffu,
+};
+static const uint32_t kDtnLightAccents[6] = {
+    0x6b6b66ffu, 0x7a5a00ffu, 0x245b9effu,
+    0x2e6b37ffu, 0x9a365effu, 0x6240a0ffu,
+};
+static const uint32_t kDtnDarkSurfaces[6] = {
+    0x343432ffu, 0x4a401fffu, 0x24384effu,
+    0x233e2bffu, 0x4a2938ffu, 0x382d4cffu,
+};
+static const uint32_t kDtnDarkAccents[6] = {
+    0xb8b8b2ffu, 0xf1cd5affu, 0x85b6e8ffu,
+    0x83c98cffu, 0xe49ab8ffu, 0xb9a2e8ffu,
+};
+
+static NSColor* DtnColor(uint32_t rgba) {
+  return [NSColor colorWithSRGBRed:((rgba >> 24u) & 0xffu) / 255.0
+                             green:((rgba >> 16u) & 0xffu) / 255.0
+                              blue:((rgba >> 8u) & 0xffu) / 255.0
+                             alpha:(rgba & 0xffu) / 255.0];
+}
+
+static uint32_t DtnSurfaceRgba(uint32_t color, bool dark) {
+  return dark ? kDtnDarkSurfaces[color] : kDtnLightSurfaces[color];
+}
+
+static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
+  return dark ? kDtnDarkAccents[color] : kDtnLightAccents[color];
+}
+
+@interface DtnCardModel : NSObject
+@property(nonatomic, copy) NSString* body;
+@property(nonatomic) uint32_t color;
+@property(nonatomic) uint32_t status;
+@property(nonatomic) uint32_t triggerKind;
+@property(nonatomic) uint32_t triggerPhase;
+@property(nonatomic) uint32_t order;
+@property(nonatomic) BOOL due;
+@end
+
+@implementation DtnCardModel
+@end
+
+@interface DtnFlippedView : NSView
+@end
+
+@implementation DtnFlippedView
+- (BOOL)isFlipped { return YES; }
+@end
+
+@interface DtnNoteBadgeButton : NSButton
+@property(nonatomic) BOOL readyCue;
+@property(nonatomic) BOOL darkAppearance;
+@end
+
+@implementation DtnNoteBadgeButton
+
+- (instancetype)initWithFrame:(NSRect)frame {
+  self = [super initWithFrame:frame];
+  if (self != nil) {
+    self.bordered = NO;
+    self.title = @"";
+    self.font = [NSFont systemFontOfSize:12 weight:NSFontWeightSemibold];
+    self.focusRingType = NSFocusRingTypeExterior;
+    [self setAccessibilityElement:YES];
+    [self setAccessibilityRole:NSAccessibilityButtonRole];
+    [self setAccessibilityHelp:@"Show Notes"];
+  }
+  return self;
+}
+
+- (BOOL)isFlipped { return YES; }
+- (BOOL)acceptsFirstResponder { return YES; }
+
+- (void)drawRect:(NSRect)dirtyRect {
+  (void)dirtyRect;
+  NSRect visual = NSMakeRect(0, 8, self.bounds.size.width, 28);
+  NSBezierPath* path = [NSBezierPath bezierPathWithRoundedRect:visual
+                                                      xRadius:14
+                                                      yRadius:14];
+  [DtnColor(self.darkAppearance ? 0x343432ffu : 0xf5f5f3ffu) setFill];
+  [path fill];
+  [DtnColor(self.darkAppearance ? 0xb8b8b2ffu : 0x6b6b66ffu) setStroke];
+  path.lineWidth = 1;
+  [path stroke];
+  NSMutableParagraphStyle* style = [[NSMutableParagraphStyle alloc] init];
+  style.alignment = NSTextAlignmentCenter;
+  NSDictionary* attributes = @{
+    NSFontAttributeName : self.font,
+    NSForegroundColorAttributeName :
+        DtnColor(self.darkAppearance ? 0xf5f5f5ffu : 0x1f1f1fffu),
+    NSParagraphStyleAttributeName : style,
+  };
+  [self.title drawInRect:NSInsetRect(visual, 4, 6) withAttributes:attributes];
+  if (self.readyCue) {
+    [DtnColor(self.darkAppearance ? 0xf1cd5affu : 0x7a5a00ffu) setFill];
+    [[NSBezierPath bezierPathWithOvalInRect:NSMakeRect(4, 18, 6, 6)] fill];
+  }
+}
+
+@end
+
+@interface DtnOpaqueRailView : DtnFlippedView
+@property(nonatomic) BOOL darkAppearance;
+@property(nonatomic) BOOL increaseContrast;
+@end
+
+@implementation DtnOpaqueRailView
+- (BOOL)isOpaque { return YES; }
+- (void)drawRect:(NSRect)dirtyRect {
+  (void)dirtyRect;
+  [DtnColor(self.darkAppearance ? 0x202124ffu : 0xf7f7f8ffu) setFill];
+  NSRectFill(self.bounds);
+  [DtnColor(self.darkAppearance ? 0xb8b8b2ffu : 0x6b6b66ffu) setStroke];
+  NSBezierPath* border = [NSBezierPath bezierPathWithRoundedRect:
+                                        NSInsetRect(self.bounds, 0.5, 0.5)
+                                                       xRadius:12
+                                                       yRadius:12];
+  border.lineWidth = self.increaseContrast ? 2 : 1;
+  [border stroke];
+}
+@end
+
+@interface DtnNoteCardView : DtnFlippedView
+@property(nonatomic, strong) NSTextField* bodyLabel;
+@property(nonatomic, strong) NSTextField* chipLabel;
+@property(nonatomic, strong) DtnCardModel* model;
+@property(nonatomic) uint32_t surfaceRgba;
+@property(nonatomic) uint32_t accentRgba;
+@property(nonatomic) uint32_t bodyRgba;
+@property(nonatomic) BOOL increaseContrast;
+- (void)applyModel:(DtnCardModel*)model
+              dark:(BOOL)dark
+     bodyFontPoints:(CGFloat)bodyFontPoints
+  increaseContrast:(BOOL)increaseContrast;
+@end
+
+@implementation DtnNoteCardView
+
+- (instancetype)initWithFrame:(NSRect)frame {
+  self = [super initWithFrame:frame];
+  if (self != nil) {
+    self.wantsLayer = YES;
+    self.layer.cornerRadius = 10;
+    self.layer.masksToBounds = NO;
+    _bodyLabel = [NSTextField wrappingLabelWithString:@""];
+    _bodyLabel.maximumNumberOfLines = 8;
+    _bodyLabel.lineBreakMode = NSLineBreakByWordWrapping;
+    _bodyLabel.selectable = NO;
+    [_bodyLabel setAccessibilityElement:YES];
+    [_bodyLabel setAccessibilityRole:NSAccessibilityStaticTextRole];
+    [self addSubview:_bodyLabel];
+    _chipLabel = [NSTextField labelWithString:@""];
+    _chipLabel.font = [NSFont systemFontOfSize:11 weight:NSFontWeightSemibold];
+    [_chipLabel setAccessibilityElement:YES];
+    [_chipLabel setAccessibilityRole:NSAccessibilityStaticTextRole];
+    [self addSubview:_chipLabel];
+    [self setAccessibilityElement:YES];
+    [self setAccessibilityRole:NSAccessibilityGroupRole];
+  }
+  return self;
+}
+
+- (BOOL)isOpaque { return YES; }
+
+- (void)applyModel:(DtnCardModel*)model
+              dark:(BOOL)dark
+     bodyFontPoints:(CGFloat)bodyFontPoints
+  increaseContrast:(BOOL)increaseContrast {
+  self.model = model;
+  self.surfaceRgba = DtnSurfaceRgba(model.color, dark);
+  self.accentRgba = DtnAccentRgba(model.color, dark);
+  self.bodyRgba = dark ? 0xf5f5f5ffu : 0x1f1f1fffu;
+  self.increaseContrast = increaseContrast;
+  self.layer.backgroundColor = DtnColor(self.surfaceRgba).CGColor;
+  self.layer.borderColor = DtnColor(self.accentRgba).CGColor;
+  self.layer.borderWidth = increaseContrast ? 2 : 1;
+  self.layer.shadowOpacity = increaseContrast ? 0 : 0.16;
+  self.layer.shadowOffset = NSMakeSize(0, 2);
+  self.layer.shadowRadius = increaseContrast ? 0 : 8;
+  self.bodyLabel.stringValue = model.body;
+  self.bodyLabel.font = [NSFont systemFontOfSize:bodyFontPoints];
+  self.bodyLabel.textColor = DtnColor(self.bodyRgba);
+  NSString* chip = nil;
+  if (model.status == 1u) {
+    chip = @"✓ Resolved";
+  } else if (model.due) {
+    chip = @"● Ready";
+  } else if (model.triggerKind == 1u) {
+    chip = @"◆ On Return";
+  } else if (model.triggerKind == 2u) {
+    chip = @"▶ Next Prompt";
+  } else {
+    chip = @"○ Active";
+  }
+  self.chipLabel.stringValue = chip;
+  self.chipLabel.textColor = DtnColor(self.accentRgba);
+  [self setNeedsDisplay:YES];
+}
+
+- (void)layout {
+  [super layout];
+  const CGFloat padding = 12;
+  const CGFloat chipHeight = 16;
+  self.chipLabel.frame = NSMakeRect(
+      padding, self.bounds.size.height - padding - chipHeight,
+      fmax(0, self.bounds.size.width - 2 * padding), chipHeight);
+  self.bodyLabel.frame = NSMakeRect(
+      padding, padding, fmax(0, self.bounds.size.width - 2 * padding),
+      fmax(0, self.bounds.size.height - 3 * padding - chipHeight));
+}
+
+@end
+
+@interface DtnNoteSurfaceView : DtnFlippedView
+@property(nonatomic, strong) DtnNoteBadgeButton* badge;
+@property(nonatomic, strong) DtnOpaqueRailView* rail;
+@property(nonatomic, strong) DtnFlippedView* toolbar;
+@property(nonatomic, strong) NSTextField* titleLabel;
+@property(nonatomic, strong) NSSegmentedControl* sectionControl;
+@property(nonatomic, strong) NSScrollView* scrollView;
+@property(nonatomic, strong) DtnFlippedView* cardList;
+@property(nonatomic, copy) NSArray<DtnCardModel*>* models;
+@property(nonatomic, copy) NSArray<DtnNoteCardView*>* cardViews;
+@property(nonatomic) DtnParsedProjection projection;
+@property(nonatomic) CGFloat requestedRailWidth;
+@property(nonatomic) CGFloat backingScale;
+@property(nonatomic) BOOL smallPane;
+@property(nonatomic) uint32_t accessibilityNodeCount;
+@property(nonatomic) uint32_t accessibilityBodyCount;
+@property(nonatomic) uint32_t animationMilliseconds;
+- (void)applyProjection:(DtnParsedProjection)projection
+                  cards:(NSArray<DtnCardModel*>*)cards;
+- (void)applyLayout:(DtnLayoutV1)layout;
+- (void)layoutPresentation;
+@end
+
+@implementation DtnNoteSurfaceView
+
+- (instancetype)initWithFrame:(NSRect)frame {
+  self = [super initWithFrame:frame];
+  if (self != nil) {
+    self.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    self.wantsLayer = YES;
+    self.layer.backgroundColor = NSColor.clearColor.CGColor;
+    _backingScale = 1;
+    _requestedRailWidth = 320;
+    _models = @[];
+    _cardViews = @[];
+    _badge = [[DtnNoteBadgeButton alloc] initWithFrame:NSZeroRect];
+    [self addSubview:_badge];
+    _rail = [[DtnOpaqueRailView alloc] initWithFrame:NSZeroRect];
+    [_rail setAccessibilityElement:YES];
+    [_rail setAccessibilityRole:NSAccessibilityGroupRole];
+    [_rail setAccessibilityLabel:@"Notes"];
+    [self addSubview:_rail];
+    _toolbar = [[DtnFlippedView alloc] initWithFrame:NSZeroRect];
+    [_toolbar setAccessibilityElement:YES];
+    [_toolbar setAccessibilityRole:NSAccessibilityToolbarRole];
+    [_rail addSubview:_toolbar];
+    _titleLabel = [NSTextField labelWithString:@"Notes"];
+    _titleLabel.font = [NSFont systemFontOfSize:15 weight:NSFontWeightSemibold];
+    [_toolbar addSubview:_titleLabel];
+    _sectionControl = [[NSSegmentedControl alloc] initWithFrame:NSZeroRect];
+    _sectionControl.segmentCount = 2;
+    [_sectionControl setLabel:@"Current" forSegment:0];
+    [_sectionControl setLabel:@"Detached" forSegment:1];
+    _sectionControl.selectedSegment = 0;
+    [_toolbar addSubview:_sectionControl];
+    _scrollView = [[NSScrollView alloc] initWithFrame:NSZeroRect];
+    _scrollView.hasVerticalScroller = YES;
+    _scrollView.drawsBackground = NO;
+    [_scrollView setAccessibilityElement:YES];
+    [_scrollView setAccessibilityRole:NSAccessibilityScrollAreaRole];
+    _cardList = [[DtnFlippedView alloc] initWithFrame:NSZeroRect];
+    [_cardList setAccessibilityElement:YES];
+    [_cardList setAccessibilityRole:NSAccessibilityListRole];
+    _scrollView.documentView = _cardList;
+    [_rail addSubview:_scrollView];
+    [self setAccessibilityElement:NO];
+  }
+  return self;
+}
+
+- (NSView*)hitTest:(NSPoint)point {
+  if ((!self.badge.hidden && NSPointInRect(point, self.badge.frame)) ||
+      (!self.rail.hidden && NSPointInRect(point, self.rail.frame))) {
+    return [super hitTest:point];
+  }
+  return nil;
+}
+
+- (NSArray*)accessibilityChildren {
+  if (!self.rail.hidden) return @[ self.rail ];
+  if (!self.badge.hidden) return @[ self.badge ];
+  return @[];
+}
+
+- (void)applyProjection:(DtnParsedProjection)projection
+                  cards:(NSArray<DtnCardModel*>*)cards {
+  self.projection = projection;
+  self.models = cards;
+  for (NSView* view in self.cardList.subviews.copy) {
+    [view removeFromSuperview];
+  }
+  NSMutableArray<DtnNoteCardView*>* card_views =
+      [[NSMutableArray alloc] init];
+  const NSUInteger materialized =
+      cards.count < DTN_MAX_MATERIALIZED_CARDS
+          ? cards.count
+          : DTN_MAX_MATERIALIZED_CARDS;
+  const BOOL dark = (projection.projection_flags & (1u << 2)) != 0u;
+  const BOOL contrast = (projection.projection_flags & (1u << 3)) != 0u;
+  const CGFloat font_points = projection.body_font_millipoints / 1000.0;
+  for (NSUInteger index = 0; index < materialized; ++index) {
+    DtnNoteCardView* card =
+        [[DtnNoteCardView alloc] initWithFrame:NSZeroRect];
+    [card applyModel:cards[index]
+                dark:dark
+       bodyFontPoints:font_points
+    increaseContrast:contrast];
+    card.layer.contentsScale = self.backingScale;
+    [card setAccessibilityLabel:
+              [NSString stringWithFormat:@"Note %lu of %u",
+                                         (unsigned long)index + 1,
+                                         projection.total_count]];
+    [self.cardList addSubview:card];
+    [card_views addObject:card];
+  }
+  self.cardViews = card_views;
+  self.badge.readyCue = (projection.projection_flags & (1u << 1)) != 0u;
+  self.badge.darkAppearance = dark;
+  self.badge.title = projection.active_count > 99u
+                         ? @"99+"
+                         : [NSString stringWithFormat:@"%u",
+                                                       projection.active_count];
+  [self.badge setAccessibilityLabel:
+                  [NSString stringWithFormat:@"Notes, %u active, %u ready",
+                                             projection.active_count,
+                                             projection.due_count]];
+  self.rail.darkAppearance = dark;
+  self.rail.increaseContrast = contrast;
+  self.titleLabel.textColor =
+      DtnColor(dark ? 0xf5f5f5ffu : 0x1f1f1fffu);
+  self.sectionControl.selectedSegment = projection.section;
+  self.animationMilliseconds =
+      (projection.projection_flags & (1u << 5)) != 0u ? 0u : 140u;
+  [self layoutPresentation];
+}
+
+- (void)applyLayout:(DtnLayoutV1)layout {
+  self.frame = NSMakeRect(0, 0, layout.pane_width, layout.pane_height);
+  self.backingScale = layout.backing_scale;
+  self.layer.contentsScale = layout.backing_scale;
+  self.badge.layer.contentsScale = layout.backing_scale;
+  self.rail.layer.contentsScale = layout.backing_scale;
+  for (DtnNoteCardView* card in self.cardViews) {
+    card.layer.contentsScale = layout.backing_scale;
+  }
+  self.requestedRailWidth = layout.requested_rail_width == 0
+                                ? 320
+                                : layout.requested_rail_width;
+  [self layoutPresentation];
+}
+
+- (void)layout {
+  [super layout];
+  [self layoutPresentation];
+}
+
+- (void)layoutPresentation {
+  const CGFloat width = self.bounds.size.width;
+  const CGFloat height = self.bounds.size.height;
+  self.smallPane = width < 264 || height < 184;
+  const BOOL available =
+      self.projection.feature_state == DTN_FEATURE_AVAILABLE;
+  const BOOL badge_visible =
+      self.projection.active_count > 0u || !available || self.smallPane;
+  const BOOL eligible = self.projection.presentation_eligible != 0u;
+  const BOOL rail_visible =
+      available && eligible && !self.smallPane &&
+      self.projection.visibility == DTN_VISIBILITY_EXPANDED;
+  self.badge.hidden = !badge_visible;
+  if (self.smallPane) {
+    self.badge.title = @"!";
+    [self.badge setAccessibilityLabel:@"Notes, pane too small"];
+  } else if (!available) {
+    self.badge.title = @"!";
+    [self.badge setAccessibilityLabel:@"Notes unavailable"];
+  } else {
+    self.badge.title = self.projection.active_count > 99u
+                           ? @"99+"
+                           : [NSString
+                                 stringWithFormat:@"%u",
+                                                  self.projection.active_count];
+    [self.badge setAccessibilityLabel:
+                    [NSString stringWithFormat:@"Notes, %u active, %u ready",
+                                               self.projection.active_count,
+                                               self.projection.due_count]];
+  }
+  self.badge.frame = NSMakeRect(fmax(0, width - 8 - 44),
+                                fmax(0, (height - 44) / 2), 44, 44);
+  [self.badge setAccessibilityElement:badge_visible && !rail_visible];
+  const BOOL system_badge =
+      (self.projection.projection_flags & (1u << 6)) != 0u;
+  const CGFloat top = 12 + (system_badge ? 48 : 0);
+  const CGFloat maximum = fmin(360, fmax(0, width - 24));
+  const CGFloat rail_width =
+      fmin(maximum, fmax(240, self.requestedRailWidth));
+  self.rail.frame = NSMakeRect(fmax(12, width - 12 - rail_width), top,
+                               rail_width, fmax(0, height - top - 12));
+  self.rail.hidden = !rail_visible;
+  self.toolbar.frame = NSMakeRect(12, 10, fmax(0, rail_width - 24), 44);
+  self.titleLabel.frame = NSMakeRect(0, 0, 72, 20);
+  self.sectionControl.frame =
+      NSMakeRect(fmax(76, rail_width - 24 - 160), 0, 160, 24);
+  self.scrollView.frame =
+      NSMakeRect(12, 62, fmax(0, rail_width - 24),
+                 fmax(0, self.rail.bounds.size.height - 74));
+  CGFloat card_y = 0;
+  const CGFloat card_width = fmax(0, self.scrollView.bounds.size.width - 12);
+  for (DtnNoteCardView* card in self.cardViews) {
+    const CGFloat font_points = self.projection.body_font_millipoints / 1000.0;
+    NSDictionary* attributes = @{
+      NSFontAttributeName : [NSFont systemFontOfSize:font_points],
+    };
+    NSRect measured = [card.model.body
+        boundingRectWithSize:NSMakeSize(fmax(1, card_width - 24),
+                                         font_points * 8 * 1.35)
+                    options:NSStringDrawingUsesLineFragmentOrigin |
+                            NSStringDrawingTruncatesLastVisibleLine
+                 attributes:attributes];
+    const CGFloat card_height =
+        fmin(220, fmax(88, ceil(measured.size.height) + 52));
+    card.frame = NSMakeRect(0, card_y, card_width, card_height);
+    [card setNeedsLayout:YES];
+    card_y += card_height + 12;
+  }
+  self.cardList.frame = NSMakeRect(
+      0, 0, card_width, fmax(self.scrollView.bounds.size.height, card_y));
+  self.accessibilityBodyCount = rail_visible ? (uint32_t)self.cardViews.count : 0;
+  self.accessibilityNodeCount =
+      rail_visible ? 5u + (uint32_t)self.cardViews.count * 3u
+                   : (badge_visible ? 1u : 0u);
+  [self.badge setNeedsDisplay:YES];
+  [self.rail setNeedsDisplay:YES];
+}
+
+@end
+
 struct DtnSurface {
   NSLock* lock;
+  DtnNoteSurfaceView* view;
   uint8_t* packet;
   size_t packet_length;
   DtnParsedProjection projection;
@@ -57,6 +512,37 @@ static uint32_t dtn_read_u32(const uint8_t* bytes) {
 static uint64_t dtn_read_u64(const uint8_t* bytes) {
   return (uint64_t)dtn_read_u32(bytes) |
          ((uint64_t)dtn_read_u32(bytes + 4u) << 32u);
+}
+
+static NSArray<DtnCardModel*>* dtn_build_card_models(const uint8_t* bytes,
+                                                      size_t length) {
+  if (bytes == NULL || length < DTN_PROJECTION_HEADER_BYTES) return nil;
+  const uint32_t card_count = dtn_read_u32(bytes + 64u);
+  const uint32_t body_offset = dtn_read_u32(bytes + 76u);
+  NSMutableArray<DtnCardModel*>* models =
+      [[NSMutableArray alloc] initWithCapacity:card_count];
+  for (uint32_t index = 0; index < card_count; ++index) {
+    const uint8_t* record =
+        bytes + DTN_PROJECTION_HEADER_BYTES + index * DTN_CARD_RECORD_BYTES;
+    const uint32_t relative_offset = dtn_read_u32(record + 8u);
+    const uint32_t body_length = dtn_read_u32(record + 12u);
+    if ((size_t)body_offset + relative_offset + body_length > length) return nil;
+    NSString* body = [[NSString alloc]
+        initWithBytes:bytes + body_offset + relative_offset
+               length:body_length
+             encoding:NSUTF8StringEncoding];
+    if (body == nil) return nil;
+    DtnCardModel* model = [[DtnCardModel alloc] init];
+    model.body = body;
+    model.order = dtn_read_u32(record + 16u);
+    model.color = record[20u];
+    model.status = record[21u];
+    model.triggerKind = record[22u];
+    model.triggerPhase = record[23u];
+    model.due = (dtn_read_u32(record + 24u) & kDtnCardFlagDue) != 0u;
+    [models addObject:model];
+  }
+  return models;
 }
 
 static bool dtn_unicode_whitespace(uint32_t scalar) {
@@ -280,9 +766,17 @@ static int dtn_compare_revision(const DtnParsedProjection* left,
 uint32_t dtn_abi_version(void) { return DTN_ABI_VERSION; }
 
 DtnSurface* dtn_surface_create(void) {
+  if (![NSThread isMainThread]) return NULL;
   DtnSurface* surface = calloc(1u, sizeof(DtnSurface));
   if (surface == NULL) return NULL;
   surface->lock = [[NSLock alloc] init];
+  surface->view = [[DtnNoteSurfaceView alloc] initWithFrame:NSZeroRect];
+  if (surface->lock == nil || surface->view == nil) {
+    surface->lock = nil;
+    surface->view = nil;
+    free(surface);
+    return NULL;
+  }
   atomic_fetch_add_explicit(&g_live_surfaces, 1u, memory_order_relaxed);
   return surface;
 }
@@ -290,13 +784,16 @@ DtnSurface* dtn_surface_create(void) {
 int32_t dtn_surface_apply_projection(DtnSurface* surface, const uint8_t* bytes,
                                      size_t length) {
   if (surface == NULL) return DTN_STATUS_INVALID_ARGUMENT;
+  if (![NSThread isMainThread]) return DTN_STATUS_WRONG_THREAD;
   DtnParsedProjection parsed = {0};
   const int32_t status = dtn_parse_projection(bytes, length, &parsed);
+  NSArray<DtnCardModel*>* card_models =
+      status == DTN_STATUS_OK ? dtn_build_card_models(bytes, length) : nil;
   [surface->lock lock];
-  if (status != DTN_STATUS_OK) {
+  if (status != DTN_STATUS_OK || card_models == nil) {
     ++surface->rejected_projection_count;
     [surface->lock unlock];
-    return status;
+    return status == DTN_STATUS_OK ? DTN_STATUS_INTERNAL : status;
   }
   if (surface->initialized &&
       (parsed.pane_id != surface->projection.pane_id ||
@@ -321,6 +818,7 @@ int32_t dtn_surface_apply_projection(DtnSurface* surface, const uint8_t* bytes,
   surface->projection = parsed;
   surface->initialized = true;
   ++surface->accepted_projection_count;
+  [surface->view applyProjection:parsed cards:card_models];
   [surface->lock unlock];
   free(previous_packet);
   return DTN_STATUS_OK;
@@ -335,6 +833,7 @@ int32_t dtn_surface_snapshot(DtnSurface* surface,
   if (snapshot->version != DTN_SNAPSHOT_VERSION) {
     return DTN_STATUS_UNSUPPORTED_VERSION;
   }
+  if (![NSThread isMainThread]) return DTN_STATUS_WRONG_THREAD;
   [surface->lock lock];
   const DtnParsedProjection projection = surface->projection;
   const size_t packet_length = surface->packet_length;
@@ -357,9 +856,7 @@ int32_t dtn_surface_snapshot(DtnSurface* surface,
   snapshot->due_count = projection.due_count;
   snapshot->projected_card_count = projection.card_count;
   snapshot->materialized_card_count =
-      projection.card_count < DTN_MAX_MATERIALIZED_CARDS
-          ? projection.card_count
-          : DTN_MAX_MATERIALIZED_CARDS;
+      (uint32_t)surface->view.cardViews.count;
   snapshot->packet_bytes = (uint32_t)packet_length;
   snapshot->visibility = projection.visibility;
   snapshot->presentation_eligible = projection.presentation_eligible;
@@ -376,14 +873,180 @@ int32_t dtn_surface_snapshot(DtnSurface* surface,
   return DTN_STATUS_OK;
 }
 
+int32_t dtn_surface_update_layout(DtnSurface* surface,
+                                  const DtnLayoutV1* layout) {
+  if (surface == NULL || layout == NULL ||
+      layout->struct_size != sizeof(DtnLayoutV1) ||
+      layout->version != DTN_LAYOUT_VERSION ||
+      !isfinite(layout->pane_width) || !isfinite(layout->pane_height) ||
+      !isfinite(layout->backing_scale) ||
+      !isfinite(layout->requested_rail_width) || layout->pane_width <= 0 ||
+      layout->pane_width > 4096 || layout->pane_height <= 0 ||
+      layout->pane_height > 4096 ||
+      (layout->backing_scale != 1.0 && layout->backing_scale != 2.0) ||
+      (layout->requested_rail_width != 0 &&
+       (layout->requested_rail_width < 240 ||
+        layout->requested_rail_width > 360))) {
+    return DTN_STATUS_INVALID_ARGUMENT;
+  }
+  for (size_t index = 0; index < 8u; ++index) {
+    if (layout->reserved[index] != 0u) return DTN_STATUS_INVALID_ARGUMENT;
+  }
+  if (![NSThread isMainThread]) return DTN_STATUS_WRONG_THREAD;
+  [surface->view applyLayout:*layout];
+  return DTN_STATUS_OK;
+}
+
+int32_t dtn_surface_presentation_snapshot(
+    DtnSurface* surface, DtnPresentationSnapshotV1* snapshot) {
+  if (surface == NULL || snapshot == NULL ||
+      snapshot->struct_size != sizeof(DtnPresentationSnapshotV1)) {
+    return DTN_STATUS_INVALID_ARGUMENT;
+  }
+  if (snapshot->version != DTN_PRESENTATION_SNAPSHOT_VERSION) {
+    return DTN_STATUS_UNSUPPORTED_VERSION;
+  }
+  if (![NSThread isMainThread]) return DTN_STATUS_WRONG_THREAD;
+  DtnNoteSurfaceView* view = surface->view;
+  memset(snapshot, 0, sizeof(*snapshot));
+  snapshot->struct_size = sizeof(*snapshot);
+  snapshot->version = DTN_PRESENTATION_SNAPSHOT_VERSION;
+  snapshot->projection_generation = view.projection.projection_generation;
+  snapshot->pane_width = view.bounds.size.width;
+  snapshot->pane_height = view.bounds.size.height;
+  snapshot->backing_scale = view.backingScale;
+  const NSRect badge_hit = view.badge.frame;
+  snapshot->badge_hit_x = badge_hit.origin.x;
+  snapshot->badge_hit_y = badge_hit.origin.y;
+  snapshot->badge_hit_width = badge_hit.size.width;
+  snapshot->badge_hit_height = badge_hit.size.height;
+  const NSRect badge_visual = NSMakeRect(badge_hit.origin.x,
+                                         badge_hit.origin.y + 8,
+                                         badge_hit.size.width, 28);
+  snapshot->badge_visual_x = badge_visual.origin.x;
+  snapshot->badge_visual_y = badge_visual.origin.y;
+  snapshot->badge_visual_width = badge_visual.size.width;
+  snapshot->badge_visual_height = badge_visual.size.height;
+  const NSRect rail = view.rail.frame;
+  snapshot->rail_x = rail.origin.x;
+  snapshot->rail_y = rail.origin.y;
+  snapshot->rail_width = rail.size.width;
+  snapshot->rail_height = rail.size.height;
+  if (view.cardViews.count > 0) {
+    DtnNoteCardView* first = view.cardViews.firstObject;
+    NSRect frame = [view convertRect:first.bounds fromView:first];
+    snapshot->first_card_x = frame.origin.x;
+    snapshot->first_card_y = frame.origin.y;
+    snapshot->first_card_width = frame.size.width;
+    snapshot->first_card_height = frame.size.height;
+    snapshot->first_surface_rgba = first.surfaceRgba;
+    snapshot->first_accent_rgba = first.accentRgba;
+    snapshot->body_text_rgba = first.bodyRgba;
+  }
+  uint32_t flags = DTN_PRESENTATION_OPAQUE_CARDS;
+  if (!view.badge.hidden) flags |= DTN_PRESENTATION_BADGE_VISIBLE;
+  if (!view.rail.hidden) flags |= DTN_PRESENTATION_RAIL_VISIBLE;
+  if (view.smallPane) flags |= DTN_PRESENTATION_SMALL_PANE;
+  if ((view.projection.projection_flags & (1u << 1)) != 0u) {
+    flags |= DTN_PRESENTATION_READY_CUE;
+  }
+  if ((view.projection.projection_flags & (1u << 3)) == 0u) {
+    flags |= DTN_PRESENTATION_CARD_SHADOWS;
+  } else {
+    flags |= DTN_PRESENTATION_INCREASE_CONTRAST;
+  }
+  if ((view.projection.projection_flags & (1u << 2)) != 0u) {
+    flags |= DTN_PRESENTATION_DARK;
+  }
+  if ((view.projection.projection_flags & (1u << 4)) != 0u) {
+    flags |= DTN_PRESENTATION_DIFFERENTIATE_WITHOUT_COLOR;
+  }
+  if ((view.projection.projection_flags & (1u << 5)) != 0u) {
+    flags |= DTN_PRESENTATION_REDUCED_MOTION;
+  }
+  if ((view.projection.projection_flags & (1u << 6)) != 0u) {
+    flags |= DTN_PRESENTATION_SYSTEM_BADGE_VISIBLE;
+  }
+  snapshot->flags = flags;
+  snapshot->materialized_card_count = (uint32_t)view.cardViews.count;
+  snapshot->accessibility_node_count = view.accessibilityNodeCount;
+  snapshot->accessibility_body_count = view.accessibilityBodyCount;
+  snapshot->animation_milliseconds = view.animationMilliseconds;
+  snapshot->body_font_millipoints = view.projection.body_font_millipoints;
+  return DTN_STATUS_OK;
+}
+
+int32_t dtn_surface_card_presentation_snapshot(
+    DtnSurface* surface, uint32_t index,
+    DtnCardPresentationSnapshotV1* snapshot) {
+  if (surface == NULL || snapshot == NULL ||
+      snapshot->struct_size != sizeof(DtnCardPresentationSnapshotV1)) {
+    return DTN_STATUS_INVALID_ARGUMENT;
+  }
+  if (snapshot->version != DTN_CARD_PRESENTATION_SNAPSHOT_VERSION) {
+    return DTN_STATUS_UNSUPPORTED_VERSION;
+  }
+  if (![NSThread isMainThread]) return DTN_STATUS_WRONG_THREAD;
+  if (index >= surface->view.cardViews.count) return DTN_STATUS_NOT_FOUND;
+  DtnNoteCardView* card = surface->view.cardViews[index];
+  memset(snapshot, 0, sizeof(*snapshot));
+  snapshot->struct_size = sizeof(*snapshot);
+  snapshot->version = DTN_CARD_PRESENTATION_SNAPSHOT_VERSION;
+  snapshot->index = index;
+  snapshot->order = card.model.order;
+  snapshot->color = card.model.color;
+  snapshot->status = card.model.status;
+  snapshot->due = card.model.due ? 1u : 0u;
+  snapshot->visible_line_limit = 8u;
+  snapshot->surface_rgba = card.surfaceRgba;
+  snapshot->accent_rgba = card.accentRgba;
+  snapshot->body_text_rgba = card.bodyRgba;
+  snapshot->non_color_cue = 1u;
+  NSRect frame = [surface->view convertRect:card.bounds fromView:card];
+  snapshot->x = frame.origin.x;
+  snapshot->y = frame.origin.y;
+  snapshot->width = frame.size.width;
+  snapshot->height = frame.size.height;
+  return DTN_STATUS_OK;
+}
+
+void* dtn_surface_native_view(DtnSurface* surface) {
+  if (surface == NULL || ![NSThread isMainThread]) return NULL;
+  return (__bridge void*)surface->view;
+}
+
+int32_t dtn_surface_attach_to_host(DtnSurface* surface, void* host_view) {
+  if (surface == NULL || host_view == NULL) return DTN_STATUS_INVALID_ARGUMENT;
+  if (![NSThread isMainThread]) return DTN_STATUS_WRONG_THREAD;
+  id candidate = (__bridge id)host_view;
+  if (![candidate isKindOfClass:NSView.class]) {
+    return DTN_STATUS_INVALID_ARGUMENT;
+  }
+  NSView* host = (NSView*)candidate;
+  surface->view.frame = host.bounds;
+  surface->view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  [host addSubview:surface->view positioned:NSWindowAbove relativeTo:nil];
+  [surface->view layoutPresentation];
+  return DTN_STATUS_OK;
+}
+
+int32_t dtn_surface_detach_from_host(DtnSurface* surface) {
+  if (surface == NULL) return DTN_STATUS_INVALID_ARGUMENT;
+  if (![NSThread isMainThread]) return DTN_STATUS_WRONG_THREAD;
+  [surface->view removeFromSuperview];
+  return DTN_STATUS_OK;
+}
+
 void dtn_surface_destroy(DtnSurface* surface) {
   if (surface == NULL) return;
+  if ([NSThread isMainThread]) [surface->view removeFromSuperview];
   [surface->lock lock];
   uint8_t* packet = surface->packet;
   surface->packet = NULL;
   surface->packet_length = 0;
   [surface->lock unlock];
   free(packet);
+  surface->view = nil;
   surface->lock = nil;
   free(surface);
   atomic_fetch_sub_explicit(&g_live_surfaces, 1u, memory_order_relaxed);

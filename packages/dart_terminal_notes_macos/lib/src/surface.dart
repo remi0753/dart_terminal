@@ -83,6 +83,112 @@ final class TerminalNotesNativeSnapshot {
   final int bodyFontMilliPoints;
 }
 
+final class TerminalNotesRect {
+  const TerminalNotesRect({
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
+  });
+
+  final double x;
+  final double y;
+  final double width;
+  final double height;
+}
+
+final class TerminalNotesNativePresentation {
+  const TerminalNotesNativePresentation({
+    required this.projectionGeneration,
+    required this.paneWidth,
+    required this.paneHeight,
+    required this.backingScale,
+    required this.badgeHit,
+    required this.badgeVisual,
+    required this.rail,
+    required this.firstCard,
+    required this.flags,
+    required this.materializedCardCount,
+    required this.accessibilityNodeCount,
+    required this.accessibilityBodyCount,
+    required this.firstSurfaceRgba,
+    required this.firstAccentRgba,
+    required this.bodyTextRgba,
+    required this.animationMilliseconds,
+    required this.bodyFontMilliPoints,
+  });
+
+  static const int _badgeVisible = 1 << 0;
+  static const int _railVisible = 1 << 1;
+  static const int _smallPane = 1 << 2;
+  static const int _opaqueCards = 1 << 3;
+  static const int _cardShadows = 1 << 4;
+  static const int _readyCue = 1 << 5;
+  static const int _reducedMotion = 1 << 6;
+  static const int _differentiateWithoutColor = 1 << 7;
+  static const int _increaseContrast = 1 << 8;
+  static const int _dark = 1 << 9;
+  static const int _systemBadgeVisible = 1 << 10;
+
+  final int projectionGeneration;
+  final double paneWidth;
+  final double paneHeight;
+  final double backingScale;
+  final TerminalNotesRect badgeHit;
+  final TerminalNotesRect badgeVisual;
+  final TerminalNotesRect rail;
+  final TerminalNotesRect firstCard;
+  final int flags;
+  final int materializedCardCount;
+  final int accessibilityNodeCount;
+  final int accessibilityBodyCount;
+  final int firstSurfaceRgba;
+  final int firstAccentRgba;
+  final int bodyTextRgba;
+  final int animationMilliseconds;
+  final int bodyFontMilliPoints;
+
+  bool get badgeVisible => flags & _badgeVisible != 0;
+  bool get railVisible => flags & _railVisible != 0;
+  bool get smallPane => flags & _smallPane != 0;
+  bool get opaqueCards => flags & _opaqueCards != 0;
+  bool get cardShadows => flags & _cardShadows != 0;
+  bool get readyCue => flags & _readyCue != 0;
+  bool get reducedMotion => flags & _reducedMotion != 0;
+  bool get differentiateWithoutColor => flags & _differentiateWithoutColor != 0;
+  bool get increaseContrast => flags & _increaseContrast != 0;
+  bool get darkAppearance => flags & _dark != 0;
+  bool get systemBadgeVisible => flags & _systemBadgeVisible != 0;
+}
+
+final class TerminalNotesNativeCardPresentation {
+  const TerminalNotesNativeCardPresentation({
+    required this.index,
+    required this.order,
+    required this.color,
+    required this.status,
+    required this.due,
+    required this.visibleLineLimit,
+    required this.surfaceRgba,
+    required this.accentRgba,
+    required this.bodyTextRgba,
+    required this.nonColorCue,
+    required this.frame,
+  });
+
+  final int index;
+  final int order;
+  final TerminalNotesColor color;
+  final TerminalNotesStatus status;
+  final bool due;
+  final int visibleLineLimit;
+  final int surfaceRgba;
+  final int accentRgba;
+  final int bodyTextRgba;
+  final bool nonColorCue;
+  final TerminalNotesRect frame;
+}
+
 final class TerminalNotesNativeSurface {
   factory TerminalNotesNativeSurface({TerminalNotesNativeBindings? bindings}) {
     final TerminalNotesNativeBindings resolved =
@@ -155,6 +261,91 @@ final class TerminalNotesNativeSurface {
       pageStart: raw.pageStart,
       totalCount: raw.totalCount,
       bodyFontMilliPoints: raw.bodyFontMilliPoints,
+    );
+  }
+
+  void updateLayout({
+    required double paneWidth,
+    required double paneHeight,
+    required double backingScale,
+    double requestedRailWidth = 0,
+  }) {
+    final int status = _bindings.updateLayout(
+      _requireHandle(),
+      paneWidth: paneWidth,
+      paneHeight: paneHeight,
+      backingScale: backingScale,
+      requestedRailWidth: requestedRailWidth,
+    );
+    if (status != nativeStatusOk) {
+      throw TerminalNotesNativeException('updateLayout', status);
+    }
+  }
+
+  TerminalNotesNativePresentation get presentation {
+    final TerminalNotesNativePresentationRawSnapshot raw = _bindings
+        .presentationSnapshot(_requireHandle());
+    TerminalNotesRect rect(
+      ({double x, double y, double width, double height}) value,
+    ) => TerminalNotesRect(
+      x: value.x,
+      y: value.y,
+      width: value.width,
+      height: value.height,
+    );
+    return TerminalNotesNativePresentation(
+      projectionGeneration: raw.projectionGeneration,
+      paneWidth: raw.paneWidth,
+      paneHeight: raw.paneHeight,
+      backingScale: raw.backingScale,
+      badgeHit: rect(raw.badgeHit),
+      badgeVisual: rect(raw.badgeVisual),
+      rail: rect(raw.rail),
+      firstCard: rect(raw.firstCard),
+      flags: raw.flags,
+      materializedCardCount: raw.materializedCardCount,
+      accessibilityNodeCount: raw.accessibilityNodeCount,
+      accessibilityBodyCount: raw.accessibilityBodyCount,
+      firstSurfaceRgba: raw.firstSurfaceRgba,
+      firstAccentRgba: raw.firstAccentRgba,
+      bodyTextRgba: raw.bodyTextRgba,
+      animationMilliseconds: raw.animationMilliseconds,
+      bodyFontMilliPoints: raw.bodyFontMilliPoints,
+    );
+  }
+
+  TerminalNotesNativeCardPresentation cardPresentation(int index) {
+    if (index < 0 || index >= TerminalNotesLimits.maximumMaterializedCards) {
+      throw RangeError.range(
+        index,
+        0,
+        TerminalNotesLimits.maximumMaterializedCards - 1,
+        'index',
+      );
+    }
+    final TerminalNotesNativeCardPresentationRawSnapshot raw = _bindings
+        .cardPresentationSnapshot(_requireHandle(), index);
+    if (raw.color >= TerminalNotesColor.values.length ||
+        raw.status >= TerminalNotesStatus.values.length) {
+      throw const TerminalNotesNativeException('cardPresentation.enum', -1);
+    }
+    return TerminalNotesNativeCardPresentation(
+      index: raw.index,
+      order: raw.order,
+      color: TerminalNotesColor.values[raw.color],
+      status: TerminalNotesStatus.values[raw.status],
+      due: raw.due,
+      visibleLineLimit: raw.visibleLineLimit,
+      surfaceRgba: raw.surfaceRgba,
+      accentRgba: raw.accentRgba,
+      bodyTextRgba: raw.bodyTextRgba,
+      nonColorCue: raw.nonColorCue,
+      frame: TerminalNotesRect(
+        x: raw.frame.x,
+        y: raw.frame.y,
+        width: raw.frame.width,
+        height: raw.frame.height,
+      ),
     );
   }
 

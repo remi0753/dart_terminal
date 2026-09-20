@@ -22,5 +22,8 @@ export 'src/surface.dart'
     show
         TerminalNotesApplyDisposition,
         TerminalNotesNativeException,
+        TerminalNotesNativeCardPresentation,
+        TerminalNotesNativePresentation,
         TerminalNotesNativeSnapshot,
-        TerminalNotesNativeSurface;
+        TerminalNotesNativeSurface,
+        TerminalNotesRect;

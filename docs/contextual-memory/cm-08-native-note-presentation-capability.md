@@ -125,3 +125,42 @@ read-only accessibilityを提供し、terminal grid、Metal drawable、PTY winsi
   `dart_terminal tests passed`を確認した。
 - 初回root testはsandbox外のclang module cacheを書けず停止した。許可された実行環境で再実行した。Makefile変更により
   release-candidate matrixがstaleになったためgeneratorでhash証跡を更新し、その後checkとfull gateがpassした。
+
+## 2026-09-21: 第2サブタスク完了
+
+### 実装と判断
+
+- `DtnNoteSurfaceView`をproduct package内へ実装した。透明なpane-sized rootはhit testをbadge/rail boundsへ限定し、
+  native-to-native `dtn_surface_attach_to_host`でterminal hostの最前面childとしてattachする。Host frame、terminal layout、
+  Metal drawable、gridを変更するAPIは持たない。Opaque pointerはDart FFIへ渡さない。
+- Collapsed badgeは44×44 pt hit targetと28 pt visualをtrailing center、8 pt insetへ配置する。1〜99はexact count、100以上は
+  `99+`、dueはcolorだけに依存しないready dotとread-only AX labelを持つ。264×184 pt未満ではrailを隠し、`pane too
+  small`のnon-content badgeへ切り替える。
+- Railはpane上へoverlayし、上下12 pt、通常320 pt、requested 240〜360 pt、system badge時top +48 ptとした。Root/rail/cardを
+  flipped coordinateでlayoutし、cardは最大32件だけmaterializeする。Previewは最大8行、corner radius 10、padding/spacing
+  12、border 1、通常shadow 0×2/blur 8を実装した。
+- Light/dark six-color canonical sRGB surface/accentとbody text tokenを実装した。Cardは常にopaqueで、status/triggerを
+  `○/●/◆/▶/✓`とtextで示す。Increase Contrastは2 pt border・shadow 0、Differentiate Without Colorでもshape/text cueを
+  維持し、Reduce Motionはduration 0、それ以外の許容durationは140 msとした。Body fontは12〜24 ptをABI値で反映する。
+- Read-only accessibilityはcollapsedでNotes button一つ、expandedでNotes group、toolbar、Current/Detached selector、scroll list、
+  ordered card group、body/chip static textを公開する。Collapsed、small pane、background/occluded相当の
+  `presentationEligible=false`ではroot accessibility childrenからrail/bodyを除く。
+- Content-free presentation/card snapshotを追加した。Frame、count、fixed state、canonical RGBA、font/motionだけを返し、body、
+  ephemeral token、persistent ID、timestampを返さない。Dart facadeもtyped geometry/card stateとして公開する。
+- Generic `dart_appkit`へoverlay/container/Note APIを追加する案は不採用とした。CM-10のcompositionはnative-to-native seamから
+  product renderer hostへattachでき、汎用libraryの責務を変更しない。
+
+### 検証結果
+
+- `make terminal-notes-native-test`: pass。Actual AppKit view hierarchyとbitmap cacheを使い、normal 320 pt、narrow 240 pt、
+  wide 360 pt、small 263×183、system badge inset、44/28 pt badge、最大32 materialization、hit region、child layer orderを確認。
+- 同native testで1×/2× backing scale、12/15/24 pt、light/dark canonical bitmap token、six dark surfaces、opaque card、
+  contrast shadow 0、non-color cue、reduced motion 0、background/collapsed body AX 0、collapsed button-only treeを確認。
+- `make terminal-notes-dart-test`: format 8 files 0 changed、analyze issue 0、typed layout/presentation/card facadeとdirect code-asset
+  loadを含めpass。
+- Standalone `dart run`はAppKit process main threadではないため、surface createを許すとthread affinityを破ることが判明した。
+  Native surfaceはmain-thread-onlyを維持し、direct Dart gateはABI/load/live-owner 0、actual lifecycle/presentationはmanifest-independent
+  native executableで検証する形へ修正した。
+- `make test`: pass。369 root files format 0 changed、root analyze issue 0、全native/package/compatibility/privacy/security test、
+  `dart_terminal tests passed`を確認した。Makefile hash証跡を再生成しfresh checkもpassした。
+- Root application manifest/dependency登録0、`dart_appkit`変更0。隣接repositoryは開始前からの3変更だけである。

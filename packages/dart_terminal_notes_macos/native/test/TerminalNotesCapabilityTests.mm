@@ -1,5 +1,8 @@
 #include "TerminalNotesPlugin.h"
 
+#import <AppKit/AppKit.h>
+
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <vector>
@@ -25,7 +28,8 @@ void write_u64(std::vector<uint8_t>& bytes, size_t offset, uint64_t value) {
 
 std::vector<uint8_t> packet(uint64_t projection_generation,
                             uint64_t store_revision,
-                            const std::vector<std::string>& bodies = {"hello"}) {
+                            const std::vector<std::string>& bodies = {"hello"},
+                            uint8_t flags = 1u) {
   size_t aggregate_body_bytes = 0;
   for (const std::string& body : bodies) aggregate_body_bytes += body.size();
   const size_t body_offset =
@@ -37,7 +41,7 @@ std::vector<uint8_t> packet(uint64_t projection_generation,
   write_u16(bytes, 10u, DTN_PROJECTION_HEADER_BYTES);
   write_u16(bytes, 12u, DTN_CARD_RECORD_BYTES);
   bytes[14u] = DTN_VISIBILITY_EXPANDED;
-  bytes[15u] = 1u;
+  bytes[15u] = flags;
   write_u64(bytes, 16u, 11u);
   write_u64(bytes, 24u, 7u);
   write_u64(bytes, 32u, projection_generation);
@@ -76,9 +80,36 @@ bool expect(bool condition, const char* message) {
   return condition;
 }
 
+bool bitmap_contains(NSView* view, uint32_t rgba) {
+  [view layoutSubtreeIfNeeded];
+  [view setNeedsDisplay:YES];
+  [view displayIfNeeded];
+  NSBitmapImageRep* bitmap =
+      [view bitmapImageRepForCachingDisplayInRect:view.bounds];
+  if (bitmap == nil) return false;
+  [view cacheDisplayInRect:view.bounds toBitmapImageRep:bitmap];
+  const double expected_red = ((rgba >> 24u) & 0xffu) / 255.0;
+  const double expected_green = ((rgba >> 16u) & 0xffu) / 255.0;
+  const double expected_blue = ((rgba >> 8u) & 0xffu) / 255.0;
+  NSUInteger matches = 0;
+  for (NSInteger y = 0; y < bitmap.pixelsHigh; y += 2) {
+    for (NSInteger x = 0; x < bitmap.pixelsWide; x += 2) {
+      NSColor* color = [[bitmap colorAtX:x y:y]
+          colorUsingColorSpace:NSColorSpace.sRGBColorSpace];
+      if (color != nil && std::abs(color.redComponent - expected_red) < 0.01 &&
+          std::abs(color.greenComponent - expected_green) < 0.01 &&
+          std::abs(color.blueComponent - expected_blue) < 0.01) {
+        if (++matches >= 16u) return true;
+      }
+    }
+  }
+  return false;
+}
+
 }  // namespace
 
 int main() {
+  @autoreleasepool {
   bool ok = true;
   ok &= expect(dtn_abi_version() == 1u, "ABI version");
   ok &= expect(dtn_debug_live_surfaces() == 0u, "initial owner count");
@@ -189,9 +220,199 @@ int main() {
                    snapshot.rejected_projection_count == 11u,
                "atomic last-good state and materialization bound");
 
+  DtnLayoutV1 normal_layout = {};
+  normal_layout.struct_size = sizeof(normal_layout);
+  normal_layout.version = DTN_LAYOUT_VERSION;
+  normal_layout.pane_width = 640;
+  normal_layout.pane_height = 480;
+  normal_layout.backing_scale = 1;
+  normal_layout.requested_rail_width = 320;
+  ok &= expect(dtn_surface_update_layout(surface, &normal_layout) ==
+                   DTN_STATUS_OK,
+               "normal layout acceptance");
+  DtnPresentationSnapshotV1 presentation = {};
+  presentation.struct_size = sizeof(presentation);
+  presentation.version = DTN_PRESENTATION_SNAPSHOT_VERSION;
+  ok &= expect(
+      dtn_surface_presentation_snapshot(surface, &presentation) ==
+              DTN_STATUS_OK &&
+          presentation.pane_width == 640 && presentation.pane_height == 480 &&
+          presentation.backing_scale == 1 &&
+          presentation.badge_hit_width == 44 &&
+          presentation.badge_hit_height == 44 &&
+          presentation.badge_visual_height == 28 &&
+          presentation.rail_width == 320 && presentation.rail_y == 12 &&
+          presentation.rail_height == 456 &&
+          presentation.materialized_card_count == 32u &&
+          presentation.accessibility_body_count == 32u &&
+          presentation.first_surface_rgba == 0xf5f5f3ffu &&
+          (presentation.flags & DTN_PRESENTATION_RAIL_VISIBLE) != 0u &&
+          (presentation.flags & DTN_PRESENTATION_OPAQUE_CARDS) != 0u &&
+          (presentation.flags & DTN_PRESENTATION_CARD_SHADOWS) != 0u,
+      "normal light presentation geometry");
+
+  NSView* host = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 640, 480)];
+  NSView* note_view =
+      (__bridge NSView*)dtn_surface_native_view(surface);
+  ok &= expect(note_view != nil &&
+                   dtn_surface_attach_to_host(surface, (__bridge void*)host) ==
+                       DTN_STATUS_OK &&
+                   host.subviews.lastObject == note_view,
+               "native child surface attachment and layer order");
+  NSArray* expanded_children = [note_view accessibilityChildren];
+  ok &= expect(expanded_children.count == 1u &&
+                   [[[expanded_children firstObject] accessibilityRole]
+                       isEqualToString:NSAccessibilityGroupRole] &&
+                   [note_view hitTest:NSMakePoint(1, 1)] == nil &&
+                   [note_view hitTest:NSMakePoint(presentation.rail_x + 4,
+                                                 presentation.rail_y + 4)] != nil,
+               "expanded accessibility and bounded hit region");
+  ok &= expect(bitmap_contains(note_view, 0xf5f5f3ffu),
+               "light card bitmap token");
+
+  std::vector<uint8_t> narrow = packet(
+      3u, 6u, {"neutral", "yellow", "blue", "green", "pink", "purple"});
+  write_u32(narrow, 104u, 12000u);
+  ok &= expect(dtn_surface_apply_projection(surface, narrow.data(),
+                                            narrow.size()) == DTN_STATUS_OK,
+               "12 point narrow projection");
+  DtnLayoutV1 narrow_layout = normal_layout;
+  narrow_layout.pane_width = 264;
+  narrow_layout.pane_height = 300;
+  narrow_layout.requested_rail_width = 240;
+  ok &= expect(dtn_surface_update_layout(surface, &narrow_layout) ==
+                   DTN_STATUS_OK,
+               "minimum usable rail layout");
+  presentation = {};
+  presentation.struct_size = sizeof(presentation);
+  presentation.version = DTN_PRESENTATION_SNAPSHOT_VERSION;
+  ok &= expect(dtn_surface_presentation_snapshot(surface, &presentation) ==
+                       DTN_STATUS_OK &&
+                   presentation.rail_width == 240 &&
+                   presentation.body_font_millipoints == 12000u &&
+                   (presentation.flags & DTN_PRESENTATION_RAIL_VISIBLE) != 0u,
+               "narrow 12 point presentation");
+
+  std::vector<uint8_t> dark =
+      packet(4u, 7u, {"neutral", "yellow", "blue", "green", "pink", "purple"},
+             0x7fu);
+  write_u32(dark, 104u, 24000u);
+  ok &= expect(dtn_surface_apply_projection(surface, dark.data(), dark.size()) ==
+                   DTN_STATUS_OK,
+               "dark appearance projection");
+  DtnLayoutV1 wide_layout = normal_layout;
+  wide_layout.pane_width = 900;
+  wide_layout.pane_height = 600;
+  wide_layout.backing_scale = 2;
+  wide_layout.requested_rail_width = 360;
+  ok &= expect(dtn_surface_update_layout(surface, &wide_layout) ==
+                   DTN_STATUS_OK,
+               "wide 2x layout acceptance");
+  presentation = {};
+  presentation.struct_size = sizeof(presentation);
+  presentation.version = DTN_PRESENTATION_SNAPSHOT_VERSION;
+  ok &= expect(
+      dtn_surface_presentation_snapshot(surface, &presentation) ==
+              DTN_STATUS_OK &&
+          presentation.backing_scale == 2 && presentation.rail_width == 360 &&
+          note_view.layer.contentsScale == 2 &&
+          presentation.rail_y == 60 && presentation.rail_height == 528 &&
+          presentation.materialized_card_count == 6u &&
+          presentation.accessibility_body_count == 6u &&
+          presentation.first_surface_rgba == 0x343432ffu &&
+          presentation.first_accent_rgba == 0xb8b8b2ffu &&
+          presentation.body_text_rgba == 0xf5f5f5ffu &&
+          presentation.animation_milliseconds == 0u &&
+          presentation.body_font_millipoints == 24000u &&
+          (presentation.flags & DTN_PRESENTATION_DARK) != 0u &&
+          (presentation.flags & DTN_PRESENTATION_INCREASE_CONTRAST) != 0u &&
+          (presentation.flags & DTN_PRESENTATION_CARD_SHADOWS) == 0u &&
+          (presentation.flags & DTN_PRESENTATION_REDUCED_MOTION) != 0u &&
+          (presentation.flags &
+           DTN_PRESENTATION_DIFFERENTIATE_WITHOUT_COLOR) != 0u &&
+          (presentation.flags & DTN_PRESENTATION_SYSTEM_BADGE_VISIBLE) != 0u,
+      "dark contrast motion and system-badge presentation");
+  const uint32_t dark_surfaces[6] = {
+      0x343432ffu, 0x4a401fffu, 0x24384effu,
+      0x233e2bffu, 0x4a2938ffu, 0x382d4cffu,
+  };
+  for (uint32_t index = 0; index < 6u; ++index) {
+    DtnCardPresentationSnapshotV1 card = {};
+    card.struct_size = sizeof(card);
+    card.version = DTN_CARD_PRESENTATION_SNAPSHOT_VERSION;
+    ok &= expect(dtn_surface_card_presentation_snapshot(surface, index, &card) ==
+                         DTN_STATUS_OK &&
+                     card.color == index && card.surface_rgba == dark_surfaces[index] &&
+                     card.non_color_cue == 1u && card.visible_line_limit == 8u &&
+                     card.width > 0 && card.height >= 88,
+                 "six-color card presentation");
+  }
+  ok &= expect(bitmap_contains(note_view, 0x343432ffu),
+               "dark card bitmap token");
+
+  DtnLayoutV1 small_layout = wide_layout;
+  small_layout.pane_width = 263;
+  small_layout.pane_height = 183;
+  small_layout.requested_rail_width = 240;
+  ok &= expect(dtn_surface_update_layout(surface, &small_layout) ==
+                   DTN_STATUS_OK,
+               "small layout acceptance");
+  presentation = {};
+  presentation.struct_size = sizeof(presentation);
+  presentation.version = DTN_PRESENTATION_SNAPSHOT_VERSION;
+  ok &= expect(dtn_surface_presentation_snapshot(surface, &presentation) ==
+                       DTN_STATUS_OK &&
+                   (presentation.flags & DTN_PRESENTATION_SMALL_PANE) != 0u &&
+                   (presentation.flags & DTN_PRESENTATION_RAIL_VISIBLE) == 0u &&
+                   (presentation.flags & DTN_PRESENTATION_BADGE_VISIBLE) != 0u &&
+                   presentation.accessibility_body_count == 0u,
+               "small-pane badge fallback");
+
+  std::vector<uint8_t> collapsed = packet(5u, 7u, {}, 0x02u);
+  collapsed[14u] = DTN_VISIBILITY_COLLAPSED;
+  write_u32(collapsed, 56u, 6u);
+  write_u32(collapsed, 60u, 1u);
+  ok &= expect(dtn_surface_apply_projection(surface, collapsed.data(),
+                                            collapsed.size()) == DTN_STATUS_OK,
+               "collapsed read-only projection");
+  ok &= expect(dtn_surface_update_layout(surface, &normal_layout) ==
+                   DTN_STATUS_OK,
+               "restore normal layout");
+  presentation = {};
+  presentation.struct_size = sizeof(presentation);
+  presentation.version = DTN_PRESENTATION_SNAPSHOT_VERSION;
+  NSArray* collapsed_children = [note_view accessibilityChildren];
+  ok &= expect(dtn_surface_presentation_snapshot(surface, &presentation) ==
+                       DTN_STATUS_OK &&
+                   (presentation.flags & DTN_PRESENTATION_RAIL_VISIBLE) == 0u &&
+                   presentation.accessibility_body_count == 0u &&
+                   presentation.accessibility_node_count == 1u &&
+                   collapsed_children.count == 1u &&
+                   [[[collapsed_children firstObject] accessibilityRole]
+                       isEqualToString:NSAccessibilityButtonRole],
+               "collapsed accessibility exposes only Notes button");
+
+  std::vector<uint8_t> background =
+      packet(6u, 7u, {"hidden body"}, 0x00u);
+  ok &= expect(dtn_surface_apply_projection(surface, background.data(),
+                                            background.size()) == DTN_STATUS_OK,
+               "background projection retention");
+  presentation = {};
+  presentation.struct_size = sizeof(presentation);
+  presentation.version = DTN_PRESENTATION_SNAPSHOT_VERSION;
+  ok &= expect(dtn_surface_presentation_snapshot(surface, &presentation) ==
+                       DTN_STATUS_OK &&
+                   (presentation.flags & DTN_PRESENTATION_RAIL_VISIBLE) == 0u &&
+                   presentation.accessibility_body_count == 0u,
+               "background body excluded from accessibility");
+  ok &= expect(dtn_surface_detach_from_host(surface) == DTN_STATUS_OK &&
+                   note_view.superview == nil,
+               "native child surface detach");
+
   dtn_surface_destroy(surface);
   ok &= expect(dtn_debug_live_surfaces() == 0u, "final owner count");
   if (!ok) return 1;
   std::puts("terminal Notes native codec tests passed");
   return 0;
+  }
 }

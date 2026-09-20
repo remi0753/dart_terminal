@@ -98,7 +98,7 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
   （[`cm-08-native-note-presentation-capability.md`](docs/contextual-memory/cm-08-native-note-presentation-capability.md)
   を参照して実施する）
   - [x] package、ABI v1、strict projection codecを実装する
-  - [ ] badge、rail、card、appearance、read-only accessibilityを実装する
+  - [x] badge、rail、card、appearance、read-only accessibilityを実装する
   - [ ] manifest-independent native acceptanceとfallbackを完了する
 - [ ] CM-09 native Note editor、intent、accessibility interactionを実装する
 - [ ] CM-10 S1 Basic memoryをproductへ統合する
