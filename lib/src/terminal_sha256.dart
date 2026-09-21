@@ -2,6 +2,8 @@
 ///
 /// This small Dart-only implementation keeps runtime resource validation free
 /// of native/process dependencies. Inputs are already bounded by each caller.
+/// Padding is synthesized by index so working memory does not scale with the
+/// input size.
 String terminalSha256(List<int> source) {
   const List<int> constants = <int>[
     0x428a2f98,
@@ -69,14 +71,8 @@ String terminalSha256(List<int> source) {
     0xbef9a3f7,
     0xc67178f2,
   ];
-  final List<int> bytes = List<int>.of(source)..add(0x80);
-  while (bytes.length % 64 != 56) {
-    bytes.add(0);
-  }
   final int bitLength = source.length * 8;
-  for (int shift = 56; shift >= 0; shift -= 8) {
-    bytes.add((bitLength >> shift) & 0xff);
-  }
+  final int paddedLength = ((source.length + 9 + 63) ~/ 64) * 64;
   final List<int> hash = <int>[
     0x6a09e667,
     0xbb67ae85,
@@ -88,14 +84,14 @@ String terminalSha256(List<int> source) {
     0x5be0cd19,
   ];
   final List<int> words = List<int>.filled(64, 0);
-  for (int offset = 0; offset < bytes.length; offset += 64) {
+  for (int offset = 0; offset < paddedLength; offset += 64) {
     for (int index = 0; index < 16; index++) {
       final int byteOffset = offset + index * 4;
       words[index] =
-          (bytes[byteOffset] << 24) |
-          (bytes[byteOffset + 1] << 16) |
-          (bytes[byteOffset + 2] << 8) |
-          bytes[byteOffset + 3];
+          (_paddedByte(source, byteOffset, paddedLength, bitLength) << 24) |
+          (_paddedByte(source, byteOffset + 1, paddedLength, bitLength) << 16) |
+          (_paddedByte(source, byteOffset + 2, paddedLength, bitLength) << 8) |
+          _paddedByte(source, byteOffset + 3, paddedLength, bitLength);
     }
     for (int index = 16; index < 64; index++) {
       final int left = words[index - 15];
@@ -134,14 +130,27 @@ String terminalSha256(List<int> source) {
       b = a;
       a = (temporary1 + temporary2) & 0xffffffff;
     }
-    final List<int> compressed = <int>[a, b, c, d, e, f, g, h];
-    for (int index = 0; index < hash.length; index++) {
-      hash[index] = (hash[index] + compressed[index]) & 0xffffffff;
-    }
+    hash[0] = (hash[0] + a) & 0xffffffff;
+    hash[1] = (hash[1] + b) & 0xffffffff;
+    hash[2] = (hash[2] + c) & 0xffffffff;
+    hash[3] = (hash[3] + d) & 0xffffffff;
+    hash[4] = (hash[4] + e) & 0xffffffff;
+    hash[5] = (hash[5] + f) & 0xffffffff;
+    hash[6] = (hash[6] + g) & 0xffffffff;
+    hash[7] = (hash[7] + h) & 0xffffffff;
   }
   return hash
       .map((int value) => value.toRadixString(16).padLeft(8, '0'))
       .join();
+}
+
+@pragma('vm:prefer-inline')
+int _paddedByte(List<int> source, int index, int paddedLength, int bitLength) {
+  if (index < source.length) return source[index];
+  if (index == source.length) return 0x80;
+  final int lengthOffset = paddedLength - index;
+  if (lengthOffset > 8) return 0;
+  return (bitLength >> ((lengthOffset - 1) * 8)) & 0xff;
 }
 
 int _rotateRight(int value, int amount) =>

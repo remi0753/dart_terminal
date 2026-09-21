@@ -142,6 +142,7 @@ import 'terminal_session_reply_test.dart';
 import 'terminal_settings_document_test.dart';
 import 'terminal_settings_editor_test.dart';
 import 'terminal_settings_inspector_test.dart';
+import 'terminal_sha256_test.dart';
 import 'terminal_shell_integration_projection_test.dart';
 import 'terminal_shell_integration_resource_test.dart';
 import 'terminal_shell_integration_test.dart';
@@ -240,6 +241,7 @@ Future<void> main() async {
   await runTerminalNoteStoreIsolateTests();
   await runTerminalNoteStoreProcessTests();
   runTerminalNoteStoreWorkerTests();
+  runTerminalSha256Tests();
   runTerminalSystemEntropyTests();
   runTerminalInputMatrixTests();
   runTerminalAppKitKeyAdapterTests();
