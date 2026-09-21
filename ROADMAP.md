@@ -158,6 +158,11 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
       - [x] fresh 8-gate aggregateとfinal evidence checkerを完走する
   - [x] manual IME/keyboard/VoiceOver/appearance/TUI checklistとR0 stage decisionを完了する
 - [ ] CM-13 R1 internal S1/S2 opt-inを完了する
+  （[`cm-13-r1-internal-opt-in.md`](docs/contextual-memory/cm-13-r1-internal-opt-in.md)
+  を参照して実施する）
+  - [x] typed internal launch profileと実データstore preview境界を固定する
+  - [ ] data recovery/export、kill switch、rollback rehearsalとinternal runbookを完了する
+  - [ ] R1両runtime、64-pane、manual aggregateとstage decisionを完了する
 - [ ] CM-14 R2 public S1/S2 opt-inを完了する
 - [ ] CM-15 R3 S1/S2 default-on promotionを完了する
 - [ ] CM-16 shell integration version 3 lifecycle protocolを実装する

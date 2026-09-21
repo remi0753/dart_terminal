@@ -150,6 +150,10 @@ override TERMINAL_NOTE_R0_QUALIFICATION_GATES := \
 	product-sanitizer-fuzz-fault-gate \
 	runtime-verify \
 	release-aot-distribution-verify
+override TERMINAL_NOTE_R1_INTERNAL_ARGUMENTS := \
+	--notes=true \
+	--notes-on-return=true \
+	--notes-next-prompt=false
 override PRODUCT_PERFORMANCE_BASELINE := $(PROJECT_ROOT)/benchmark/baselines/product-micro-macos-arm64-m1.json
 override PRODUCT_PERFORMANCE_COMPARATOR_EVIDENCE := $(PROJECT_ROOT)/benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json
 override PRODUCT_RELATIVE_PERFORMANCE_EVIDENCE := $(PROJECT_ROOT)/benchmark/evidence/product-relative-performance-macos-arm64-m1.json
@@ -170,6 +174,7 @@ override PRODUCT_PERFORMANCE_AGGREGATE_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)
 	terminal-note-r0-native-budget \
 	terminal-notes-dart-test terminal-notes-host-acceptance \
 	terminal-notes-capability-audit terminal-notes-acceptance contextual-memory-s1-acceptance contextual-memory-s2-acceptance contextual-memory-r0-qualification \
+	contextual-memory-r1-internal-profile-check contextual-memory-r1-internal-candidate-build \
 	compatibility-inventory compatibility-inventory-check \
 	compatibility-manifest compatibility-manifest-check terminal-differential-contract-check \
 	terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check \
@@ -250,6 +255,8 @@ help:
 	@echo "  make terminal-note-r0-evidence  Generate versioned content-free Note R0 budget evidence"
 	@echo "  make terminal-note-r0-architecture-audit  Audit Note capability and resource equality across runtime bundles"
 	@echo "  make contextual-memory-r0-qualification  Run the complete automated Note R0 qualification graph"
+	@echo "  make contextual-memory-r1-internal-profile-check  Validate the typed internal Notes launch profile"
+	@echo "  make contextual-memory-r1-internal-candidate-build  Build and audit both internal Notes runtime candidates"
 	@echo "  make product-performance-comparator-check  Validate pinned Ghostty relative evidence"
 	@echo "  make product-performance-regression-gate  Run the complete Release AOT performance gate"
 	@echo "  make compatibility-inventory      Regenerate sequence inventory and summary"
@@ -907,6 +914,17 @@ contextual-memory-r0-qualification:
 	@cd $(PROJECT_ROOT) && $(DART) run \
 		tool/terminal_note_r0_qualification.dart \
 		--source-root=$(PROJECT_ROOT)
+
+contextual-memory-r1-internal-profile-check: dependencies
+	@cd $(PROJECT_ROOT) && $(DART) run \
+		tool/terminal_note_r1_internal_profile.dart \
+		--source-root=$(PROJECT_ROOT)
+
+contextual-memory-r1-internal-candidate-build:
+	@$(MAKE) -j1 RUNTIME_ARCH=$(RUNTIME_ARCH) \
+		contextual-memory-r1-internal-profile-check \
+		developer-jit-audit release-aot-audit
+	@echo "CONTEXTUAL_MEMORY_R1_INTERNAL_CANDIDATE_PASS runtime_modes=2 typed_profile=checked public_exposure=false s3=false content_free=true"
 
 product-performance-comparator-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run test/product_performance_comparator_test.dart
