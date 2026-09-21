@@ -148,7 +148,7 @@ override PRODUCT_PERFORMANCE_AGGREGATE_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)
 	terminal-app-intents-dart-test \
 	terminal-notes-contract-check terminal-notes-native-test \
 	terminal-notes-dart-test terminal-notes-host-acceptance \
-	terminal-notes-capability-audit terminal-notes-acceptance contextual-memory-s1-acceptance \
+	terminal-notes-capability-audit terminal-notes-acceptance contextual-memory-s1-acceptance contextual-memory-s2-acceptance \
 	compatibility-inventory compatibility-inventory-check \
 	compatibility-manifest compatibility-manifest-check terminal-differential-contract-check \
 	terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check \
@@ -173,7 +173,7 @@ override PRODUCT_PERFORMANCE_AGGREGATE_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)
 	product-performance-comparator-check product-performance-regression-gate \
 	runtime-source-check runtime-architecture-check \
 	developer-jit-build developer-jit-run developer-jit-audit \
-	developer-jit-integration developer-jit-display developer-jit-hierarchy developer-jit-performance developer-jit-reliability developer-jit-actions developer-jit-applescript developer-jit-system-automation developer-jit-native-content developer-jit-window-interaction developer-jit-quick-terminal developer-jit-secure-keyboard-entry developer-jit-diagnostics developer-jit-configuration developer-jit-theme developer-jit-shell-integration developer-jit-desktop-signals developer-jit-osc52 developer-jit-restoration developer-jit-note-s1 developer-jit-clipboard developer-jit-lifecycle developer-jit-traffic \
+	developer-jit-integration developer-jit-display developer-jit-hierarchy developer-jit-performance developer-jit-reliability developer-jit-actions developer-jit-applescript developer-jit-system-automation developer-jit-native-content developer-jit-window-interaction developer-jit-quick-terminal developer-jit-secure-keyboard-entry developer-jit-diagnostics developer-jit-configuration developer-jit-theme developer-jit-shell-integration developer-jit-desktop-signals developer-jit-osc52 developer-jit-restoration developer-jit-note-s1 developer-jit-note-s2 developer-jit-clipboard developer-jit-lifecycle developer-jit-traffic \
 	developer-jit-resource developer-jit-shutdown-fault \
 	release-aot-build release-aot-run release-aot-audit \
 	release-aot-arm64-build release-aot-x86_64-build release-aot-thin-builds \
@@ -188,9 +188,9 @@ override PRODUCT_PERFORMANCE_AGGREGATE_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)
 	terminal-update-feed-test terminal-update-transaction-test terminal-update-controller-test terminal-release-symbols-test terminal-incident-service-test release-update-feed-credentials-check \
 	release-update-feed \
 	release-aot-symbols \
-	release-aot-integration release-aot-display release-aot-hierarchy release-aot-performance release-aot-reliability release-aot-actions release-aot-applescript release-aot-system-automation release-aot-native-content release-aot-window-interaction release-aot-quick-terminal release-aot-secure-keyboard-entry release-aot-diagnostics release-aot-configuration release-aot-theme release-aot-shell-integration release-aot-desktop-signals release-aot-osc52 release-aot-restoration release-aot-note-s1 release-aot-clipboard release-aot-lifecycle release-aot-traffic \
+	release-aot-integration release-aot-display release-aot-hierarchy release-aot-performance release-aot-reliability release-aot-actions release-aot-applescript release-aot-system-automation release-aot-native-content release-aot-window-interaction release-aot-quick-terminal release-aot-secure-keyboard-entry release-aot-diagnostics release-aot-configuration release-aot-theme release-aot-shell-integration release-aot-desktop-signals release-aot-osc52 release-aot-restoration release-aot-note-s1 release-aot-note-s2 release-aot-clipboard release-aot-lifecycle release-aot-traffic \
 	release-aot-resource release-aot-shutdown-fault runtime-bundle-audit \
-	runtime-integration runtime-terminal-display-integration runtime-native-hierarchy-integration runtime-product-performance-integration runtime-bounded-reliability-integration runtime-user-actions-integration runtime-applescript-integration runtime-system-automation-integration runtime-native-content-integration runtime-window-interaction-integration runtime-quick-terminal-integration runtime-secure-keyboard-entry-integration runtime-diagnostics-integration runtime-configuration-integration runtime-theme-integration runtime-shell-integration runtime-desktop-signals-integration runtime-osc52-integration runtime-restoration-integration runtime-note-s1-integration runtime-clipboard-integration runtime-lifecycle-integration \
+	runtime-integration runtime-terminal-display-integration runtime-native-hierarchy-integration runtime-product-performance-integration runtime-bounded-reliability-integration runtime-user-actions-integration runtime-applescript-integration runtime-system-automation-integration runtime-native-content-integration runtime-window-interaction-integration runtime-quick-terminal-integration runtime-secure-keyboard-entry-integration runtime-diagnostics-integration runtime-configuration-integration runtime-theme-integration runtime-shell-integration runtime-desktop-signals-integration runtime-osc52-integration runtime-restoration-integration runtime-note-s1-integration runtime-note-s2-integration runtime-clipboard-integration runtime-lifecycle-integration \
 	runtime-traffic-integration runtime-resource-integration \
 	runtime-shutdown-fault-integration runtime-verify clean
 
@@ -294,6 +294,8 @@ help:
 	@echo "  make runtime-restoration-integration  Verify fullscreen, system recovery, restoration, and reopen in both modes"
 	@echo "  make runtime-note-s1-integration  Verify the complete Note S1 product vector in both modes"
 	@echo "  make contextual-memory-s1-acceptance  Run Note S1 runtime and safety/privacy audits"
+	@echo "  make runtime-note-s2-integration  Verify the complete Note S2 product vector in both modes"
+	@echo "  make contextual-memory-s2-acceptance  Run Note S2 runtime and safety/privacy audits"
 	@echo "  make runtime-clipboard-integration  Verify bounded Copy/Paste in both modes"
 	@echo "  make runtime-verify                Audit and integration-test both modes"
 
@@ -921,6 +923,10 @@ developer-jit-note-s1: developer-jit-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=developer-jit \
 		--suite=note-s1 $(DEVELOPER_JIT_BUNDLE)
 
+developer-jit-note-s2: developer-jit-build
+	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=developer-jit \
+		--suite=note-s2 $(DEVELOPER_JIT_BUNDLE)
+
 developer-jit-clipboard: developer-jit-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=developer-jit \
 		--suite=clipboard $(DEVELOPER_JIT_BUNDLE)
@@ -1178,6 +1184,10 @@ release-aot-note-s1: release-aot-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
 		--suite=note-s1 $(RELEASE_AOT_BUNDLE)
 
+release-aot-note-s2: release-aot-build
+	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
+		--suite=note-s2 $(RELEASE_AOT_BUNDLE)
+
 release-aot-clipboard: release-aot-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
 		--suite=clipboard $(RELEASE_AOT_BUNDLE)
@@ -1262,6 +1272,14 @@ contextual-memory-s1-acceptance: terminal-notes-capability-audit \
 	runtime-note-s1-integration
 	@echo "CONTEXTUAL_MEMORY_S1_ACCEPTANCE_PASS runtimes=2 sanitizer=true bundle=true privacy=true restoration=true shell=true diagnostics=true dart_appkit=generic"
 
+runtime-note-s2-integration: developer-jit-note-s2 release-aot-note-s2
+
+contextual-memory-s2-acceptance: terminal-notes-capability-audit \
+	product-native-sanitizer runtime-bundle-audit \
+	terminal-diagnostics-privacy-check terminal-shell-integration-check \
+	runtime-note-s2-integration
+	@echo "CONTEXTUAL_MEMORY_S2_ACCEPTANCE_PASS runtimes=2 vectors=4 focus_edges=64 tui=true sanitizer=true bundle=true privacy=true restoration=true shell=true diagnostics=true dart_appkit=generic"
+
 runtime-clipboard-integration: \
 	developer-jit-clipboard release-aot-clipboard
 
@@ -1293,6 +1311,7 @@ runtime-verify: test runtime-source-check runtime-bundle-audit \
 	runtime-osc52-integration \
 	runtime-restoration-integration \
 	runtime-note-s1-integration \
+	runtime-note-s2-integration \
 	runtime-clipboard-integration \
 	runtime-lifecycle-integration \
 	runtime-traffic-integration runtime-resource-integration \

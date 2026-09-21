@@ -99,6 +99,8 @@ import 'terminal_note_native_adapter_test.dart';
 import 'terminal_note_product_subsystem_test.dart';
 import 'terminal_note_s1_product_acceptance_test.dart'
     as terminal_note_s1_product_acceptance_test;
+import 'terminal_note_s2_product_acceptance_test.dart'
+    as terminal_note_s2_product_acceptance_test;
 import 'terminal_note_store_acceptance_test.dart';
 import 'terminal_note_store_codec_test.dart';
 import 'terminal_note_store_isolate_test.dart';
@@ -227,6 +229,7 @@ Future<void> main() async {
   await runTerminalNoteNativeAdapterTests();
   await runTerminalNoteProductSubsystemTests();
   await terminal_note_s1_product_acceptance_test.main();
+  await terminal_note_s2_product_acceptance_test.main();
   await runTerminalNoteCompositionTests();
   runTerminalNoteModelTests();
   await runTerminalNoteStoreAcceptanceTests();
@@ -2001,6 +2004,61 @@ void _testOptions() {
       },
     ),
     'Note S1 and native hierarchy tests are mutually exclusive',
+  );
+  final TerminalOptions noteS2TestOptions = _parseOptions(
+    const <String>['--runtime-note-s2-test'],
+    environment: const <String, String>{
+      'DT_RUNTIME_NOTE_S2_TEST': '1',
+      'DT_RUNTIME_NOTE_S2_DIRECTORY': '/private/tmp/note-s2',
+    },
+  );
+  _expect(
+    noteS2TestOptions.runtimeNoteS2Test &&
+        noteS2TestOptions.runtimeNoteS2Directory == '/private/tmp/note-s2',
+    'gated Note S2 product test and isolated directory',
+  );
+  _expectThrows(
+    () => _parseOptions(const <String>['--runtime-note-s2-test']),
+    'Note S2 product test gate',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>['--runtime-note-s2-test'],
+      environment: const <String, String>{'DT_RUNTIME_NOTE_S2_TEST': '1'},
+    ),
+    'Note S2 product test directory',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>['--runtime-note-s2-test'],
+      environment: const <String, String>{
+        'DT_RUNTIME_NOTE_S2_TEST': '1',
+        'DT_RUNTIME_NOTE_S2_DIRECTORY': 'relative/note-s2',
+      },
+    ),
+    'Note S2 product test requires an absolute directory',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>['--runtime-note-s2-test', '--runtime-note-s2-test'],
+      environment: const <String, String>{
+        'DT_RUNTIME_NOTE_S2_TEST': '1',
+        'DT_RUNTIME_NOTE_S2_DIRECTORY': '/private/tmp/note-s2',
+      },
+    ),
+    'duplicate Note S2 product test option',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>['--runtime-note-s1-test', '--runtime-note-s2-test'],
+      environment: const <String, String>{
+        'DT_RUNTIME_NOTE_S1_TEST': '1',
+        'DT_RUNTIME_NOTE_S1_DIRECTORY': '/private/tmp/note-s1',
+        'DT_RUNTIME_NOTE_S2_TEST': '1',
+        'DT_RUNTIME_NOTE_S2_DIRECTORY': '/private/tmp/note-s2',
+      },
+    ),
+    'Note S1 and S2 product tests are mutually exclusive',
   );
   _expectThrows(
     () => _parseOptions(

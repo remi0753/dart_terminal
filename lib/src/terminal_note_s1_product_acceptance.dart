@@ -66,6 +66,82 @@ final class TerminalNoteS1SentinelSnapshot {
       diagnosticContentFields == other.diagnosticContentFields;
 }
 
+typedef TerminalNoteS2SentinelProbe = TerminalNoteS2SentinelSnapshot Function();
+
+/// Content-free terminal/TUI state which On Return presentation must preserve.
+final class TerminalNoteS2SentinelSnapshot {
+  TerminalNoteS2SentinelSnapshot({
+    required this.terminalOutputBytes,
+    required this.terminalRows,
+    required this.terminalColumns,
+    required this.shellIntegrationEvents,
+    required this.restorationPayloadEntries,
+    required this.diagnosticContentFields,
+    required this.terminalInputDeliveries,
+    required this.ptyWriteEnqueuedCount,
+    required this.focusReportCount,
+    required this.usingAlternateScreen,
+    required this.applicationCursorKeys,
+    required this.bracketedPasteMode,
+    required this.focusReportingMode,
+    required this.mouseTrackingEnabled,
+    required this.mouseSgrEncoding,
+  }) {
+    if (terminalOutputBytes < 0 ||
+        terminalRows <= 0 ||
+        terminalColumns <= 0 ||
+        shellIntegrationEvents < 0 ||
+        restorationPayloadEntries < 0 ||
+        diagnosticContentFields < 0 ||
+        terminalInputDeliveries < 0 ||
+        ptyWriteEnqueuedCount < 0 ||
+        focusReportCount < 0) {
+      throw ArgumentError('Note S2 sentinel snapshot is invalid');
+    }
+  }
+
+  final int terminalOutputBytes;
+  final int terminalRows;
+  final int terminalColumns;
+  final int shellIntegrationEvents;
+  final int restorationPayloadEntries;
+  final int diagnosticContentFields;
+  final int terminalInputDeliveries;
+  final int ptyWriteEnqueuedCount;
+  final int focusReportCount;
+  final bool usingAlternateScreen;
+  final bool applicationCursorKeys;
+  final bool bracketedPasteMode;
+  final bool focusReportingMode;
+  final bool mouseTrackingEnabled;
+  final bool mouseSgrEncoding;
+
+  bool get hasTuiModeSignature =>
+      usingAlternateScreen &&
+      applicationCursorKeys &&
+      bracketedPasteMode &&
+      focusReportingMode &&
+      mouseTrackingEnabled &&
+      mouseSgrEncoding;
+
+  bool hasSameProtectedState(TerminalNoteS2SentinelSnapshot other) =>
+      terminalOutputBytes == other.terminalOutputBytes &&
+      terminalRows == other.terminalRows &&
+      terminalColumns == other.terminalColumns &&
+      shellIntegrationEvents == other.shellIntegrationEvents &&
+      restorationPayloadEntries == other.restorationPayloadEntries &&
+      diagnosticContentFields == other.diagnosticContentFields &&
+      terminalInputDeliveries == other.terminalInputDeliveries &&
+      ptyWriteEnqueuedCount == other.ptyWriteEnqueuedCount &&
+      focusReportCount == other.focusReportCount &&
+      usingAlternateScreen == other.usingAlternateScreen &&
+      applicationCursorKeys == other.applicationCursorKeys &&
+      bracketedPasteMode == other.bracketedPasteMode &&
+      focusReportingMode == other.focusReportingMode &&
+      mouseTrackingEnabled == other.mouseTrackingEnabled &&
+      mouseSgrEncoding == other.mouseSgrEncoding;
+}
+
 /// Fixed, content-free evidence emitted by the reusable S1 product vector.
 final class TerminalNoteS1ProductAcceptanceResult {
   const TerminalNoteS1ProductAcceptanceResult({
@@ -127,6 +203,71 @@ final class TerminalNoteS1ProductAcceptanceResult {
       'store_fault=${storeFaultReduced ? 1 : 0} '
       'native_faults=$nativeFaultCount restart=${exactRestart ? 1 : 0} '
       'default_off=${defaultOffZeroCost ? 1 : 0} '
+      'protected_state=${protectedStateUnchanged ? 1 : 0} '
+      'owners=$ownerLeakCount';
+}
+
+/// Fixed, content-free evidence emitted by the reusable S2 product vector.
+final class TerminalNoteS2ProductAcceptanceResult {
+  const TerminalNoteS2ProductAcceptanceResult({
+    required this.reviewVectorCount,
+    required this.standardWindowCount,
+    required this.standardTabCount,
+    required this.standardPaneCount,
+    required this.quickTerminalCount,
+    required this.focusEdgeCount,
+    required this.fifoAcknowledgementCount,
+    required this.falseConsumeCount,
+    required this.exactRestart,
+    required this.detachedPassive,
+    required this.disabledZeroEntry,
+    required this.tuiModeSignature,
+    required this.protectedStateUnchanged,
+    required this.ownerLeakCount,
+  });
+
+  final int reviewVectorCount;
+  final int standardWindowCount;
+  final int standardTabCount;
+  final int standardPaneCount;
+  final int quickTerminalCount;
+  final int focusEdgeCount;
+  final int fifoAcknowledgementCount;
+  final int falseConsumeCount;
+  final bool exactRestart;
+  final bool detachedPassive;
+  final bool disabledZeroEntry;
+  final bool tuiModeSignature;
+  final bool protectedStateUnchanged;
+  final int ownerLeakCount;
+
+  bool get isSuccess =>
+      reviewVectorCount == 4 &&
+      standardWindowCount == 2 &&
+      standardTabCount == 3 &&
+      standardPaneCount == 5 &&
+      quickTerminalCount == 1 &&
+      focusEdgeCount == 64 &&
+      fifoAcknowledgementCount == 2 &&
+      falseConsumeCount == 0 &&
+      exactRestart &&
+      detachedPassive &&
+      disabledZeroEntry &&
+      tuiModeSignature &&
+      protectedStateUnchanged &&
+      ownerLeakCount == 0;
+
+  String machineLine() =>
+      'TERMINAL_NOTE_S2_PRODUCT_PASS '
+      'vectors=$reviewVectorCount windows=$standardWindowCount '
+      'tabs=$standardTabCount panes=$standardPaneCount '
+      'quick=$quickTerminalCount focus_edges=$focusEdgeCount '
+      'fifo_acks=$fifoAcknowledgementCount '
+      'false_consumes=$falseConsumeCount '
+      'restart=${exactRestart ? 1 : 0} '
+      'detached=${detachedPassive ? 1 : 0} '
+      'disabled=${disabledZeroEntry ? 1 : 0} '
+      'tui_modes=${tuiModeSignature ? 1 : 0} '
       'protected_state=${protectedStateUnchanged ? 1 : 0} '
       'owners=$ownerLeakCount';
 }
@@ -238,13 +379,15 @@ abstract final class TerminalNoteS1ProductAcceptance {
             ..add(TerminalNotesAttachDisposition.attached)
             ..add(TerminalNotesAttachDisposition.rendererUnavailable)
             ..add(TerminalNotesAttachDisposition.attached);
-      final List<_S1NativeChannel> channels = <_S1NativeChannel>[];
-      _S1NativeChannel createChannel() {
-        final _S1NativeChannel channel = _S1NativeChannel(
-          attachment: attachments.isEmpty
-              ? TerminalNotesAttachDisposition.attached
-              : attachments.removeFirst(),
-        );
+      final List<_NoteAcceptanceNativeChannel> channels =
+          <_NoteAcceptanceNativeChannel>[];
+      _NoteAcceptanceNativeChannel createChannel() {
+        final _NoteAcceptanceNativeChannel channel =
+            _NoteAcceptanceNativeChannel(
+              attachment: attachments.isEmpty
+                  ? TerminalNotesAttachDisposition.attached
+                  : attachments.removeFirst(),
+            );
         channels.add(channel);
         return channel;
       }
@@ -310,7 +453,7 @@ abstract final class TerminalNoteS1ProductAcceptance {
         'primary Note surface was not attached: '
         '${attached.disposition.name}/${coordinator.capability.name}',
       );
-      final _S1NativeChannel primary = channels.first;
+      final _NoteAcceptanceNativeChannel primary = channels.first;
 
       final TerminalNoteProductTopologyResult began = await coordinator
           .performAction(
@@ -476,7 +619,7 @@ abstract final class TerminalNoteS1ProductAcceptance {
         sourceAttached.isAccepted,
         'Detached source surface unavailable',
       );
-      final _S1NativeChannel source = channels.last;
+      final _NoteAcceptanceNativeChannel source = channels.last;
       await coordinator.performAction(
         detachedSourcePane,
         TerminalNoteApplicationActionKind.newNote,
@@ -524,7 +667,7 @@ abstract final class TerminalNoteS1ProductAcceptance {
             copyEffect: (_) => false,
             exportDestinationChooser: (_) => null,
             initializeNativeCapability: () {},
-            surfaceFactory: () => _S1NativeChannel(
+            surfaceFactory: () => _NoteAcceptanceNativeChannel(
               attachment: TerminalNotesAttachDisposition.attached,
             ),
             storeFactory: storeFactory,
@@ -583,7 +726,8 @@ abstract final class TerminalNoteS1ProductAcceptance {
         'exact restoration bytes were not persisted',
       );
       reopenedTopology = await _createTopology(initialPaneId: 400);
-      final List<_S1NativeChannel> reopenedChannels = <_S1NativeChannel>[];
+      final List<_NoteAcceptanceNativeChannel> reopenedChannels =
+          <_NoteAcceptanceNativeChannel>[];
       reopenedCoordinator =
           await TerminalNoteApplicationCoordinator.startProduction(
             launchConfiguration: _enabled,
@@ -598,9 +742,10 @@ abstract final class TerminalNoteS1ProductAcceptance {
             exportDestinationChooser: (_) => null,
             initializeNativeCapability: () {},
             surfaceFactory: () {
-              final _S1NativeChannel channel = _S1NativeChannel(
-                attachment: TerminalNotesAttachDisposition.attached,
-              );
+              final _NoteAcceptanceNativeChannel channel =
+                  _NoteAcceptanceNativeChannel(
+                    attachment: TerminalNotesAttachDisposition.attached,
+                  );
               reopenedChannels.add(channel);
               return channel;
             },
@@ -717,6 +862,814 @@ abstract final class TerminalNoteS1ProductAcceptance {
     screen: null,
     fullscreen: false,
   );
+}
+
+/// Runs the deterministic S2 product vector used by focused and runtime gates.
+///
+/// The host supplies a content-free snapshot of its live PTY/TUI state. The
+/// vector owns the real Note worker/filesystem and product authority while its
+/// native channel remains injected at the semantic projection boundary.
+abstract final class TerminalNoteS2ProductAcceptance {
+  static const TerminalNoteFeatureConfiguration _enabled =
+      TerminalNoteFeatureConfiguration(
+        notes: true,
+        notesOnReturn: true,
+        notesNextPrompt: false,
+        fontSize: 15,
+      );
+  static const TerminalNoteFeatureConfiguration _s1Only =
+      TerminalNoteFeatureConfiguration(
+        notes: true,
+        notesOnReturn: false,
+        notesNextPrompt: false,
+        fontSize: 15,
+      );
+
+  static Future<TerminalNoteS2ProductAcceptanceResult> run({
+    required Directory rootDirectory,
+    required TerminalNoteS2SentinelProbe sentinelProbe,
+    TerminalNoteAuthorityStoreFactory? storeFactory,
+    TerminalNoteContextIdGenerator? contextIdGenerator,
+    TerminalNoteIdGenerator? noteIdGenerator,
+  }) async {
+    final Directory root = Directory(
+      await rootDirectory.resolveSymbolicLinks(),
+    );
+    final TerminalNoteS2SentinelSnapshot before = sentinelProbe();
+    _require(
+      before.hasTuiModeSignature,
+      'Note S2 runtime did not enter the required TUI mode signature',
+    );
+    final _NoteOwnerCounts ownerBaseline = _NoteOwnerCounts.capture();
+    final TerminalNoteContextIdGenerator selectedContextIdGenerator =
+        contextIdGenerator ?? TerminalNoteContextIdGenerator.secure();
+    final TerminalNoteIdGenerator selectedNoteIdGenerator =
+        noteIdGenerator ?? TerminalNoteIdGenerator.secure();
+    final TerminalRestorationPersistence restorationPersistence =
+        TerminalRestorationPersistence(
+          FileTerminalRestorationStore('${root.path}/restoration.json'),
+        );
+    var timestamp = 20000;
+    var fifoAcknowledgementCount = 0;
+    var falseConsumeCount = 0;
+    var detachedPassive = false;
+    var disabledZeroEntry = false;
+    var exactRestart = false;
+    var acceptancePhase = 'startup';
+
+    void reportAsynchronousError(Object error, StackTrace stackTrace) {
+      Zone.current.handleUncaughtError(
+        StateError('Note S2 $acceptancePhase failed asynchronously: $error'),
+        stackTrace,
+      );
+    }
+
+    TerminalNoteApplicationCoordinator? disabledCoordinator;
+    TerminalWindowInteractionAuthority? disabledInteractionAuthority;
+    TerminalWindowInteractionRouter? disabledInteractionRouter;
+    _AcceptanceTopology? disabledTopology;
+    TerminalNoteApplicationCoordinator? detachedCoordinator;
+    TerminalWindowInteractionAuthority? detachedInteractionAuthority;
+    TerminalWindowInteractionRouter? detachedInteractionRouter;
+    _AcceptanceTopology? detachedTopology;
+    TerminalNoteApplicationCoordinator? coordinator;
+    TerminalWindowInteractionAuthority? interactionAuthority;
+    TerminalWindowInteractionRouter? interactionRouter;
+    _AcceptanceTopology? topology;
+    TerminalNoteApplicationCoordinator? reopenedCoordinator;
+    TerminalWindowInteractionAuthority? reopenedInteractionAuthority;
+    TerminalWindowInteractionRouter? reopenedInteractionRouter;
+    _AcceptanceTopology? reopenedTopology;
+    try {
+      // `notes-on-return=false` retains S1 but has no S2 entry or mutation.
+      acceptancePhase = 'disabled-path';
+      disabledTopology = await _createTopology(
+        standardWindowCount: 1,
+        initialPaneId: 700,
+      );
+      final _NoteAcceptanceNativeChannel disabledChannel =
+          _NoteAcceptanceNativeChannel(
+            attachment: TerminalNotesAttachDisposition.attached,
+          );
+      disabledCoordinator =
+          await TerminalNoteApplicationCoordinator.startProduction(
+            launchConfiguration: _s1Only,
+            environment: <String, String>{
+              'XDG_STATE_HOME': '${root.path}/disabled-state',
+            },
+            authorityGeneration: 201,
+            restoration: null,
+            initialBindings: disabledTopology.standardBindings,
+            ensureQuickTerminalContext: false,
+            copyEffect: (_) => false,
+            exportDestinationChooser: (_) => null,
+            initializeNativeCapability: () {},
+            surfaceFactory: () => disabledChannel,
+            storeFactory: storeFactory,
+            contextIdGenerator: selectedContextIdGenerator,
+            noteIdGenerator: selectedNoteIdGenerator,
+            clock: () => timestamp++,
+            onError: reportAsynchronousError,
+          );
+      disabledInteractionAuthority = TerminalWindowInteractionAuthority(
+        disabledTopology.state,
+      );
+      disabledInteractionRouter = TerminalWindowInteractionRouter(
+        disabledInteractionAuthority,
+      );
+      final PaneId disabledPane = disabledTopology.standardPaneIds.single;
+      final TerminalPaneLocation disabledLocation = disabledTopology.state
+          .locationForPane(disabledPane)!;
+      disabledTopology.state.focusPane(disabledLocation.tabId, disabledPane);
+      disabledInteractionAuthority.synchronize();
+      final TerminalNoteProductTopologyResult disabledAttached =
+          await disabledCoordinator.synchronizeSurface(
+            paneId: disabledPane,
+            windowId: disabledLocation.windowId,
+            configuration: _surfaceConfiguration(701),
+            interactionAuthority: disabledInteractionAuthority,
+            interactionRouter: disabledInteractionRouter,
+            focusTerminal: () => true,
+          );
+      _require(disabledAttached.isAccepted, 'S1-only surface did not attach');
+      await disabledCoordinator.performAction(
+        disabledPane,
+        TerminalNoteApplicationActionKind.newNote,
+      );
+      await _sendIntent(
+        disabledChannel,
+        kind: TerminalNotesIntentKind.save,
+        color: TerminalNotesColor.neutral,
+        body: 's2-disabled-s1-note',
+      );
+      final TerminalNotesProjection disabledBefore = disabledChannel.projection;
+      final TerminalNotesNativeResult rejectedArm = await _sendIntent(
+        disabledChannel,
+        kind: TerminalNotesIntentKind.armOnReturn,
+        cardToken: disabledBefore.cards.single.token,
+        expectedDisposition: TerminalNotesResultDisposition.rejected,
+      );
+      final TerminalNotesProjection disabledAfter = disabledChannel.projection;
+      disabledZeroEntry =
+          !disabledAfter.onReturnEnabled &&
+          disabledAfter.activeCount == 1 &&
+          disabledAfter.storeRevision == disabledBefore.storeRevision &&
+          disabledAfter.cards.single.triggerKind == null &&
+          rejectedArm.newStoreRevision == disabledBefore.storeRevision;
+      _require(
+        disabledZeroEntry,
+        'S2-disabled configuration admitted an On Return mutation',
+      );
+      await disabledCoordinator.shutdown();
+      disabledCoordinator = null;
+      disabledInteractionRouter.dispose();
+      disabledInteractionRouter = null;
+      disabledInteractionAuthority.dispose();
+      disabledInteractionAuthority = null;
+      await disabledTopology.state.shutdown();
+      disabledTopology = null;
+
+      // F4 is isolated so its user-close topology does not weaken the exact
+      // topology used by the F3 restoration vector.
+      acceptancePhase = 'detached-close';
+      detachedTopology = await _createTopology(initialPaneId: 800);
+      final List<_NoteAcceptanceNativeChannel> detachedChannels =
+          <_NoteAcceptanceNativeChannel>[];
+      detachedCoordinator =
+          await TerminalNoteApplicationCoordinator.startProduction(
+            launchConfiguration: _enabled,
+            environment: <String, String>{
+              'XDG_STATE_HOME': '${root.path}/detached-state',
+            },
+            authorityGeneration: 202,
+            restoration: null,
+            initialBindings: detachedTopology.standardBindings,
+            ensureQuickTerminalContext: false,
+            copyEffect: (_) => false,
+            exportDestinationChooser: (_) => null,
+            initializeNativeCapability: () {},
+            surfaceFactory: () {
+              final _NoteAcceptanceNativeChannel channel =
+                  _NoteAcceptanceNativeChannel(
+                    attachment: TerminalNotesAttachDisposition.attached,
+                  );
+              detachedChannels.add(channel);
+              return channel;
+            },
+            storeFactory: storeFactory,
+            contextIdGenerator: selectedContextIdGenerator,
+            noteIdGenerator: selectedNoteIdGenerator,
+            clock: () => timestamp++,
+            onError: reportAsynchronousError,
+          );
+      await detachedCoordinator.synchronizeTopology(
+        detachedTopology.standardBindings,
+      );
+      detachedInteractionAuthority = TerminalWindowInteractionAuthority(
+        detachedTopology.state,
+      );
+      detachedInteractionRouter = TerminalWindowInteractionRouter(
+        detachedInteractionAuthority,
+      );
+      final PaneId detachedViewer = detachedTopology.standardPaneIds.first;
+      final PaneId detachedSource = detachedTopology.standardPaneIds[1];
+      for (final (PaneId paneId, int identity) in <(PaneId, int)>[
+        (detachedViewer, 801),
+        (detachedSource, 802),
+      ]) {
+        final TerminalPaneLocation location = detachedTopology.state
+            .locationForPane(paneId)!;
+        detachedTopology.state.focusPane(location.tabId, paneId);
+        detachedInteractionAuthority.synchronize();
+        final TerminalNoteProductTopologyResult attached =
+            await detachedCoordinator.synchronizeSurface(
+              paneId: paneId,
+              windowId: location.windowId,
+              configuration: _surfaceConfiguration(identity),
+              interactionAuthority: detachedInteractionAuthority,
+              interactionRouter: detachedInteractionRouter,
+              focusTerminal: () => true,
+            );
+        _require(attached.isAccepted, 'F4 surface did not attach');
+      }
+      final _NoteAcceptanceNativeChannel detachedViewerChannel =
+          detachedChannels[0];
+      final _NoteAcceptanceNativeChannel detachedSourceChannel =
+          detachedChannels[1];
+      await detachedCoordinator.performAction(
+        detachedSource,
+        TerminalNoteApplicationActionKind.newNote,
+      );
+      await _sendIntent(
+        detachedSourceChannel,
+        kind: TerminalNotesIntentKind.saveOnReturn,
+        color: TerminalNotesColor.purple,
+        body: 's2-f4-detached',
+      );
+      final List<TerminalNoteApplicationPaneBinding> retainedBindings =
+          detachedTopology.standardBindings
+              .where(
+                (TerminalNoteApplicationPaneBinding binding) =>
+                    binding.paneId != detachedSource,
+              )
+              .toList(growable: false);
+      await detachedCoordinator.synchronizeTopology(retainedBindings);
+      final TerminalPaneLocation detachedViewerLocation = detachedTopology.state
+          .locationForPane(detachedViewer)!;
+      detachedTopology.state.focusPane(
+        detachedViewerLocation.tabId,
+        detachedViewer,
+      );
+      detachedInteractionAuthority.synchronize();
+      await _sendIntent(
+        detachedViewerChannel,
+        kind: TerminalNotesIntentKind.showDetached,
+      );
+      final TerminalNotesProjection detachedProjection =
+          detachedViewerChannel.projection;
+      detachedPassive =
+          detachedProjection.section ==
+              TerminalNotesCollectionSection.detached &&
+          detachedProjection.dueCount == 0 &&
+          detachedProjection.cards.length == 1 &&
+          detachedProjection.cards.single.body == 's2-f4-detached' &&
+          detachedProjection.cards.single.triggerKind == null &&
+          detachedProjection.cards.single.triggerPhase == null;
+      _require(
+        detachedPassive,
+        'F4 user close did not leave one passive Detached Note',
+      );
+      await detachedTopology.state.removePane(detachedSource);
+      detachedInteractionAuthority.synchronize();
+      await detachedCoordinator.shutdown();
+      detachedCoordinator = null;
+      detachedInteractionRouter.dispose();
+      detachedInteractionRouter = null;
+      detachedInteractionAuthority.dispose();
+      detachedInteractionAuthority = null;
+      await detachedTopology.state.shutdown();
+      detachedTopology = null;
+
+      acceptancePhase = 'focus-fifo';
+      topology = await _createTopology();
+      final List<_NoteAcceptanceNativeChannel> channels =
+          <_NoteAcceptanceNativeChannel>[];
+      coordinator = await TerminalNoteApplicationCoordinator.startProduction(
+        launchConfiguration: _enabled,
+        environment: <String, String>{
+          'XDG_STATE_HOME': '${root.path}/main-state',
+        },
+        authorityGeneration: 203,
+        restoration: null,
+        initialBindings: topology.standardBindings,
+        ensureQuickTerminalContext: true,
+        copyEffect: (_) => false,
+        exportDestinationChooser: (_) => null,
+        initializeNativeCapability: () {},
+        surfaceFactory: () {
+          final _NoteAcceptanceNativeChannel channel =
+              _NoteAcceptanceNativeChannel(
+                attachment: TerminalNotesAttachDisposition.attached,
+              );
+          channels.add(channel);
+          return channel;
+        },
+        storeFactory: storeFactory,
+        contextIdGenerator: selectedContextIdGenerator,
+        noteIdGenerator: selectedNoteIdGenerator,
+        clock: () => timestamp++,
+        onError: reportAsynchronousError,
+      );
+      await coordinator.synchronizeTopology(topology.allBindings);
+      interactionAuthority = TerminalWindowInteractionAuthority(topology.state);
+      interactionRouter = TerminalWindowInteractionRouter(interactionAuthority);
+      final _AcceptanceTopology activeTopology = topology;
+      final TerminalNoteApplicationCoordinator activeCoordinator = coordinator;
+      final TerminalWindowInteractionAuthority activeInteractionAuthority =
+          interactionAuthority;
+      final TerminalWindowInteractionRouter activeInteractionRouter =
+          interactionRouter;
+
+      Future<_NoteAcceptanceNativeChannel> attachPane(
+        PaneId paneId,
+        int identity,
+      ) async {
+        final TerminalPaneLocation location = activeTopology.state
+            .locationForPane(paneId)!;
+        activeTopology.state.focusPane(location.tabId, paneId);
+        activeInteractionAuthority.synchronize();
+        final TerminalNoteProductTopologyResult attached =
+            await activeCoordinator.synchronizeSurface(
+              paneId: paneId,
+              windowId: location.windowId,
+              configuration: _surfaceConfiguration(identity),
+              interactionAuthority: activeInteractionAuthority,
+              interactionRouter: activeInteractionRouter,
+              focusTerminal: () => true,
+            );
+        _require(attached.isAccepted, 'S2 product surface did not attach');
+        return channels.last;
+      }
+
+      final PaneId primaryPane = topology.standardPaneIds.first;
+      final _NoteAcceptanceNativeChannel primary = await attachPane(
+        primaryPane,
+        901,
+      );
+      for (final (String body, TerminalNotesColor color)
+          in <(String, TerminalNotesColor)>[
+            ('s2-fifo-first', TerminalNotesColor.yellow),
+            ('s2-fifo-second', TerminalNotesColor.blue),
+          ]) {
+        await coordinator.performAction(
+          primaryPane,
+          TerminalNoteApplicationActionKind.newNote,
+        );
+        await _sendIntent(
+          primary,
+          kind: TerminalNotesIntentKind.saveOnReturn,
+          color: color,
+          body: body,
+        );
+      }
+      TerminalNotesProjection projection = primary.projection;
+      final int firstToken = projection.cards
+          .firstWhere((TerminalNotesCard card) => card.body == 's2-fifo-first')
+          .token;
+      await _sendIntent(
+        primary,
+        kind: TerminalNotesIntentKind.beginEdit,
+        cardToken: firstToken,
+      );
+      await _sendIntent(
+        primary,
+        kind: TerminalNotesIntentKind.cancel,
+        cardToken: primary.projection.selectedToken,
+      );
+      projection = primary.projection;
+      final int explicitFocusCallCount = primary.focusCallCount;
+      _require(
+        projection.dueCount == 0 &&
+            projection.cards.length == 2 &&
+            projection.cards.every(
+              (TerminalNotesCard card) =>
+                  card.triggerPhase ==
+                  TerminalNotesTriggerPhase.onReturnArmedHere,
+            ) &&
+            explicitFocusCallCount > 0,
+        'F1 editor visit created a delivery or lost explicit editor focus',
+      );
+
+      const int focusEdgeCount = 64;
+      final List<Future<TerminalNoteProductTopologyResult>> pressure =
+          <Future<TerminalNoteProductTopologyResult>>[];
+      for (var edge = 0; edge < focusEdgeCount; edge++) {
+        final bool eligible = edge.isOdd;
+        pressure.add(
+          coordinator.synchronizeSurface(
+            paneId: primaryPane,
+            windowId: topology.state.locationForPane(primaryPane)!.windowId,
+            configuration: _surfaceConfiguration(
+              901,
+              visibility: TerminalNoteSurfaceVisibility.collapsed,
+              foreground: eligible,
+              occluded: !eligible && edge % 4 == 2,
+            ),
+            interactionAuthority: interactionAuthority,
+            interactionRouter: interactionRouter,
+            focusTerminal: () => true,
+          ),
+        );
+      }
+      final List<TerminalNoteProductTopologyResult> pressureResults =
+          await Future.wait(pressure);
+      _require(
+        pressureResults.every(
+          (TerminalNoteProductTopologyResult result) => result.isAccepted,
+        ),
+        '64-edge S2 pressure rejected a product surface transition',
+      );
+      projection = await _waitForProjection(
+        primary,
+        (TerminalNotesProjection candidate) =>
+            candidate.dueCount == 2 &&
+            candidate.visibility == TerminalNotesVisibility.expanded &&
+            candidate.presentationEligible &&
+            candidate.cards.length == 2 &&
+            candidate.cards.every((TerminalNotesCard card) => card.due),
+      );
+      final List<String> fifoBodies = projection.cards
+          .map((TerminalNotesCard card) => card.body)
+          .toList(growable: false);
+      _require(
+        fifoBodies.toSet().containsAll(<String>{
+              's2-fifo-first',
+              's2-fifo-second',
+            }) &&
+            primary.focusCallCount == explicitFocusCallCount,
+        'F2 did not expose one non-focusing FIFO rail',
+      );
+
+      Future<void> expectFalseConsume(String label) async {
+        final int dueBefore = primary.projection.dueCount;
+        await _notifyAndWaitForPump(primary);
+        final int dueAfter = primary.projection.dueCount;
+        if (dueAfter < dueBefore) falseConsumeCount += dueBefore - dueAfter;
+        _require(
+          dueAfter == dueBefore,
+          '$label consumed an ineligible S2 delivery',
+        );
+      }
+
+      await coordinator.synchronizeSurface(
+        paneId: primaryPane,
+        windowId: topology.state.locationForPane(primaryPane)!.windowId,
+        configuration: _surfaceConfiguration(
+          901,
+          foreground: false,
+          occluded: false,
+        ),
+        interactionAuthority: interactionAuthority,
+        interactionRouter: interactionRouter,
+        focusTerminal: () => true,
+      );
+      await expectFalseConsume('background wake');
+      await coordinator.synchronizeSurface(
+        paneId: primaryPane,
+        windowId: topology.state.locationForPane(primaryPane)!.windowId,
+        configuration: _surfaceConfiguration(
+          901,
+          foreground: true,
+          occluded: true,
+        ),
+        interactionAuthority: interactionAuthority,
+        interactionRouter: interactionRouter,
+        focusTerminal: () => true,
+      );
+      await expectFalseConsume('occluded wake');
+      await coordinator.synchronizeSurface(
+        paneId: primaryPane,
+        windowId: topology.state.locationForPane(primaryPane)!.windowId,
+        configuration: _surfaceConfiguration(901),
+        interactionAuthority: interactionAuthority,
+        interactionRouter: interactionRouter,
+        focusTerminal: () => true,
+      );
+      projection = await _waitForProjection(
+        primary,
+        (TerminalNotesProjection candidate) =>
+            candidate.dueCount == 2 && candidate.presentationEligible,
+      );
+      primary.smallPane = true;
+      await expectFalseConsume('small-pane wake');
+      primary.smallPane = false;
+      primary.presentationProjectionGeneration =
+          projection.projectionGeneration - 1;
+      await expectFalseConsume('stale-layout wake');
+      primary.presentationProjectionGeneration = null;
+
+      final int firstAcknowledgedGeneration =
+          primary.projection.projectionGeneration;
+      primary.notify();
+      projection = await _waitForProjection(
+        primary,
+        (TerminalNotesProjection candidate) =>
+            candidate.dueCount == 1 &&
+            candidate.cards.first.body == fifoBodies[1] &&
+            candidate.cards.first.due,
+      );
+      fifoAcknowledgementCount++;
+      primary.presentationProjectionGeneration = firstAcknowledgedGeneration;
+      primary.visibleAcknowledgementEligibleGeneration =
+          firstAcknowledgedGeneration;
+      await expectFalseConsume('duplicate old-generation wake');
+      primary.presentationProjectionGeneration = null;
+      primary.visibleAcknowledgementEligibleGeneration = null;
+      primary.notify();
+      projection = await _waitForProjection(
+        primary,
+        (TerminalNotesProjection candidate) => candidate.dueCount == 0,
+      );
+      fifoAcknowledgementCount++;
+      _require(
+        fifoAcknowledgementCount == 2 &&
+            falseConsumeCount == 0 &&
+            primary.focusCallCount == explicitFocusCallCount,
+        'F2 FIFO acknowledgement or false-consume boundary failed',
+      );
+
+      acceptancePhase = 'quick-terminal';
+      final PaneId quickPane = topology.quickPaneId!;
+      final _NoteAcceptanceNativeChannel quick = await attachPane(
+        quickPane,
+        902,
+      );
+      await coordinator.performAction(
+        quickPane,
+        TerminalNoteApplicationActionKind.newNote,
+      );
+      await _sendIntent(
+        quick,
+        kind: TerminalNotesIntentKind.saveOnReturn,
+        color: TerminalNotesColor.green,
+        body: 's2-quick-return',
+      );
+      final int quickExplicitFocusCallCount = quick.focusCallCount;
+      final TerminalWindowId quickWindow = topology.state
+          .locationForPane(quickPane)!
+          .windowId;
+      await coordinator.synchronizeSurface(
+        paneId: quickPane,
+        windowId: quickWindow,
+        configuration: _surfaceConfiguration(
+          902,
+          foreground: false,
+          occluded: true,
+        ),
+        interactionAuthority: interactionAuthority,
+        interactionRouter: interactionRouter,
+        focusTerminal: () => true,
+      );
+      await coordinator.synchronizeSurface(
+        paneId: quickPane,
+        windowId: quickWindow,
+        configuration: _surfaceConfiguration(902),
+        interactionAuthority: interactionAuthority,
+        interactionRouter: interactionRouter,
+        focusTerminal: () => true,
+      );
+      await _waitForProjection(
+        quick,
+        (TerminalNotesProjection candidate) =>
+            candidate.dueCount == 1 &&
+            candidate.visibility == TerminalNotesVisibility.expanded &&
+            candidate.presentationEligible,
+      );
+      quick.notify();
+      await _waitForProjection(
+        quick,
+        (TerminalNotesProjection candidate) => candidate.dueCount == 0,
+      );
+      _require(
+        quickExplicitFocusCallCount > 0 &&
+            quick.focusCallCount == quickExplicitFocusCallCount,
+        'Quick Terminal return stole terminal focus',
+      );
+
+      acceptancePhase = 'restart-arm';
+      final int restartPaneIndex = 1;
+      final PaneId restartPane = topology.standardPaneIds[restartPaneIndex];
+      final _NoteAcceptanceNativeChannel restart = await attachPane(
+        restartPane,
+        903,
+      );
+      await coordinator.performAction(
+        restartPane,
+        TerminalNoteApplicationActionKind.newNote,
+      );
+      await _sendIntent(
+        restart,
+        kind: TerminalNotesIntentKind.saveOnReturn,
+        color: TerminalNotesColor.pink,
+        body: 's2-f3-restart',
+      );
+      _require(
+        restart.projection.cards.single.triggerPhase ==
+            TerminalNotesTriggerPhase.onReturnArmedHere,
+        'F3 restart Note was not armed in the current visit',
+      );
+
+      final TerminalNoteRestorationCaptureArtifact capture =
+          TerminalNoteRestorationCaptureArtifact.capture(
+            topology.state,
+            placementForWindow:
+                TerminalNoteS1ProductAcceptance._placementForWindow,
+            workingDirectoryForPane: (_) => null,
+          );
+      Future<bool> commitRestoration(
+        TerminalNoteRestorationArtifact artifact,
+      ) async =>
+          (await restorationPersistence.saveExactEncoded(artifact.exactEncoded))
+              .disposition ==
+          TerminalRestorationSaveDisposition.saved;
+      final TerminalNoteApplicationShutdownResult firstShutdown =
+          await coordinator.shutdownApplication(
+            capture: capture,
+            updatedAtUtcMicros: timestamp++,
+            commitRestoration: commitRestoration,
+          );
+      _require(firstShutdown.isSuccess, 'F3 ordered shutdown failed');
+      coordinator = null;
+      interactionRouter.dispose();
+      interactionRouter = null;
+      interactionAuthority.dispose();
+      interactionAuthority = null;
+      await topology.state.shutdown();
+      topology = null;
+
+      final TerminalRestorationLoadResult loaded = await restorationPersistence
+          .load();
+      _require(
+        loaded.disposition == TerminalRestorationLoadDisposition.restored &&
+            loaded.exactEncoded == capture.restoration.exactEncoded,
+        'F3 exact restoration artifact was not persisted',
+      );
+      acceptancePhase = 'restart-reopen';
+      reopenedTopology = await _createTopology(initialPaneId: 1000);
+      final _NoteAcceptanceNativeChannel reopenedChannel =
+          _NoteAcceptanceNativeChannel(
+            attachment: TerminalNotesAttachDisposition.attached,
+          );
+      reopenedCoordinator =
+          await TerminalNoteApplicationCoordinator.startProduction(
+            launchConfiguration: _enabled,
+            environment: <String, String>{
+              'XDG_STATE_HOME': '${root.path}/main-state',
+            },
+            authorityGeneration: 204,
+            restoration: TerminalNoteRestorationArtifact.fromExactEncoded(
+              loaded.exactEncoded!,
+            ),
+            initialBindings: reopenedTopology.standardBindings,
+            ensureQuickTerminalContext: true,
+            copyEffect: (_) => false,
+            exportDestinationChooser: (_) => null,
+            initializeNativeCapability: () {},
+            surfaceFactory: () => reopenedChannel,
+            storeFactory: storeFactory,
+            contextIdGenerator: selectedContextIdGenerator,
+            noteIdGenerator: selectedNoteIdGenerator,
+            clock: () => timestamp++,
+            onError: reportAsynchronousError,
+          );
+      await reopenedCoordinator.synchronizeTopology(
+        reopenedTopology.allBindings,
+      );
+      reopenedInteractionAuthority = TerminalWindowInteractionAuthority(
+        reopenedTopology.state,
+      );
+      reopenedInteractionRouter = TerminalWindowInteractionRouter(
+        reopenedInteractionAuthority,
+      );
+      final PaneId reopenedPane =
+          reopenedTopology.standardPaneIds[restartPaneIndex];
+      final TerminalPaneLocation reopenedLocation = reopenedTopology.state
+          .locationForPane(reopenedPane)!;
+      reopenedTopology.state.focusPane(reopenedLocation.tabId, reopenedPane);
+      reopenedInteractionAuthority.synchronize();
+      final TerminalNoteProductTopologyResult reopenedAttached =
+          await reopenedCoordinator.synchronizeSurface(
+            paneId: reopenedPane,
+            windowId: reopenedLocation.windowId,
+            configuration: _surfaceConfiguration(
+              904,
+              visibility: TerminalNoteSurfaceVisibility.collapsed,
+            ),
+            interactionAuthority: reopenedInteractionAuthority,
+            interactionRouter: reopenedInteractionRouter,
+            focusTerminal: () => true,
+          );
+      _require(
+        reopenedAttached.isAccepted,
+        'F3 reopened surface did not attach',
+      );
+      final TerminalNotesProjection reopenedProjection =
+          await _waitForProjection(
+            reopenedChannel,
+            (TerminalNotesProjection candidate) =>
+                candidate.dueCount == 1 &&
+                candidate.visibility == TerminalNotesVisibility.expanded &&
+                candidate.cards.single.body == 's2-f3-restart' &&
+                candidate.cards.single.due,
+          );
+      exactRestart =
+          reopenedProjection.presentationEligible &&
+          reopenedChannel.focusCallCount == 0;
+      reopenedChannel.notify();
+      await _waitForProjection(
+        reopenedChannel,
+        (TerminalNotesProjection candidate) => candidate.dueCount == 0,
+      );
+      _require(exactRestart, 'F3 first eligible restart visit was not exact');
+      final TerminalNoteRestorationCaptureArtifact reopenedCapture =
+          TerminalNoteRestorationCaptureArtifact.capture(
+            reopenedTopology.state,
+            placementForWindow:
+                TerminalNoteS1ProductAcceptance._placementForWindow,
+            workingDirectoryForPane: (_) => null,
+          );
+      final TerminalNoteApplicationShutdownResult reopenedShutdown =
+          await reopenedCoordinator.shutdownApplication(
+            capture: reopenedCapture,
+            updatedAtUtcMicros: timestamp++,
+            commitRestoration: commitRestoration,
+          );
+      _require(
+        reopenedShutdown.isSuccess,
+        'F3 reopened ordered shutdown failed',
+      );
+      reopenedCoordinator = null;
+      reopenedInteractionRouter.dispose();
+      reopenedInteractionRouter = null;
+      reopenedInteractionAuthority.dispose();
+      reopenedInteractionAuthority = null;
+      await reopenedTopology.state.shutdown();
+      reopenedTopology = null;
+
+      final TerminalNoteS2SentinelSnapshot after = sentinelProbe();
+      final int ownerLeakCount = _NoteOwnerCounts.capture().delta(
+        ownerBaseline,
+      );
+      final TerminalNoteS2ProductAcceptanceResult result =
+          TerminalNoteS2ProductAcceptanceResult(
+            reviewVectorCount: 4,
+            standardWindowCount: 2,
+            standardTabCount: 3,
+            standardPaneCount: 5,
+            quickTerminalCount: 1,
+            focusEdgeCount: focusEdgeCount,
+            fifoAcknowledgementCount: fifoAcknowledgementCount,
+            falseConsumeCount: falseConsumeCount,
+            exactRestart: exactRestart,
+            detachedPassive: detachedPassive,
+            disabledZeroEntry: disabledZeroEntry,
+            tuiModeSignature:
+                before.hasTuiModeSignature && after.hasTuiModeSignature,
+            protectedStateUnchanged: before.hasSameProtectedState(after),
+            ownerLeakCount: ownerLeakCount,
+          );
+      _require(
+        result.isSuccess,
+        'S2 product acceptance result is incomplete: ${result.machineLine()}',
+      );
+      return result;
+    } finally {
+      await disabledCoordinator?.shutdown();
+      disabledInteractionRouter?.dispose();
+      disabledInteractionAuthority?.dispose();
+      if (disabledTopology != null && !disabledTopology.state.isDisposed) {
+        await disabledTopology.state.shutdown();
+      }
+      await detachedCoordinator?.shutdown();
+      detachedInteractionRouter?.dispose();
+      detachedInteractionAuthority?.dispose();
+      if (detachedTopology != null && !detachedTopology.state.isDisposed) {
+        await detachedTopology.state.shutdown();
+      }
+      await coordinator?.shutdown();
+      interactionRouter?.dispose();
+      interactionAuthority?.dispose();
+      if (topology != null && !topology.state.isDisposed) {
+        await topology.state.shutdown();
+      }
+      await reopenedCoordinator?.shutdown();
+      reopenedInteractionRouter?.dispose();
+      reopenedInteractionAuthority?.dispose();
+      if (reopenedTopology != null && !reopenedTopology.state.isDisposed) {
+        await reopenedTopology.state.shutdown();
+      }
+    }
+  }
 }
 
 final class _NoteOwnerCounts {
@@ -884,27 +1837,36 @@ TerminalPaneConfiguration _paneConfiguration() => TerminalPaneConfiguration(
   onExitRequested: () {},
 );
 
-TerminalNoteProductSurfaceConfiguration _surfaceConfiguration(int identity) =>
-    TerminalNoteProductSurfaceConfiguration(
-      rendererIdentity: TerminalMetalRendererCompositionIdentity(
-        handle: identity,
-        generation: identity,
-      ),
-      paneWidth: 900,
-      paneHeight: 600,
-      backingScale: 2,
-      requestedRailWidth: 320,
-      visibility: TerminalNoteSurfaceVisibility.expanded,
-      foreground: true,
-      occluded: false,
-    );
+TerminalNoteProductSurfaceConfiguration _surfaceConfiguration(
+  int identity, {
+  TerminalNoteSurfaceVisibility visibility =
+      TerminalNoteSurfaceVisibility.expanded,
+  bool foreground = true,
+  bool occluded = false,
+  double paneWidth = 900,
+  double paneHeight = 600,
+}) => TerminalNoteProductSurfaceConfiguration(
+  rendererIdentity: TerminalMetalRendererCompositionIdentity(
+    handle: identity,
+    generation: identity,
+  ),
+  paneWidth: paneWidth,
+  paneHeight: paneHeight,
+  backingScale: 2,
+  requestedRailWidth: 320,
+  visibility: visibility,
+  foreground: foreground,
+  occluded: occluded,
+);
 
 Future<TerminalNotesNativeResult> _sendIntent(
-  _S1NativeChannel channel, {
+  _NoteAcceptanceNativeChannel channel, {
   required TerminalNotesIntentKind kind,
   int? cardToken,
   TerminalNotesColor? color,
   String? body,
+  TerminalNotesResultDisposition expectedDisposition =
+      TerminalNotesResultDisposition.accepted,
 }) async {
   final TerminalNotesProjection projection = channel.projection;
   final int resultCount = channel.results.length;
@@ -929,16 +1891,48 @@ Future<TerminalNotesNativeResult> _sendIntent(
   }
   if (channel.results.length != resultCount + 1) {
     throw StateError(
-      'Note S1 intent did not produce exactly one result: '
+      'Note acceptance intent did not produce exactly one result: '
       '${kind.name}/results=${channel.results.length - resultCount}/'
       'pending=${channel.intents.length}/disposed=${channel.disposeCount}',
     );
   }
   final TerminalNotesNativeResult result = channel.results.last;
-  if (result.disposition != TerminalNotesResultDisposition.accepted) {
-    throw StateError('Note S1 intent was not accepted');
+  if (result.disposition != expectedDisposition) {
+    throw StateError(
+      'Note acceptance intent disposition ${result.disposition.name} did not '
+      'match ${expectedDisposition.name}',
+    );
   }
   return result;
+}
+
+Future<TerminalNotesProjection> _waitForProjection(
+  _NoteAcceptanceNativeChannel channel,
+  bool Function(TerminalNotesProjection projection) predicate,
+) async {
+  final Stopwatch deadline = Stopwatch()..start();
+  while (deadline.elapsed < const Duration(seconds: 5)) {
+    if (channel.projections.isNotEmpty) {
+      final TerminalNotesProjection projection = channel.projection;
+      if (predicate(projection)) return projection;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
+  throw StateError('timed out waiting for Note acceptance projection');
+}
+
+Future<void> _notifyAndWaitForPump(_NoteAcceptanceNativeChannel channel) async {
+  final int baseline = channel.takeIntentCount;
+  channel.notify();
+  final Stopwatch deadline = Stopwatch()..start();
+  while (channel.takeIntentCount == baseline &&
+      deadline.elapsed < const Duration(seconds: 3)) {
+    await Future<void>.delayed(const Duration(milliseconds: 1));
+  }
+  if (channel.takeIntentCount != baseline + 1) {
+    throw StateError('Note acceptance wake did not pump exactly once');
+  }
+  await _drainEvents();
 }
 
 Future<void> _drainEvents() async {
@@ -951,9 +1945,11 @@ void _require(bool condition, String message) {
   if (!condition) throw StateError(message);
 }
 
-final class _S1NativeChannel implements TerminalNoteNativeSurfaceChannel {
-  _S1NativeChannel({required TerminalNotesAttachDisposition attachment})
-    : _nextAttachment = attachment;
+final class _NoteAcceptanceNativeChannel
+    implements TerminalNoteNativeSurfaceChannel {
+  _NoteAcceptanceNativeChannel({
+    required TerminalNotesAttachDisposition attachment,
+  }) : _nextAttachment = attachment;
 
   final List<TerminalNotesProjection> projections = <TerminalNotesProjection>[];
   final Queue<TerminalNotesNativeIntent> intents =
@@ -965,10 +1961,18 @@ final class _S1NativeChannel implements TerminalNoteNativeSurfaceChannel {
   void Function()? _notificationHandler;
   (double, double, double, double)? _layout;
   var _eventGeneration = 0;
+  var takeIntentCount = 0;
   var disposeCount = 0;
   var detachCount = 0;
+  var focusCallCount = 0;
   var editorDirty = false;
   var confirmingDiscard = false;
+  var smallPane = false;
+  var railVisible = true;
+  int? snapshotProjectionGeneration;
+  int? presentationProjectionGeneration;
+  int? visibleAcknowledgementEligibleGeneration;
+  TerminalNotesRect? firstCard;
   TerminalNotesNativeFocusTarget _focusTarget =
       TerminalNotesNativeFocusTarget.none;
 
@@ -1019,8 +2023,10 @@ final class _S1NativeChannel implements TerminalNoteNativeSurfaceChannel {
   }
 
   @override
-  TerminalNotesNativeIntent? takeIntent() =>
-      intents.isEmpty ? null : intents.removeFirst();
+  TerminalNotesNativeIntent? takeIntent() {
+    takeIntentCount++;
+    return intents.isEmpty ? null : intents.removeFirst();
+  }
 
   @override
   TerminalNotesResultApplyDisposition applyResult(
@@ -1034,6 +2040,7 @@ final class _S1NativeChannel implements TerminalNoteNativeSurfaceChannel {
 
   @override
   bool focus(TerminalNotesNativeFocusTarget target) {
+    focusCallCount++;
     _focusTarget = target;
     return true;
   }
@@ -1050,7 +2057,8 @@ final class _S1NativeChannel implements TerminalNoteNativeSurfaceChannel {
     return TerminalNotesNativeSnapshot(
       paneId: current.paneId,
       surfaceGeneration: current.surfaceGeneration,
-      projectionGeneration: current.projectionGeneration,
+      projectionGeneration:
+          snapshotProjectionGeneration ?? current.projectionGeneration,
       storeRevision: current.storeRevision,
       acceptedProjectionCount: projections.length,
       rejectedProjectionCount: 0,
@@ -1069,6 +2077,7 @@ final class _S1NativeChannel implements TerminalNoteNativeSurfaceChannel {
       differentiateWithoutColor: current.differentiateWithoutColor,
       reduceMotion: current.reduceMotion,
       systemBadgeVisible: current.systemBadgeVisible,
+      onReturnEnabled: current.onReturnEnabled,
       featureState: current.featureState,
       surfaceState: current.surfaceState,
       section: current.section,
@@ -1089,8 +2098,19 @@ final class _S1NativeChannel implements TerminalNoteNativeSurfaceChannel {
   @override
   TerminalNotesNativePresentation get presentation {
     final TerminalNotesProjection current = projection;
+    final bool expanded =
+        current.visibility == TerminalNotesVisibility.expanded;
+    final bool visibleRail = expanded && railVisible && !smallPane;
+    final bool visibleDue =
+        visibleRail &&
+        current.presentationEligible &&
+        current.editorMode == TerminalNotesEditorMode.inactive &&
+        current.dueCount > 0 &&
+        current.cards.isNotEmpty &&
+        current.cards.first.due;
     return TerminalNotesNativePresentation(
-      projectionGeneration: current.projectionGeneration,
+      projectionGeneration:
+          presentationProjectionGeneration ?? current.projectionGeneration,
       paneWidth: _layout?.$1 ?? 900,
       paneHeight: _layout?.$2 ?? 600,
       backingScale: _layout?.$3 ?? 2,
@@ -1102,12 +2122,16 @@ final class _S1NativeChannel implements TerminalNoteNativeSurfaceChannel {
         height: 28,
       ),
       rail: const TerminalNotesRect(x: 568, y: 12, width: 320, height: 576),
-      firstCard: const TerminalNotesRect(x: 580, y: 74, width: 284, height: 88),
-      flags: 2,
+      firstCard:
+          firstCard ??
+          const TerminalNotesRect(x: 580, y: 74, width: 284, height: 88),
+      flags: (visibleRail ? 2 : 1) | (smallPane ? 4 : 0),
       materializedCardCount: current.cards.length,
       accessibilityNodeCount: 1,
       accessibilityBodyCount: current.cards.length,
-      visibleAcknowledgementEligibleGeneration: current.projectionGeneration,
+      visibleAcknowledgementEligibleGeneration:
+          visibleAcknowledgementEligibleGeneration ??
+          (visibleDue ? current.projectionGeneration : 0),
       accessibilityAnnouncementCount: 0,
       animationMilliseconds: 0,
       bodyFontMilliPoints: current.bodyFontMilliPoints,

@@ -1,7 +1,7 @@
 # Dart Terminal — contextual memory ロードマップ
 
-最終更新: 2026-09-20<br>
-状態: 設計仕様と実装順序を確定。採用sliceの製品実装は未着手。
+最終更新: 2026-09-21<br>
+状態: S1/S2の製品実装を完了。R0 hidden qualificationは未着手。
 
 主要な terminal emulator 機能と配布版リリースまでの計画は達成済みであり、
 [`docs/archive/terminal-emulator-release-roadmap.md`](docs/archive/terminal-emulator-release-roadmap.md)
@@ -129,7 +129,7 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
     - [x] ordered Note shutdownとexact restoration commit境界をproductへ接続する
     - [x] S1 restart/fault/close/quit product vectorを実装する
     - [x] Developer JIT/Release AOT named acceptanceと全監査を完了する
-- [ ] CM-11 S2 On Returnをproductへ統合する
+- [x] CM-11 S2 On Returnをproductへ統合する
   （[`cm-11-s2-on-return-product-integration.md`](docs/contextual-memory/cm-11-s2-on-return-product-integration.md)
   を参照して実施する）
   - [x] explicit arm/re-arm native UIとatomic product mutationを接続する
@@ -138,7 +138,7 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
     - [x] actual visible layout wake-upとsingle FIFO acknowledgementを接続する
     - [x] ordered shutdown-awayとrestart deliveryを接続する
     - [x] commit/ack crash境界とfalse-consume vectorを固定する
-  - [ ] S2両runtime product acceptanceと全監査を完了する
+  - [x] S2両runtime product acceptanceと全監査を完了する
 - [ ] CM-12 R0 hidden qualificationを完了する
 - [ ] CM-13 R1 internal S1/S2 opt-inを完了する
 - [ ] CM-14 R2 public S1/S2 opt-inを完了する

@@ -1,7 +1,7 @@
 # CM-11 S2 On Return product integration
 
 日付: 2026-09-21
-状態: 実装中
+状態: 完了
 
 ## 目的
 
@@ -519,3 +519,123 @@ shutdown-awayは後続サブタスクの順序どおり未実装である。
 
 本子項目と親項目「visible acknowledgement、shutdown-away、crash境界」に未検証事項・阻害要因はない。次の先頭未完了は
 「S2両runtime product acceptanceと全監査を完了する」である。
+
+## 2026-09-21: 第4サブタスク着手
+
+### 目的と背景
+
+- ROADMAPを再確認し、先頭未完了がCM-11最後の「S2両runtime product acceptanceと全監査を完了する」
+  であることを確認した。README、FEATURE_MATRIX、implementation plan、focus review vector F1〜F4、既存S1 runtime
+  harness、S2 product/fault test、Makefile aggregateを再照合した。
+- 個別testではarm、focus edge、visible acknowledgement、shutdown-away、commit/ack crash境界を固定済みだが、同じ
+  product-owned vectorをDeveloper JITとRelease AOTの実AppKit rootから起動し、F1〜F4とterminal/TUI不変条件を一つの
+  content-free evidenceとして検査するnamed acceptanceがまだない。本項目はその統合証拠を追加する。
+
+### 範囲
+
+- S1 acceptanceを独立の回帰証拠として維持したまま、S2専用のdeterministic product vectorとmachine-readable summaryを
+  追加する。既存のapplication coordinator、実Note store worker/filesystem、semantic native channelを通して、F1〜F4、
+  simultaneous due FIFO、actual visible acknowledgement、multi-window/tab/pane、Quick Terminal、64 focus edge pressure、
+  restart、Detached、`notes-on-return=false`を検証する。
+- 実AppKit/PTY hostをalternate screen、application cursor、bracketed paste、DEC focus report、SGR mouse reportingへ遷移させ、
+  Vim/Codex/mouse TUIが使うprotocol-level mode signatureとして扱う。S2 vector前後でscreen kind、rows/columns、terminal output、
+  input/write/focus counters、mode stateが不変であることを両runtimeで検査する。
+- Developer JIT/Release AOT runner、Makefile target、native sanitizer、bundle、privacy、restoration、shell、diagnostics監査を
+  S2 named aggregateへ接続し、通常のfull gateと隣接`dart_appkit` generic auditも完走する。
+
+### 対象外
+
+- Vim、Codex、その他第三者TUIのinstallやUI座標automation。製品不変条件は外部tool名ではなくterminal protocol modeで
+  deterministicに固定する。
+- S3 shell event、R0以降のrollout、public Settings/documentation、default変更、manual evaluator evidence。
+- Note本文をmachine line、diagnostics、restoration、shell markerへ含めること、および`dart_appkit`への製品固有code追加。
+
+### 選択肢と判断
+
+- S1 vectorへS2を混在させる案は、S1のpassive-only回帰とS2 failureの所有範囲が曖昧になるため不採用とした。
+- UI座標で実cardをクリックする案はappearance/layout差に弱く、visible acknowledgementの正本であるnative
+  snapshot/presentation照合より弱いため不採用とした。
+- 既存S1 acceptance file内のprivate topology/native harnessを共用し、公開結果型とS2 runnerだけを追加する案を採用する。
+  product固有のscenario compositionは`dart_terminal`に閉じ、`dart_appkit`は変更しない。
+
+### 依存関係、完了条件、検証方針
+
+- 依存は完了済みCM-01〜CM-10とCM-11先行3サブタスク、既存runtime integration launcher、Notes native sanitizer/
+  capability auditである。
+- F1〜F4が各1回の期待結果、同時dueがFIFOで一件ずつack、false consume 0、Quick Terminal hide/show、64 edge後の
+  lost/duplicate 0、restart first eligible delivery、close後Detached passive、S2 disabled entry 0を一つのvectorで満たす。
+- Developer JIT/Release AOTの各launchでsummaryとclean owner teardownをexact matchし、TUI mode中のterminal protected state
+  delta 0、stdoutへの本文/path leak 0を要求する。
+- Focused Dart test、option parser test、format/analyze、S2 named aggregate、`make test`、`runtime-verify`相当の関連監査、
+  `git diff --check`、隣接`dart_appkit` full test/generic auditを実行する。未達は完了扱いにしない。
+
+## 2026-09-21: 第4サブタスク完了
+
+### 実装したproduct acceptance
+
+- `TerminalNoteS2ProductAcceptance`をS1とは独立した結果型とmachine-readable summaryを持つvectorとして追加した。
+  実Note store worker/filesystem、product composition、authority、topology、interaction routerを使い、native側だけを既存の
+  semantic projection/snapshot/presentation境界で注入する。S1 vectorの期待値とsummaryは変更していない。
+- F1はarmed-here Noteのeditor open/cancelでdelivery 0、F2は64 focus edge後の同時due 2件、terminal focusを奪わない
+  automatic rail、DeliverySequence FIFOのone-visible-card-per-commit acknowledgementを検証する。Background、occluded、
+  small-pane、stale layout、duplicate old generationはすべてconsume 0である。
+- F2へQuick Terminalのhide/show相当edgeを含めた。F3はordered shutdownでexact restorationを先に保存し、reopen後の最初の
+  eligible observationだけでdueを提示する。F4はuser closeされたcontextのNoteがtrigger/deliveryを持たないpassive Detachedへ
+  移ることを別topologyで固定した。`notes-on-return=false`ではS1 create/saveを維持し、injected S2 intentもrejectする。
+- Product vectorの前後でcontent-free sentinelを二回取得し、terminal render byte count、rows/columns、shell state、diagnostic
+  content field count、terminal input delivery、PTY write enqueue、DEC focus report、およびalternate screen、application cursor、
+  bracketed paste、focus reporting、mouse tracking、SGR mouse encodingが完全一致することを要求する。Note本文、path、terminal
+  bufferはsummaryへ出さない。
+- Runtime applicationへ環境変数で二重gateされた`--runtime-note-s2-test`を追加した。実PTY foreground fixtureはraw/no-echoで
+  alternate screenと上記TUI modeを有効にしたまま一byteを待機し、その間にS2 vectorを実行する。完了後に一byteだけ送り、
+  全modeを解除してprimary screenへ戻してから通常shutdownする。これはVim/Codex/mouse TUIに共通するprotocol-level invariantで
+  あり、第三者toolのinstall、座標automation、固有UIへの依存はない。
+- Runtime smokeへDeveloper JIT/Release AOT共通の`note-s2` suiteを追加し、exact product/cleanup/session/shell marker、worker count、
+  stderr 0、本文/path leak 0を検査する。Makefileへ両runtime targetと`contextual-memory-s2-acceptance`を追加し、Notes capability、
+  ASan/UBSan、bundle、diagnostics privacy、shell resourceを一つのnamed aggregateへ束ねた。`runtime-verify`にもS2両runtimeを追加した。
+- Exact machine evidenceは
+  `TERMINAL_NOTE_S2_PRODUCT_PASS vectors=4 windows=2 tabs=3 panes=5 quick=1 focus_edges=64 fifo_acks=2 false_consumes=0 restart=1 detached=1 disabled=1 tui_modes=1 protected_state=1 owners=0`
+  とした。通常AppKit hierarchy側のcleanupもsession 1、Metal owner 1、text client/native handle 0をexact matchする。
+
+### 検討結果、失敗した試行、監査証跡
+
+- 最初のTUI fixtureはliteralなREADY markerを入力command内に含めており、terminal input echoを実出力と誤認し得た。また通常promptへ
+  戻してからvectorを実行する案ではzsh ZLEがterminal modeを復元し、保護対象のTUI状態を維持できなかった。Foregroundの
+  raw-mode `dd`待機を採用し、markerは`%s`へ`READY`/`RESET`を分離してcommand echoに完成形が現れないよう修正した。修正後の
+  Developer JITは同じbinaryで連続3回成功し、Release AOTも成功した。
+- UI座標でcardをclickする案、外部Vim/Codex binaryをinstallする案、S1 summaryへS2項目を混在させる案は、環境依存、semantic
+  acknowledgementより弱い検査、S1回帰所有範囲の曖昧化をそれぞれ生むため不採用とした。
+- Named aggregateの途中、既存汎用PTY sanitizerの33-process pipeline samplingが一度`members=32 total=32`、単独再試行で
+  `members=28 total=28`となり既存omission assertionで停止した。Process tableを確認し、fixtureや`sleep 30`の残留processが
+  ないことを確認した。S2と無関係なPTY閾値、production code、test条件は変更せず、その後のfull named aggregateとrepository
+  全体testでは`members=32 total=33`で成功した。この一過性sampling raceに未解決のS2 blockerはない。
+- 最初のrepository全体testは、変更した`terminal_application.dart`とtest inventoryに対するPhase 7 AppKit acceptanceのhashが
+  staleであることを正しく検出した。正規generatorをPhase 7、Ghostty gap inventory、release-candidate daily-use matrixの
+  依存順で実行した。差分は変更source/evidenceのSHA-256だけで、criteria、gap分類、件数、release blockerは変えていない。
+- Sandbox内の最初のfocused S1回帰testはMetal/Clang cache書込み拒否で停止した。通常のmacOS cache accessで同じtestを再実行して
+  成功し、今回のS2 logicとは無関係な環境制約と確認した。
+- READMEとFEATURE_MATRIXはpublic rollout状態を表す正本であり、本項目の対象外であるR0以前のhidden acceptanceを公開機能として
+  記載しないため変更していない。Rollout documentationはCM-12以降でROADMAP順に扱う。
+
+### 最終検証
+
+- `dart run test/terminal_note_s2_product_acceptance_test.dart`: pass。固定summary、全vector、前後sentinel、owner 0を確認した。
+- S1回帰、product subsystem、authority、store workerの各focused test: pass。S1 summary、actual visible ack、shutdown/restart、
+  crash/false-consume境界に回帰なし。
+- Developer JIT S2 runtime: 修正後3回pass。Release AOT S2 runtime: pass。両方でproduct/cleanup/session/shell marker、TUI mode、
+  protected state、privacy、worker cleanupをexact matchした。
+- `make RUNTIME_ARCH=arm64 contextual-memory-s2-acceptance`: pass。
+  `CONTEXTUAL_MEMORY_S2_ACCEPTANCE_PASS runtimes=2 vectors=4 focus_edges=64 tui=true sanitizer=true bundle=true privacy=true restoration=true shell=true diagnostics=true dart_appkit=generic`。
+  Notes capability audit、5 suite/11 artifactのnative sanitizer（全artifact ASan、対象9 artifact UBSan）、Developer/Release bundle、
+  diagnostics privacy、shell resource、両runtimeを完走した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: pass。384 Dart filesのformat変更0、root/package analyze issue 0、
+  Note store acceptance（commit p95 141,694 us、primitive p95 16,069 us）、security stress、全native/package/root、Phase 7、
+  compatibility、application、privacy/restoration/shell/distributionを含む全gateが通過し、`dart_terminal tests passed`を確認した。
+- 隣接`dart_appkit`で`CI=true DART_SUPPRESS_ANALYTICS=true make test`: pass。
+  `GENERIC_REPOSITORY_AUDIT_PASS paths=148 text_files=147`と全native bridge/runtime/Dart API/example testが通過した。実行前後とも
+  既存の`docs/BUILDING_DART_ENGINE.md`、`scripts/bootstrap_dart_engine.sh`、`scripts/build_dart_engine.sh`だけが変更状態で、
+  本作業は編集・stageしていない。Note、On Return、Dart Terminal固有codeの追加は0である。
+- `git diff --check`: pass。生成証跡のfreshness checkを含むrepository全体testが最終sourceで成功した。
+
+CM-11の4サブタスクと親項目の完了条件はすべて満たした。未検証事項、追加ROADMAP項目、阻害要因はない。次の先頭未完了は
+CM-12 R0 hidden qualificationである。

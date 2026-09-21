@@ -199,6 +199,8 @@ final class TerminalOptions {
     this.runtimeRestorationPath,
     this.runtimeNoteS1Test = false,
     this.runtimeNoteS1Directory,
+    this.runtimeNoteS2Test = false,
+    this.runtimeNoteS2Directory,
     this.runtimeShellExitTestScenario = RuntimeShellExitTestScenario.none,
     this.runtimeLifecycleScenario = RuntimeLifecycleScenario.normal,
     this.runtimeWorkerCommand =
@@ -264,6 +266,7 @@ final class TerminalOptions {
     var runtimePerformanceTest = false;
     var runtimeRestorationTest = false;
     var runtimeNoteS1Test = false;
+    var runtimeNoteS2Test = false;
     RuntimeShellExitTestScenario? runtimeShellExitTestScenario;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
     for (final String argument in configuration.remainingArguments) {
@@ -468,6 +471,15 @@ final class TerminalOptions {
         runtimeNoteS1Test = true;
         continue;
       }
+      if (argument == '--runtime-note-s2-test') {
+        if (runtimeNoteS2Test) {
+          throw const FormatException(
+            '--runtime-note-s2-test may only be supplied once',
+          );
+        }
+        runtimeNoteS2Test = true;
+        continue;
+      }
       if (argument.startsWith(autoClosePrefix)) {
         if (autoCloseAfter != null) {
           throw const FormatException(
@@ -667,6 +679,7 @@ final class TerminalOptions {
             runtimeDiagnosticsTest ||
             runtimePerformanceTest ||
             runtimeRestorationTest ||
+            runtimeNoteS2Test ||
             selectedShellExitTest != RuntimeShellExitTestScenario.none)) {
       throw const FormatException(
         'window interaction test cannot be combined with another runtime test',
@@ -1119,9 +1132,59 @@ final class TerminalOptions {
             runtimeDiagnosticsTest ||
             runtimePerformanceTest ||
             runtimeRestorationTest ||
+            runtimeNoteS2Test ||
             selectedShellExitTest != RuntimeShellExitTestScenario.none)) {
       throw const FormatException(
         'Note S1 test cannot be combined with another runtime test',
+      );
+    }
+    final String? runtimeNoteS2Directory = runtimeNoteS2Test
+        ? selectedEnvironment['DT_RUNTIME_NOTE_S2_DIRECTORY']
+        : null;
+    if (runtimeNoteS2Test &&
+        selectedEnvironment['DT_RUNTIME_NOTE_S2_TEST'] != '1') {
+      throw const FormatException(
+        'Note S2 test requires the integration-test gate',
+      );
+    }
+    if (runtimeNoteS2Test &&
+        (runtimeNoteS2Directory == null ||
+            runtimeNoteS2Directory.isEmpty ||
+            runtimeNoteS2Directory.contains('\u0000') ||
+            utf8.encode(runtimeNoteS2Directory).length > 4096 ||
+            !Directory(runtimeNoteS2Directory).isAbsolute)) {
+      throw const FormatException(
+        'Note S2 test requires a bounded absolute directory',
+      );
+    }
+    if (runtimeNoteS2Test &&
+        (selectedScenario != RuntimeLifecycleScenario.normal ||
+            autoCloseAfter != null ||
+            runtimeResourceStress ||
+            runtimeShutdownFaultInjection ||
+            runtimePtyExitFaultInjection ||
+            runtimeTerminalDisplayTest ||
+            runtimeClipboardTest ||
+            runtimeNativeHierarchyTest ||
+            runtimeUserActionsTest ||
+            runtimeConfigurationTest ||
+            runtimeThemeTest ||
+            runtimeShellIntegrationTest ||
+            runtimeDesktopSignalsTest ||
+            runtimeOsc52Test ||
+            runtimeNativeContentTest ||
+            runtimeWindowInteractionTest ||
+            runtimeQuickTerminalTest ||
+            runtimeSecureKeyboardEntryTest ||
+            runtimeAppleScriptTest ||
+            runtimeSystemAutomationTest ||
+            runtimeDiagnosticsTest ||
+            runtimePerformanceTest ||
+            runtimeRestorationTest ||
+            runtimeNoteS1Test ||
+            selectedShellExitTest != RuntimeShellExitTestScenario.none)) {
+      throw const FormatException(
+        'Note S2 test cannot be combined with another runtime test',
       );
     }
     return TerminalOptions(
@@ -1152,6 +1215,8 @@ final class TerminalOptions {
       runtimeRestorationPath: runtimeRestorationPath,
       runtimeNoteS1Test: runtimeNoteS1Test,
       runtimeNoteS1Directory: runtimeNoteS1Directory,
+      runtimeNoteS2Test: runtimeNoteS2Test,
+      runtimeNoteS2Directory: runtimeNoteS2Directory,
       runtimeShellExitTestScenario: selectedShellExitTest,
       runtimeLifecycleScenario: selectedScenario,
       runtimeWorkerCommand:
@@ -1202,6 +1267,8 @@ final class TerminalOptions {
   final String? runtimeRestorationPath;
   final bool runtimeNoteS1Test;
   final String? runtimeNoteS1Directory;
+  final bool runtimeNoteS2Test;
+  final String? runtimeNoteS2Directory;
   final RuntimeShellExitTestScenario runtimeShellExitTestScenario;
   final RuntimeLifecycleScenario runtimeLifecycleScenario;
   final RuntimeLifecycleWorkerCommand runtimeWorkerCommand;
@@ -1300,6 +1367,7 @@ final class TerminalApplication {
         options.runtimeDiagnosticsTest ||
         options.runtimePerformanceTest ||
         options.runtimeNoteS1Test ||
+        options.runtimeNoteS2Test ||
         _usesInteractiveProductHierarchy(options)) {
       final TerminalProductConfiguration productConfiguration =
           options.effectiveConfiguration == null
@@ -1338,6 +1406,8 @@ final class TerminalApplication {
         runPerformanceAcceptance: options.runtimePerformanceTest,
         runNoteS1Acceptance: options.runtimeNoteS1Test,
         noteS1Directory: options.runtimeNoteS1Directory,
+        runNoteS2Acceptance: options.runtimeNoteS2Test,
+        noteS2Directory: options.runtimeNoteS2Directory,
         osc52Clipboard: options.runtimeOsc52Test
             ? _MemoryTerminalOsc52Clipboard()
             : null,
@@ -2850,6 +2920,7 @@ final class TerminalApplication {
       !options.runtimePerformanceTest &&
       !options.runtimeRestorationTest &&
       !options.runtimeNoteS1Test &&
+      !options.runtimeNoteS2Test &&
       options.runtimeShellExitTestScenario == RuntimeShellExitTestScenario.none;
 
   static Future<void> _runInteractiveHierarchyProduct(
@@ -2882,6 +2953,8 @@ final class TerminalApplication {
     bool runPerformanceAcceptance = false,
     bool runNoteS1Acceptance = false,
     String? noteS1Directory,
+    bool runNoteS2Acceptance = false,
+    String? noteS2Directory,
     TerminalOsc52ClipboardPort? osc52Clipboard,
   }) async {
     const String acceptancePrompt = '__DT_USER_ACTIONS_PROMPT__ ';
@@ -2950,6 +3023,11 @@ final class TerminalApplication {
     if (runNoteS1Acceptance && noteS1Directory == null) {
       throw StateError(
         'Note S1 acceptance requires an isolated product directory',
+      );
+    }
+    if (runNoteS2Acceptance && noteS2Directory == null) {
+      throw StateError(
+        'Note S2 acceptance requires an isolated product directory',
       );
     }
     TerminalNativeHierarchyAdapter? hierarchy;
@@ -3211,7 +3289,8 @@ final class TerminalApplication {
                   runSystemAutomationAcceptance ||
                   runDiagnosticsAcceptance ||
                   runPerformanceAcceptance ||
-                  runNoteS1Acceptance;
+                  runNoteS1Acceptance ||
+                  runNoteS2Acceptance;
               final Map<String, String> shellEnvironment =
                   usesDeterministicShell
                   ? <String, String>{
@@ -3273,7 +3352,8 @@ final class TerminalApplication {
                   if ((runNativeContentAcceptance ||
                           runWindowInteractionAcceptance ||
                           runUserActionAcceptance ||
-                          runConfigurationAcceptance) &&
+                          runConfigurationAcceptance ||
+                          runNoteS2Acceptance) &&
                       observation.event.stage ==
                           PtyDiagnosticStage.writeEnqueued) {
                     nativeContentWriteEnqueuedCounts.update(
@@ -3557,7 +3637,8 @@ final class TerminalApplication {
                   runConfigurationAcceptance ||
                   runOsc52Acceptance ||
                   runWindowInteractionAcceptance ||
-                  runDiagnosticsAcceptance) {
+                  runDiagnosticsAcceptance ||
+                  runNoteS2Acceptance) {
                 terminalInputDeliveryCount++;
               }
               state.focusPane(state.locationForPane(pane.id)!.tabId, pane.id);
@@ -3609,7 +3690,8 @@ final class TerminalApplication {
                   runConfigurationAcceptance ||
                   runOsc52Acceptance ||
                   runWindowInteractionAcceptance ||
-                  runDiagnosticsAcceptance) {
+                  runDiagnosticsAcceptance ||
+                  runNoteS2Acceptance) {
                 terminalInputDeliveryCount++;
               }
               state.focusPane(state.locationForPane(pane.id)!.tabId, pane.id);
@@ -6803,7 +6885,89 @@ final class TerminalApplication {
       }, onError: recordAsynchronousError);
 
       stdout.writeln('Dart Terminal is attached to the AppKit main thread.');
-      if (runNoteS1Acceptance) {
+      if (runNoteS2Acceptance) {
+        final TerminalSession initialSession = sessions[initialPane.id]!;
+        await _waitForAsciiMarker(initialSession, acceptancePrompt.trimRight());
+        initialPane.insertText(
+          "stty raw -echo; printf '\\033[?1049h\\033[?1h\\033[?2004h"
+          "\\033[?1004h\\033[?1000h\\033[?1006h\\r\\n"
+          "__DT_NOTE_S2_TUI_%s__\\r\\n' 'READY'; "
+          "dd bs=1 count=1 of=/dev/null 2>/dev/null; "
+          "printf '\\033[?1000l\\033[?1006l\\033[?1004l\\033[?2004l"
+          "\\033[?1l\\033[?1049l'; stty sane; "
+          "printf '\\r\\n__DT_NOTE_S2_TUI_%s__\\r\\n' 'RESET'",
+        );
+        await initialPane.submit();
+        await _waitForAsciiMarker(initialSession, '__DT_NOTE_S2_TUI_READY__');
+        final TerminalScreenSet tuiScreens = initialSession.terminalScreenSet;
+        _expectLifecycle(
+          tuiScreens.usingAlternate &&
+              tuiScreens.keyboardModes.applicationCursorKeys &&
+              tuiScreens.bracketedPasteMode &&
+              tuiScreens.focusReportingMode &&
+              tuiScreens.mouseModes.reportingEnabled &&
+              tuiScreens.mouseModes.encoding ==
+                  TerminalMouseCoordinateEncoding.sgr,
+          'Note S2 host did not enter the alternate-screen TUI signature: '
+          'alternate=${tuiScreens.usingAlternate} '
+          'cursor=${tuiScreens.keyboardModes.applicationCursorKeys} '
+          'paste=${tuiScreens.bracketedPasteMode} '
+          'focus=${tuiScreens.focusReportingMode} '
+          'mouse=${tuiScreens.mouseModes.tracking.name} '
+          'encoding=${tuiScreens.mouseModes.encoding.name}',
+        );
+
+        TerminalNoteS2SentinelSnapshot protectedState() {
+          final TerminalScreen screen = tuiScreens.activeScreen;
+          return TerminalNoteS2SentinelSnapshot(
+            terminalOutputBytes: utf8.encode(initialSession.render()).length,
+            terminalRows: screen.rows,
+            terminalColumns: screen.columns,
+            shellIntegrationEvents: tuiScreens.semanticPrompt.shellState.index,
+            restorationPayloadEntries: 0,
+            diagnosticContentFields: sessions.values
+                .where(
+                  (TerminalSession session) =>
+                      session.diagnosticsCaptureEnabled,
+                )
+                .length,
+            terminalInputDeliveries: terminalInputDeliveryCount,
+            ptyWriteEnqueuedCount:
+                nativeContentWriteEnqueuedCounts[initialPane.id] ?? 0,
+            focusReportCount: focusReportCounts[initialPane.id] ?? 0,
+            usingAlternateScreen: tuiScreens.usingAlternate,
+            applicationCursorKeys:
+                tuiScreens.keyboardModes.applicationCursorKeys,
+            bracketedPasteMode: tuiScreens.bracketedPasteMode,
+            focusReportingMode: tuiScreens.focusReportingMode,
+            mouseTrackingEnabled: tuiScreens.mouseModes.reportingEnabled,
+            mouseSgrEncoding:
+                tuiScreens.mouseModes.encoding ==
+                TerminalMouseCoordinateEncoding.sgr,
+          );
+        }
+
+        final TerminalNoteS2ProductAcceptanceResult result =
+            await TerminalNoteS2ProductAcceptance.run(
+              rootDirectory: Directory(noteS2Directory!),
+              sentinelProbe: protectedState,
+              storeFactory: noteStoreFactory,
+              contextIdGenerator: noteContextIdGenerator,
+              noteIdGenerator: noteIdGenerator,
+            );
+        stdout.writeln(result.machineLine());
+        initialPane.sendInput(Uint8List.fromList(const <int>[0x71]));
+        await _waitForAsciiMarker(initialSession, '__DT_NOTE_S2_TUI_RESET__');
+        _expectLifecycle(
+          !tuiScreens.usingAlternate &&
+              !tuiScreens.keyboardModes.applicationCursorKeys &&
+              !tuiScreens.bracketedPasteMode &&
+              !tuiScreens.focusReportingMode &&
+              !tuiScreens.mouseModes.reportingEnabled,
+          'Note S2 host did not restore the primary terminal modes',
+        );
+        if (!closed.isCompleted) closed.complete();
+      } else if (runNoteS1Acceptance) {
         final TerminalSession initialSession = sessions[initialPane.id]!;
         await _waitForAsciiMarker(initialSession, acceptancePrompt.trimRight());
         TerminalNoteS1SentinelSnapshot protectedState() {
@@ -7169,6 +7333,23 @@ final class TerminalApplication {
         );
         stdout.writeln(
           'TERMINAL_NOTE_S1_CLEANUP sessions=1 metal=1 '
+          'text_clients=0 native_handles=0',
+        );
+      }
+      if (runNoteS2Acceptance) {
+        _expectLifecycle(
+          shutdown.sessions.length == 1 &&
+              shutdown.isClean &&
+              owners.values.every(
+                (_TerminalHierarchyProductPane owner) =>
+                    owner.adaptersDisposed && owner.surface.isDisposed,
+              ) &&
+              debugLiveTerminalTextInputClientCount() == 0 &&
+              application.debugLiveObjectCount == 0,
+          'Note S2 acceptance did not release ordinary product owners',
+        );
+        stdout.writeln(
+          'TERMINAL_NOTE_S2_CLEANUP sessions=1 metal=1 '
           'text_clients=0 native_handles=0',
         );
       }
