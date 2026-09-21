@@ -406,22 +406,47 @@ Future<void> _testTopologySurfaceInteractionAndShutdown() async {
     'removed Quick Terminal retires its surface before its durable binding',
   );
 
-  final Future<TerminalNoteCompositionShutdownDisposition> first = coordinator
-      .shutdown();
-  final Future<TerminalNoteCompositionShutdownDisposition> second = coordinator
-      .shutdown();
+  final TerminalNoteRestorationArtifact restoration =
+      TerminalNoteRestorationArtifact.fromSnapshot(_onePaneRestoration());
+  final TerminalNoteRestorationCaptureArtifact capture =
+      TerminalNoteRestorationCaptureArtifact.fromArtifact(
+        restoration: restoration,
+        paneIdsInTraversalOrder: <PaneId>[standardPane],
+      );
+  final List<String> committedRestoration = <String>[];
+  final Future<TerminalNoteApplicationShutdownResult> first = coordinator
+      .shutdownApplication(
+        capture: capture,
+        updatedAtUtcMicros: 1001,
+        commitRestoration: (TerminalNoteRestorationArtifact artifact) async {
+          committedRestoration.add(artifact.exactEncoded);
+          return true;
+        },
+      );
+  final Future<TerminalNoteApplicationShutdownResult> second = coordinator
+      .shutdownApplication(
+        capture: capture,
+        updatedAtUtcMicros: 1002,
+        commitRestoration: (_) async => false,
+      );
   _expect(
     identical(first, second),
-    'application Note shutdown is single-flight',
+    'ordered application Note shutdown is single-flight',
   );
+  final TerminalNoteApplicationShutdownResult shutdown = await first;
   _expect(
-    await first == TerminalNoteCompositionShutdownDisposition.stopped &&
+    shutdown.isSuccess &&
+        shutdown.compositionDisposition ==
+            TerminalNoteCompositionShutdownDisposition.stopped &&
+        shutdown.authorityResult?.isSuccess == true &&
+        committedRestoration.single == restoration.exactEncoded &&
+        runtime.applicationShutdownCount == 1 &&
         runtime.isStopped &&
         coordinator.liveBindingCount == 0 &&
         coordinator.liveSurfaceCount == 0 &&
         TerminalNoteApplicationCoordinator.debugLiveInteractionAdapterCount ==
             interactionBaseline,
-    'shutdown releases interaction, surfaces, topology, and runtime owners',
+    'ordered shutdown commits exact restoration once and releases every owner',
   );
   router.dispose();
   authority.dispose();
@@ -473,6 +498,7 @@ final class _FakeNoteTopologyRuntime
   TerminalNoteProductSurfaceEventHandler? surfaceEventHandler;
   int pumpCount = 0;
   int discardConfirmationCount = 0;
+  int applicationShutdownCount = 0;
   var _nextSurfaceGeneration = 10;
   var _stopped = false;
 
@@ -668,6 +694,26 @@ final class _FakeNoteTopologyRuntime
   }
 
   @override
+  Future<TerminalNoteAuthorityShutdownResult> shutdownApplication({
+    required TerminalNoteRestorationCaptureArtifact capture,
+    required int updatedAtUtcMicros,
+    required TerminalNoteRestorationCommit commitRestoration,
+    Duration drainTimeout = const Duration(seconds: 3),
+  }) async {
+    applicationShutdownCount++;
+    final bool committed = await commitRestoration(capture.restoration);
+    await shutdown();
+    return TerminalNoteAuthorityShutdownResult(
+      disposition: committed
+          ? TerminalNoteAuthorityShutdownDisposition.committed
+          : TerminalNoteAuthorityShutdownDisposition.persistenceFailed,
+      persistence: null,
+      storeDisposition: TerminalNoteStoreDisposition.stopped,
+      surfaceDisposeCount: surfaces.length,
+    );
+  }
+
+  @override
   Future<void> shutdown() async {
     _stopped = true;
     bindings.clear();
@@ -676,6 +722,37 @@ final class _FakeNoteTopologyRuntime
     surfaceEventHandler = null;
   }
 }
+
+TerminalRestorationSnapshot _onePaneRestoration() =>
+    TerminalRestorationSnapshot(
+      windows: <TerminalRestorableWindow>[
+        TerminalRestorableWindow(
+          placement: TerminalWindowPlacement(
+            windowedFrame: TerminalWindowFrame(
+              left: 100,
+              top: 100,
+              width: 800,
+              height: 500,
+            ),
+            screen: null,
+            fullscreen: false,
+          ),
+          tabs: <TerminalRestorableTab>[
+            TerminalRestorableTab(
+              splitTree: TerminalRestorableSplitLeaf(
+                TerminalRestorablePane(workingDirectory: null),
+              ),
+              focusedPaneIndex: 0,
+              zoomedPaneIndex: null,
+              customTitle: null,
+              color: null,
+            ),
+          ],
+          selectedTabIndex: 0,
+        ),
+      ],
+      activeWindowIndex: 0,
+    );
 
 TerminalPaneConfiguration _configuration(
   List<_CoordinatorFakeSession> sessions,

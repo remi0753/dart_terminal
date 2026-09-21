@@ -199,6 +199,15 @@ abstract interface class TerminalNoteProductTopologyPort
 
   bool prepareSurfaceForHostTeardown(PaneId paneId);
 
+  /// Freezes ingress and commits exact restoration bytes before the Note
+  /// document that binds to them, then releases every product owner.
+  Future<TerminalNoteAuthorityShutdownResult> shutdownApplication({
+    required TerminalNoteRestorationCaptureArtifact capture,
+    required int updatedAtUtcMicros,
+    required TerminalNoteRestorationCommit commitRestoration,
+    Duration drainTimeout = const Duration(seconds: 3),
+  });
+
   void updatePresentation(TerminalNoteNativePresentationState presentation);
 }
 
@@ -355,6 +364,7 @@ final class TerminalNoteProductSubsystem
   TerminalNoteFeatureConfiguration _configuration;
   TerminalNoteNativePresentationState _presentation;
   Future<void>? _shutdownFuture;
+  Future<TerminalNoteAuthorityShutdownResult>? _applicationShutdownFuture;
   bool _stopping = false;
   bool _stopped = false;
   bool _debugRetired = false;
@@ -642,6 +652,40 @@ final class TerminalNoteProductSubsystem
     if (existing != null) return existing;
     _stopping = true;
     return _shutdownFuture = _serialize(_runShutdown);
+  }
+
+  @override
+  Future<TerminalNoteAuthorityShutdownResult> shutdownApplication({
+    required TerminalNoteRestorationCaptureArtifact capture,
+    required int updatedAtUtcMicros,
+    required TerminalNoteRestorationCommit commitRestoration,
+    Duration drainTimeout = const Duration(seconds: 3),
+  }) {
+    final Future<TerminalNoteAuthorityShutdownResult>? existing =
+        _applicationShutdownFuture;
+    if (existing != null) return existing;
+    if (_shutdownFuture != null) {
+      return Future<TerminalNoteAuthorityShutdownResult>.error(
+        StateError('Note product shutdown already started'),
+      );
+    }
+    if (drainTimeout <= Duration.zero) {
+      return Future<TerminalNoteAuthorityShutdownResult>.error(
+        ArgumentError.value(drainTimeout, 'drainTimeout', 'must be positive'),
+      );
+    }
+    _stopping = true;
+    final Future<TerminalNoteAuthorityShutdownResult> future = _serialize(
+      () => _runApplicationShutdown(
+        capture: capture,
+        updatedAtUtcMicros: updatedAtUtcMicros,
+        commitRestoration: commitRestoration,
+        drainTimeout: drainTimeout,
+      ),
+    );
+    _applicationShutdownFuture = future;
+    _shutdownFuture = future.then<void>((_) {});
+    return future;
   }
 
   Future<TerminalNoteProductTopologyResult> _attachSurface(
@@ -1204,15 +1248,49 @@ final class TerminalNoteProductSubsystem
     try {
       await _authority.stop();
     } finally {
-      final List<_TerminalNoteProductSurface> remaining = _surfaces.values
-          .toList(growable: false);
-      _surfaces.clear();
-      _paneKinds.clear();
-      for (final _TerminalNoteProductSurface surface in remaining) {
+      await _releaseProductOwnership();
+    }
+  }
+
+  Future<TerminalNoteAuthorityShutdownResult> _runApplicationShutdown({
+    required TerminalNoteRestorationCaptureArtifact capture,
+    required int updatedAtUtcMicros,
+    required TerminalNoteRestorationCommit commitRestoration,
+    required Duration drainTimeout,
+  }) async {
+    _surfaceEventHandler = null;
+    try {
+      return await _authority.shutdownApplication(
+        capture: capture,
+        updatedAtUtcMicros: updatedAtUtcMicros,
+        commitRestoration: commitRestoration,
+        drainTimeout: drainTimeout,
+      );
+    } finally {
+      await _releaseProductOwnership();
+    }
+  }
+
+  Future<void> _releaseProductOwnership() async {
+    final List<_TerminalNoteProductSurface> remaining = _surfaces.values.toList(
+      growable: false,
+    );
+    _surfaces.clear();
+    _paneKinds.clear();
+    Object? firstError;
+    StackTrace? firstStackTrace;
+    for (final _TerminalNoteProductSurface surface in remaining) {
+      try {
         await surface.adapter.dispose();
+      } on Object catch (error, stackTrace) {
+        firstError ??= error;
+        firstStackTrace ??= stackTrace;
       }
-      _stopped = true;
-      _retireDebugOwner();
+    }
+    _stopped = true;
+    _retireDebugOwner();
+    if (firstError != null) {
+      Error.throwWithStackTrace(firstError, firstStackTrace!);
     }
   }
 

@@ -72,6 +72,19 @@ explicit exportをdurable authorityに接続する。Default-offではentry/surf
    - 完了条件: S1全flowがdurable、restart後exact context、default-off zero-cost、terminal bytes/geometry 0、
      store/native/adapter/interaction owner 0、full gate pass。
 
+   この受け入れは次の順序付きサブタスクへ分割する。各項目を個別に検証・commitし、先行項目が完了するまで
+   後続へ進まない。
+
+   1. ordered Note shutdownとexact restoration commit境界をproductへ接続する。
+      Note authorityのfreeze/drain、restoration先行commit、Note document commit、surface/store teardownを、
+      application coordinatorから一度だけ呼べる型付き境界にする。
+   2. S1 restart/fault/close/quit product vectorを実装する。
+      2 window/3 tab/5 pane、Quick Terminal、dirty close/quit、store/native fault、exact-context restart、
+      default-off、terminal byte/geometry、owner leakを決定的に検証する。
+   3. Developer JIT/Release AOT named acceptanceと全監査を完了する。
+      実app bundleで同一vectorを実行し、sanitizer、bundle/privacy/restoration/shell/diagnostics sentinelと
+      full gateをnamed aggregateへ固定する。
+
 ## 完了条件
 
 - Implementation planのCM-10成果物、完了条件、必須検証を満たす。
@@ -900,3 +913,39 @@ explicit exportをdurable authorityに接続する。Default-offではentry/surf
 - 次の先頭未完了taskはCM-10の「restart、fault、close/quit、両runtime product acceptanceを完了する」である。ここまでのunit/focused testを
   product vectorへ束ね、exact context restart、store/native fault、dirty close/quit、複数window/tab/pane、Quick Terminal、PTY/shell/geometry sentinelを
   Developer JITとRelease AOTで受け入れる。S2以降はまだ実装しない。
+
+## 2026-09-21: ordered Note shutdownとexact restoration commit境界完了
+
+### 実装と判断
+
+- 残りのproduct acceptanceを、ordered shutdown境界、S1 product vector、両runtime named acceptance/全監査の3つへ分割し、
+  ROADMAPへ依存順で登録した。この項目では最初の境界だけを実装し、fault vectorやruntime targetへ先行していない。
+- `TerminalNoteProductTopologyPort`へapplication-owned shutdown contractを追加した。Product subsystemは新規ingressをfreezeし、
+  authorityのbounded drain、exact restoration先行commit、Note document commit、authority surface/store停止を実行した後に、
+  native adapter、pane topology、event handler、debug ownerを必ず解放する。通常のfallback shutdownとordered shutdownは互いに
+  single-flightで、後発経路が二重commitや二重ownerを作らない。
+- Application coordinatorはinteraction/native hostを先にteardown準備し、productのordered shutdown後にcomposition rootを停止する。
+  Authorityのcontent-free結果とcomposition結果を型付きで返し、disabled/unavailable compositionではauthority resultなしで安全に停止する。
+- 実filesystem testはNoteをdurable保存し、captured restorationの`exactEncoded`を再encodeせず先に保存してからNote bindingをcommitする。
+  新しいpane IDで再起動した後、保存Noteが同一traversal位置のexact contextだけへ再接続されることと、2回目のordered shutdown後に
+  product/authority/worker/native ownerがbaselineへ戻ることを固定した。
+- 実装とtestは`dart_terminal`内に限定した。`dart_appkit`へNote型、application shutdown、store path、restoration policyを追加していない。
+
+### 検証と試行記録
+
+- Focused format/analyze: 更新4 Dart file、issue 0。Coordinator testはexact bytesの一回だけのcommit、typed result、interaction/topology owner 0、
+  product testは実filesystemでdurable Note、exact restart、single-flight、全owner baselineを確認してpassした。
+- 最初の直接`dart format`/testはDart telemetry sessionとMetal/Clang module cacheのsandbox外書込みでtest本体前に停止した。
+  `CI=true DART_SUPPRESS_ANALYTICS=true`と許可済みの通常cache環境で同じ解析・testを再実行し成功したため、製品codeの失敗ではない。
+- 最終`CI=true DART_SUPPRESS_ANALYTICS=true make test`: 成功。377 Dart filesのformat変更0、root/package analyze issue 0、
+  Notes host/capability/store実filesystem、privacy、application、security stress、distributionを含む全gateを完走し、
+  `dart_terminal tests passed`を確認した。Capability auditは`exports=20`、`snapshot=content-free`、`dart_appkit=generic`である。
+- `make RUNTIME_ARCH=arm64 developer-jit-audit release-aot-audit`: 両方成功。Notesを含む5 native assets、3 capabilities、
+  8 localizationのexact bundleを受理した。`git diff --check`も成功した。
+- 隣接`dart_appkit`の差分は着手前から存在する3 fileだけで、本サブタスクによる追加差分は0。
+
+### 次への引き継ぎ
+
+- 次の先頭未完了taskは「S1 restart/fault/close/quit product vectorを実装する」である。2 window/3 tab/5 paneとQuick Terminalを一つの
+  deterministic product vectorにし、dirty close/quit、store/native fault、exact restart、default-off、terminal byte/geometry、owner leakを検証する。
+- Developer JIT/Release AOTのnamed targetとsanitizer/bundle/privacy/restoration/shell/diagnostics集約は、その次のサブタスクまで実施しない。

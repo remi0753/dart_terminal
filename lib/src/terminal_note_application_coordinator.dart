@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'terminal_application_state.dart';
+import 'terminal_note_authority.dart';
 import 'terminal_note_composition.dart';
 import 'terminal_note_context_restoration.dart';
 import 'terminal_note_model.dart';
@@ -21,6 +22,22 @@ typedef TerminalNoteApplicationErrorHandler = void Function(
 enum TerminalNoteApplicationPointerPhase { down, drag, up, moved, cancel }
 
 enum TerminalNoteApplicationActionKind { newNote, toggleNotes, focusTerminal }
+
+/// Content-free outcome for application-owned ordered Note shutdown.
+final class TerminalNoteApplicationShutdownResult {
+  const TerminalNoteApplicationShutdownResult({
+    required this.compositionDisposition,
+    required this.authorityResult,
+  });
+
+  final TerminalNoteCompositionShutdownDisposition compositionDisposition;
+  final TerminalNoteAuthorityShutdownResult? authorityResult;
+
+  bool get isSuccess =>
+      compositionDisposition !=
+          TerminalNoteCompositionShutdownDisposition.failed &&
+      (authorityResult == null || authorityResult!.isSuccess);
+}
 
 /// Content-free logical placement of one pane in the application hierarchy.
 final class TerminalNoteApplicationPaneBinding {
@@ -177,6 +194,7 @@ final class TerminalNoteApplicationCoordinator {
       <PaneId, _TerminalNoteApplicationSurface>{};
   Future<void> _tail = Future<void>.value();
   Future<TerminalNoteCompositionShutdownDisposition>? _shutdownFuture;
+  Future<TerminalNoteApplicationShutdownResult>? _applicationShutdownFuture;
   bool _stopping = false;
   final Set<PaneId> _pendingSurfaceEvents = <PaneId>{};
   bool _surfaceEventDrainScheduled = false;
@@ -534,6 +552,75 @@ final class TerminalNoteApplicationCoordinator {
       _bindings.clear();
       return disposition;
     });
+  }
+
+  /// Performs the restoration-first Note shutdown owned by the application.
+  ///
+  /// Disabled and unavailable compositions still stop normally and return no
+  /// authority result. Starting plain [shutdown] first makes this operation
+  /// unavailable because exact restoration can no longer be committed.
+  Future<TerminalNoteApplicationShutdownResult> shutdownApplication({
+    required TerminalNoteRestorationCaptureArtifact capture,
+    required int updatedAtUtcMicros,
+    required TerminalNoteRestorationCommit commitRestoration,
+    Duration drainTimeout = const Duration(seconds: 3),
+  }) {
+    final Future<TerminalNoteApplicationShutdownResult>? existing =
+        _applicationShutdownFuture;
+    if (existing != null) return existing;
+    if (_shutdownFuture != null) {
+      return Future<TerminalNoteApplicationShutdownResult>.error(
+        StateError('Note application shutdown already started'),
+      );
+    }
+    if (drainTimeout <= Duration.zero) {
+      return Future<TerminalNoteApplicationShutdownResult>.error(
+        ArgumentError.value(drainTimeout, 'drainTimeout', 'must be positive'),
+      );
+    }
+    _stopping = true;
+    _runtime?.setSurfaceEventHandler(null);
+    _pendingSurfaceEvents.clear();
+    for (final PaneId paneId in _surfaces.keys.toList(growable: false)) {
+      preparePaneForViewTeardown(paneId);
+    }
+    final Future<TerminalNoteApplicationShutdownResult> future = _serialize(
+      () async {
+        TerminalNoteAuthorityShutdownResult? authorityResult;
+        Object? shutdownError;
+        StackTrace? shutdownStackTrace;
+        try {
+          authorityResult = await _runtime?.shutdownApplication(
+            capture: capture,
+            updatedAtUtcMicros: updatedAtUtcMicros,
+            commitRestoration: commitRestoration,
+            drainTimeout: drainTimeout,
+          );
+        } on Object catch (error, stackTrace) {
+          shutdownError = error;
+          shutdownStackTrace = stackTrace;
+        }
+        final TerminalNoteCompositionShutdownDisposition disposition =
+            await _root.shutdown();
+        for (final PaneId paneId in _surfaces.keys.toList(growable: false)) {
+          _retireSurface(paneId);
+        }
+        _bindings.clear();
+        if (shutdownError != null) {
+          Error.throwWithStackTrace(shutdownError, shutdownStackTrace!);
+        }
+        return TerminalNoteApplicationShutdownResult(
+          compositionDisposition: disposition,
+          authorityResult: authorityResult,
+        );
+      },
+    );
+    _applicationShutdownFuture = future;
+    _shutdownFuture = future.then(
+      (TerminalNoteApplicationShutdownResult result) =>
+          result.compositionDisposition,
+    );
+    return future;
   }
 
   bool _releaseInteraction(_TerminalNoteApplicationSurface surface) {

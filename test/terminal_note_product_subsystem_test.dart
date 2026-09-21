@@ -10,7 +10,186 @@ Future<void> main() => runTerminalNoteProductSubsystemTests();
 
 Future<void> runTerminalNoteProductSubsystemTests() async {
   await _testProductionAuthorityAndTopologyLifecycle();
+  await _testOrderedShutdownAndExactContextRestart();
   await _testStartupFailureStaysContentFree();
+}
+
+Future<void> _testOrderedShutdownAndExactContextRestart() async {
+  final int productBaseline =
+      TerminalNoteProductSubsystem.debugLiveProductSubsystemCount;
+  final int authorityBaseline = TerminalNoteAuthority.debugLiveAuthorityCount;
+  final int workerBaseline = TerminalNoteStoreWorkerClient.debugLiveClientCount;
+  final Directory temporary = await Directory.systemTemp.createTemp(
+    'dart-terminal-note-ordered-shutdown-',
+  );
+  final Directory root = Directory(await temporary.resolveSymbolicLinks());
+  final TerminalRestorationPersistence restorationPersistence =
+      TerminalRestorationPersistence(
+        FileTerminalRestorationStore('${root.path}/restoration.json'),
+      );
+  final TerminalNoteRestorationArtifact restoration =
+      TerminalNoteRestorationArtifact.fromSnapshot(_onePaneRestoration());
+  final TerminalNoteRestorationCaptureArtifact firstCapture =
+      TerminalNoteRestorationCaptureArtifact.fromArtifact(
+        restoration: restoration,
+        paneIdsInTraversalOrder: const <PaneId>[PaneId(1)],
+      );
+  const TerminalNoteFeatureConfiguration configuration =
+      TerminalNoteFeatureConfiguration(
+        notes: true,
+        notesOnReturn: false,
+        notesNextPrompt: false,
+        fontSize: 15,
+      );
+  TerminalNoteProductSubsystem? first;
+  TerminalNoteProductSubsystem? reopened;
+  try {
+    final _FakeProductNativeChannel firstChannel = _FakeProductNativeChannel(
+      nextAttachment: TerminalNotesAttachDisposition.attached,
+    );
+    final TerminalNoteSubsystemStartResult firstStart =
+        await TerminalNoteProductSubsystem.start(
+          configuration: configuration,
+          environment: <String, String>{'XDG_STATE_HOME': root.path},
+          authorityGeneration: 201,
+          restoration: null,
+          initialPaneIdsInTraversalOrder: const <PaneId>[PaneId(1)],
+          ensureQuickTerminalContext: false,
+          updatedAtUtcMicros: 5000,
+          copyEffect: (_) => true,
+          exportDestinationChooser: (_) => null,
+          initializeNativeCapability: () {},
+          surfaceFactory: () => firstChannel,
+          clock: () => 5001,
+        );
+    first = firstStart.runtime! as TerminalNoteProductSubsystem;
+    await first.attachSurface(
+      paneId: const PaneId(1),
+      configuration: _surfaceConfiguration(
+        handle: 31,
+        visibility: TerminalNoteSurfaceVisibility.expanded,
+        foreground: true,
+        occluded: false,
+      ),
+    );
+    TerminalNotesProjection projection = firstChannel.projections.last;
+    firstChannel.intents.add(
+      _nativeIntent(
+        projection,
+        eventGeneration: 1,
+        kind: TerminalNotesIntentKind.beginCreate,
+      ),
+    );
+    await first.pumpSurfaceIntent(const PaneId(1));
+    projection = firstChannel.projections.last;
+    firstChannel.intents.add(
+      _nativeIntent(
+        projection,
+        eventGeneration: 2,
+        kind: TerminalNotesIntentKind.save,
+        color: TerminalNotesColor.blue,
+        body: 'exact-context-note',
+      ),
+    );
+    await first.pumpSurfaceIntent(const PaneId(1));
+
+    Future<bool> commitRestoration(
+      TerminalNoteRestorationArtifact artifact,
+    ) async =>
+        (await restorationPersistence.saveExactEncoded(artifact.exactEncoded))
+            .disposition ==
+        TerminalRestorationSaveDisposition.saved;
+
+    final Future<TerminalNoteAuthorityShutdownResult> firstShutdown = first
+        .shutdownApplication(
+          capture: firstCapture,
+          updatedAtUtcMicros: 5002,
+          commitRestoration: commitRestoration,
+        );
+    _expect(
+      identical(
+        firstShutdown,
+        first.shutdownApplication(
+          capture: firstCapture,
+          updatedAtUtcMicros: 5003,
+          commitRestoration: (_) async => false,
+        ),
+      ),
+      'ordered product shutdown is single-flight',
+    );
+    final TerminalNoteAuthorityShutdownResult firstResult = await firstShutdown;
+    final TerminalRestorationLoadResult loaded = await restorationPersistence
+        .load();
+    _expect(
+      firstResult.isSuccess &&
+          firstResult.persistence?.isSuccess == true &&
+          loaded.disposition == TerminalRestorationLoadDisposition.restored &&
+          loaded.exactEncoded == restoration.exactEncoded &&
+          first.isStopped &&
+          first.livePaneCount == 0 &&
+          first.liveSurfaceCount == 0 &&
+          firstChannel.disposeCount == 1,
+      'product shutdown commits exact restoration before retiring all owners',
+    );
+
+    final _FakeProductNativeChannel reopenedChannel = _FakeProductNativeChannel(
+      nextAttachment: TerminalNotesAttachDisposition.attached,
+    );
+    final TerminalNoteSubsystemStartResult reopenedStart =
+        await TerminalNoteProductSubsystem.start(
+          configuration: configuration,
+          environment: <String, String>{'XDG_STATE_HOME': root.path},
+          authorityGeneration: 202,
+          restoration: TerminalNoteRestorationArtifact.fromExactEncoded(
+            loaded.exactEncoded!,
+          ),
+          initialPaneIdsInTraversalOrder: const <PaneId>[PaneId(11)],
+          ensureQuickTerminalContext: false,
+          updatedAtUtcMicros: 5004,
+          copyEffect: (_) => true,
+          exportDestinationChooser: (_) => null,
+          initializeNativeCapability: () {},
+          surfaceFactory: () => reopenedChannel,
+          clock: () => 5005,
+        );
+    reopened = reopenedStart.runtime! as TerminalNoteProductSubsystem;
+    await reopened.attachSurface(
+      paneId: const PaneId(11),
+      configuration: _surfaceConfiguration(
+        handle: 32,
+        visibility: TerminalNoteSurfaceVisibility.expanded,
+        foreground: true,
+        occluded: false,
+      ),
+    );
+    _expect(
+      reopenedChannel.projections.last.cards.single.body ==
+          'exact-context-note',
+      'restart reattaches the durable Note only to the exact restored context',
+    );
+    final TerminalNoteAuthorityShutdownResult reopenedResult = await reopened
+        .shutdownApplication(
+          capture: TerminalNoteRestorationCaptureArtifact.fromArtifact(
+            restoration: restoration,
+            paneIdsInTraversalOrder: const <PaneId>[PaneId(11)],
+          ),
+          updatedAtUtcMicros: 5006,
+          commitRestoration: commitRestoration,
+        );
+    _expect(
+      reopenedResult.isSuccess &&
+          reopenedChannel.disposeCount == 1 &&
+          TerminalNoteProductSubsystem.debugLiveProductSubsystemCount ==
+              productBaseline &&
+          TerminalNoteAuthority.debugLiveAuthorityCount == authorityBaseline &&
+          TerminalNoteStoreWorkerClient.debugLiveClientCount == workerBaseline,
+      'exact restart and second ordered shutdown leave every owner at baseline',
+    );
+  } finally {
+    if (first != null && !first.isStopped) await first.shutdown();
+    if (reopened != null && !reopened.isStopped) await reopened.shutdown();
+    if (await temporary.exists()) await temporary.delete(recursive: true);
+  }
 }
 
 Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
@@ -1016,6 +1195,37 @@ Future<void> _testStartupFailureStaysContentFree() async {
     'out-of-schema launch input fails before native or store ownership',
   );
 }
+
+TerminalRestorationSnapshot _onePaneRestoration() =>
+    TerminalRestorationSnapshot(
+      windows: <TerminalRestorableWindow>[
+        TerminalRestorableWindow(
+          placement: TerminalWindowPlacement(
+            windowedFrame: TerminalWindowFrame(
+              left: 100,
+              top: 100,
+              width: 800,
+              height: 500,
+            ),
+            screen: null,
+            fullscreen: false,
+          ),
+          tabs: <TerminalRestorableTab>[
+            TerminalRestorableTab(
+              splitTree: TerminalRestorableSplitLeaf(
+                TerminalRestorablePane(workingDirectory: null),
+              ),
+              focusedPaneIndex: 0,
+              zoomedPaneIndex: null,
+              customTitle: null,
+              color: null,
+            ),
+          ],
+          selectedTabIndex: 0,
+        ),
+      ],
+      activeWindowIndex: 0,
+    );
 
 TerminalNoteProductSurfaceConfiguration _surfaceConfiguration({
   required int handle,
