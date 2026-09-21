@@ -24089,7 +24089,12 @@ keybind = command+right=pane.focus-left
         for (int row = 0; row < screen.rows; row++)
           if (_asciiRow(screen, row).contains(prompt)) row,
       ].length;
-      if (occurrences >= minimumOccurrences) {
+      final String cursorRow = _asciiRow(screen, screen.cursorRow);
+      final int currentPromptColumn = cursorRow.lastIndexOf(prompt);
+      final bool isIdleAtCurrentPrompt =
+          currentPromptColumn >= 0 &&
+          screen.cursorColumn == currentPromptColumn + prompt.length;
+      if (occurrences >= minimumOccurrences && isIdleAtCurrentPrompt) {
         return;
       }
       _expectLifecycle(
@@ -24098,7 +24103,9 @@ keybind = command+right=pane.focus-left
       );
       await Future<void>.delayed(const Duration(milliseconds: 10));
     }
-    throw TimeoutException('display-test zsh did not publish its prompt');
+    throw TimeoutException(
+      'display-test zsh did not become idle at its current prompt',
+    );
   }
 
   static _TerminalAsciiPosition? _findAscii(

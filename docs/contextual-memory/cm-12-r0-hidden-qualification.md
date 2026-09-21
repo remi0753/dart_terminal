@@ -865,3 +865,69 @@ Fresh aggregate子タスクを次の順に分割する。
   所有するGhostty inventoryと、それらをbindするrelease-candidate matrixだけで、Phase 7 corpus内容は変更不要だった。
 - 最終root `make test`は393 Dart files／0 format changes、analyze issue 0、package/native/generated/privacy/distribution/root suiteを完走し、
   `dart_terminal tests passed`。`git diff --check`もpassした。
+
+### Fresh named aggregate 3回目の阻害
+
+Action-menu smoke修正commit後、fresh 8-gate aggregateをretry wrapperなしでgate 1から再実行した。Gate 1〜6はpassし、gate 7の
+source auditとstandard Developer JIT／Release AOT smokeもpassした。その次のDeveloper JIT terminal-display integrationが
+`normal and selected search overlays did not reach bounded Metal without mutating canonical cells`でstatus 70となり停止した。
+Gate 8とfinal checkerは未実行で、final R0 summaryは出ていない。
+
+このrunのfresh evidence／主要結果:
+
+- Budget combined first-visible p95 19,143 us／100,000 us、content-free。
+- Cross-architecture: 4 bundles、21 resources、1,388,080 bytes、8 Note images、sentinel／absolute path 0。
+- Notes、S1、S2 acceptance pass。Sanitizer/fuzz/faultはnative suites 5、artifacts 11、fuzz executions 1,296、fault boundaries 4、
+  runtime modes 2でpass。
+- Root suiteは393 files／format 0／analyze issue 0／`dart_terminal tests passed`。PTY large pipelineはtotal 33／retained 32／p95 272 us。
+- Gate 7 source auditはapplication direct FFI 0／system-entropy package 1。Standard smokeはDeveloper JIT 2,216 ms、Release AOT
+  1,555 msでpassした。
+
+### Display-test current prompt readiness raceと追加分割
+
+失敗はsearch overlay publication前のfixture readinessにある。`_exerciseSearchOverlay`はcommand投入後にASCII markerを待ち、続けて
+`_waitForTerminalDisplayPrompt(... minimumOccurrences: 1)`を呼ぶ。しかしmarker文字列はzshの入力echoにも含まれ、prompt waiterは現在の
+cursor位置を確認せず、visible gridに残る過去の`__DT_DISPLAY_PROMPT__ `を1件見つけるだけでreturnする。このため新しいpromptが到着する前に
+canonical digestとMetal baselineを取得でき、その後のprompt描画がcursor row／columnを含むcanonical digestを正当に変えてoverlay invariantを
+失敗させる競合が成立する。Search projectionはgeneration、span、selected span、accepted frame、pending frame、atlas pinを5秒のbounded loopで
+検査しており、単なるMetal deadline不足と断定する根拠はない。
+
+検討した選択肢:
+
+- 同じaggregateまたはdisplay integrationをそのままretryする案は、readiness raceを隠してfresh一発完走の契約を満たさないため不採用。
+- 5秒deadlineを延長または固定sleepを追加する案は、過去promptを即時受理する論理条件を直さず、canonical mutationの発生時点をずらすだけなので
+  不採用。
+- Canonical digestからcursor row／columnを除外する、またはdigest assertionを外す案は、overlayがcanonical terminal stateを変更しない契約を
+  弱めるため不採用。
+- Search fixtureだけ一時的なprompt文字列へ切り替える案は判別可能だが、product scenario中のshell stateを追加で変更・復元する必要があり、
+  readiness helper自体の誤った意味を残すため不採用。
+- 既存prompt waiterに、必要出現数に加えて「active screenの現在cursor rowにpromptがあり、cursorがその末尾にある」というidle readinessを
+  要求する案を採用する。画面内の過去promptは受理せず、固定時間にも依存せず、既存の全display command境界を同じ意味で強化できる。
+
+Fresh aggregate子タスクを次の順に追加分割する。
+
+1. **Display-test current prompt readiness race除去**
+   - 範囲: Display fixtureのprompt waiter、focused static/unit validation、Developer JIT／Release AOT terminal-display integration、関連generated
+     freshness。
+   - 対象外: Search overlay／Metal renderer product semantics、canonical digest、5秒deadline、shell integration resource、retry、`dart_appkit`。
+   - 完了条件: 過去promptではなくcurrent cursorのidle promptだけを受理し、両runtimeでsearch overlayを含むdisplay acceptanceがpassする。
+2. **Prompt readiness修正後のfresh 8-gate aggregate完走**
+   - 元のaggregate完了条件を継承し、readiness修正commit後にgate 1からretry wrapperなしで再実行する。
+
+### Display-test current prompt readiness raceの完了結果
+
+- `_waitForTerminalDisplayPrompt`は従来のvisible prompt出現数に加え、active screenのcurrent cursor rowにある最後のprompt位置を求め、
+  cursor columnがprompt末尾とexactly一致する場合だけidle readinessを受理する。過去のprompt、prompt後に入力がある行、command実行中の行は
+  受理しない。5秒deadline、search overlay projection、Metal scheduler、canonical digestには変更を加えていない。
+- Focused formatterは1 file／0 changes、`dart analyze lib/src/terminal_application.dart`はissue 0。Overlay contract testとMetal compositor
+  testはpassした。
+- 実際のAppKit／Metal terminal-display integrationはDeveloper JITで
+  `RUNTIME_TERMINAL_DISPLAY_INTEGRATION_PASS mode=developer-jit launch_architecture=native scale_16_16=131072 elapsed_ms=11708`、
+  Release AOTで
+  `RUNTIME_TERMINAL_DISPLAY_INTEGRATION_PASS mode=release-aot launch_architecture=native scale_16_16=131072 elapsed_ms=10450`となった。
+  Search overlayのnormal／selected／clear、canonical不変、bounded frameを含む全display sequenceが両modeで完走した。
+- 正規generatorでPhase 7 acceptance、Ghostty P0/P1 gap inventory、release-candidate matrixを更新した。差分は
+  `terminal_application.dart` source hashと、その証跡をbindするhashだけで、criteria／row／gate countなど意味上のinventoryは変わっていない。
+- 最終root `make test`は393 Dart files／0 format changes、root／package analyze issue 0、全package/native/generated/privacy/
+  distribution/root suiteを完走し、`dart_terminal tests passed`。PTY large pipelineもtotal 33／retained 32／p95 261 usでpassした。
+- `dart_appkit`のAPI／source／testには変更を加えておらず、修正はproduct-owned display acceptance fixtureのreadinessに限定した。
