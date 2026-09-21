@@ -236,3 +236,46 @@ TERMINAL_NOTE_R0_HARNESS_PASS temporary_store=1 default_off=1 user_entries=0 dis
   `GENERIC_REPOSITORY_AUDIT_PASS paths=148 text_files=147`で、Dart Terminal固有code追加0。既存未commit変更3件は変更もstageもしていない。
 
 SHA-256 working memoryの個別完了条件を満たした。Isolated Dart fixture全体はhard-cap peak違反が残るため未完了とする。
+
+### Duplicate canonical decode除去の着手条件
+
+- 目的: Successful commit後だけ実行される`decode(candidateBytes)`によるstrict JSON tree、canonical再encode、2個目の
+  `TerminalNoteStoreDocument`の一時所有をなくし、96 MiB peak上限を満たす。
+- 範囲: `TerminalNoteStoreTransactionEngine.commitCandidate`のpublish後state更新、ordinary／deletion／fault／restart test、
+  fixed M1 Release AOT hard-cap再測定。Durable write前のcandidate validation、canonical encode、checksum、atomic replace、
+  deletion coverage read-backは維持する。
+- 対象外: Store format/version、checksum algorithm、isolate full-snapshot protocol、file/body/count上限、threshold、native UI、
+  `dart_appkit`変更。
+- 安全性前提: `TerminalNoteStoreDocument` constructorと`TerminalNoteSnapshot.fromRecords`はrecordsをcopyしてunmodifiable viewにし、
+  model invariantを検証する。Worker-side `encode(candidate)`もwrite前に`snapshot.validate()`し、canonical bytes生成失敗時はpublishしない。
+  Candidateはisolate messageでworker heapへcopy済みで、commit後に外部producerから変更できない。
+- 完了条件: 成功応答のrevision/count/bytes、連続commit、disk reload、backup rotation、deletion resurrection protection、全fault後の
+  old-or-new recoveryが不変であり、hard-cap steady 64 MiB／peak 96 MiB／file 16 MiBとowner 0を満たす。
+- 検証: store worker／isolate／acceptance focused test、AOT hard-cap child、format/analyze、root `make test`、隣接
+  `dart_appkit` generic audit、差分review。違反が残れば次retainerを現在位置へ追加し、閾値は変更しない。
+
+### Duplicate canonical decode除去の完了結果
+
+- Durable replace成功後は、同じ`candidateBytes`をstrict parse／canonical再encodeして第二documentを作らず、write前の
+  `encode(candidate)`で再検証済みかつworker heap所有のimmutable candidateを`_loaded`へ保持する。Failure、recovery、load、
+  deletion coverageのdisk decodeは変更していない。
+- Store worker／isolate／real filesystem acceptanceは全てpassした。Ordinary連続commit、backup rotation、全filesystem fault後の
+  old-or-new read、On Return commit/ack crash、deletion resurrection、two-process contention、restart reloadが既存vectorのまま通る。
+- Fixed M1 Release AOT hard-capは、SHA修正後148,357,120 bytesだったpeak増分が108,740,608 bytesへ39,616,512 bytes減少した。
+  Steady 44,941,312 bytes、canonical 9,698,603 bytesは上限内だが、peakは96 MiB上限を8,077,312 bytes超える。
+- 残る主要な入力比例allocationはpayload checksum用の`utf8.encode(payloadSource)`で、canonical約9.7 MiBを丸ごと複製する。
+  Thresholdは変更せず、UTF-8 code pointをincremental SHA-256へ直接渡すbounded checksumを次の現在taskとして追加した。
+- 最初のroot aggregateは、前subtaskでimport orderingを直した後にmatrixを再生成していなかったためstale判定で停止した。
+  Matrixをfresh生成し直し、同じaggregateを再実行してpassした。履歴のamendは行っていない。
+
+検証結果:
+
+- `dart analyze lib/src/terminal_note_store_worker.dart`: `No issues found!`。
+- Store worker、store isolate、20-run real filesystem acceptance: pass。Commit p95 48,908 us、primitive p95 13,425 us。
+- Hard-cap AOT child: gate failureは上記peakのみ。Commit、steady、file、privacy-safe classificationはpass相当。
+- Regenerated release-candidate matrix check後の`CI=true DART_SUPPRESS_ANALYTICS=true make test`: pass。387 Dart files、root analyze
+  `No issues found!`、R0 hidden harness、store acceptanceを含む。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test` in `../dart_appkit`: pass。
+  `GENERIC_REPOSITORY_AUDIT_PASS paths=148 text_files=147`、Dart Terminal固有code追加0。既存未commit変更3件は非接触。
+
+Duplicate decode除去の個別完了条件を満たした。Isolated Dart fixture全体は残る8,077,312-byte peak違反のため未完了とする。

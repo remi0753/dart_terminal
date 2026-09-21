@@ -146,7 +146,8 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
   - [ ] hard resource/latency budget benchmarkとcontent-free evidenceを実装する
     - [ ] isolated Release AOT Dart budget fixtureを実装する
       - [x] hard-cap commitのSHA-256 working memoryをbounded化する
-      - [ ] hard-cap commit後のduplicate canonical decodeを除去する
+      - [x] hard-cap commit後のduplicate canonical decodeを除去する
+      - [ ] canonical payload checksumのUTF-8 allocationをbounded化する
       - [ ] native-assets CLI bundleと4-phase hard gateを完了する
     - [ ] actual AppKit native apply/first-visible budget fixtureを実装する
     - [ ] versioned content-free evidenceと全hard gateを接続する

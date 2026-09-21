@@ -554,15 +554,17 @@ final class TerminalNoteStoreTransactionEngine {
         _session.unlink(deletionJournalLeaf, missingOkay: true);
         _session.flushDirectory();
       }
-      final TerminalNoteStoreDocument committed = _codec.decode(candidateBytes);
-      _loaded = committed;
+      // Encoding has already revalidated the immutable worker-side candidate.
+      // Retaining it avoids parsing the same canonical bytes into a duplicate
+      // full document after the durable replace has succeeded.
+      _loaded = candidate;
       _journal = TerminalNoteDeletionJournal(
         entries: const <TerminalNoteDeletionTombstone>[],
       );
       _state = _TerminalNoteEngineState.ready;
       return _result(
         TerminalNoteStoreDisposition.committed,
-        document: committed,
+        document: candidate,
         exposeDocument: false,
       );
     } on TerminalNoteStoreException catch (error) {
