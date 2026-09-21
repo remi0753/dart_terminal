@@ -635,3 +635,79 @@ Fresh実測／検証結果:
 
 Fresh 4 bundle equality auditと親のversioned cross-architecture auditの完了条件を満たした。次はROADMAPを再確認し、R0 named aggregateへ
 full gate inventoryを接続する。
+
+### R0 named aggregateへのfull gate inventory接続の着手条件
+
+- 目的: R0 automated qualificationの唯一のentry pointを設け、既存gateの一部だけを実行してR0 passと誤認できないようにする。
+- 範囲: 次の8 gateをexact order／重複なしのinventoryとして一つのserial recursive Make graphへ接続する。
+  1. Fresh budget evidence
+  2. Fresh cross-architecture equality evidence
+  3. Native Note acceptance
+  4. S1 product acceptance
+  5. S2 product acceptance
+  6. Sanitizer／fuzz／fault aggregate
+  7. Full Developer JIT／Release AOT runtime verify
+  8. arm64／x86_64／Universal distribution verify
+- Evidence checker: Aggregate終了時にversioned budget／architecture evidenceをcurrent sourceで再検証し、Makefileの8-gate inventory、`-j1`、
+  final checker invocationをexact contractとして検証する。成功時だけcontent-freeな固定summaryを一行出す。
+- 対象外: Manual IME／keyboard／VoiceOver／appearance／TUIのpass、R0 stage decision、R1 promotion、既存gate logicの複製、
+  `dart_appkit`への製品固有code追加。
+- 依存: 完了済みR0 harness、budget evidence、cross-architecture evidence、S1／S2 named acceptance、既存runtime／distribution graph。
+- 完了条件: Missing／extra／duplicate／reordered gate、parallel execution、checker欠落、stale／malformed evidenceをfail closedとし、fresh named targetが
+  全graph完了後にexactly one final R0 summaryを出す。Manual／promotion claimはfalseのままにする。
+- 検証: Aggregate inventory positive／negative test、focused format/analyze、fresh named target、root `make test`、隣接`dart_appkit` full generic
+  audit、content-free outputとstaged diff review。
+
+検討した選択肢:
+
+- `runtime-verify`だけを別名で公開する案は、R0固有budget、cross-architecture evidence、native Note aggregate、S1／S2 named summaryを
+  必須化できないため不採用。
+- 各testを新targetへ再列挙する案は、既存ownerと将来の追加を二重管理するため不採用。
+- 既存named gateを単一recursive Make invocationへ列挙し、Make dependency graphで共有前提をdeduplicateする案を採用する。
+
+最初のfocused negative testは、parallel mutationがR0 targetではなく同じ`make -j1`断片を持つ既存release-candidate targetの先頭一致を
+書き換えたため、期待したrejectが発生せず停止した。Validatorのfail-closed条件は正しく、test fixtureのmutation scopeが原因である。
+置換対象をR0 target headerとrecipeの組へ限定し、他targetを変更してもR0 contract testが誤ってpassしない形へ修正する。
+
+最初のfresh named aggregateはbudget evidenceと4 bundle cross-architecture auditをpassした後、3番目の`terminal-notes-acceptance`が依存する
+`product-native-sanitizer`のPTY suiteで停止した。Allocation fault recoveryはpassしたが、foreground snapshotが期待33 memberに対して25となり、
+その後のsignal、UTF-8、high-watermark、burst、exit／reap／owner回収assertionが連鎖失敗した。Aggregateはfinal summaryを出さずexit 2で
+fail closedした。Gateの省略、threshold変更、成功扱いは行わず、isolated sanitizer再実行、process fixture／resource cleanup、再現性を
+現在task内で調査する。
+
+Isolated再実行でもtotal 28／33で同じ失敗を再現した。失敗後のprocess tableにはsanitizer test、test-owned zsh、`sleep 30`の残留は0で、
+前回runのleakやsystem process exhaustionではない。Fixtureはforeground process groupがchild groupと異なった時点だけでstartup完了とみなし、
+33-process pipelineの全memberが`libproc`観測可能になる前に64回のsnapshot benchmarkを開始していた。ASan/UBSan buildではspawnと観測が
+遅くなり、25〜28 memberの途中snapshotを最終値として検査した後、33-process jobへSIGINTを送る前提が崩れて後続操作が連鎖失敗した。
+
+検討した選択肢:
+
+- 33を25〜28へ緩和する案はhard capのomission境界を検証できなくなるため不採用。
+- Sanitizer gateからPTY suiteを除く、またはretryで隠す案はnative ownership／fault gateを弱めるため不採用。
+- Production snapshotを33になるまでblockさせる案はnon-blocking APIの契約を変えるため不採用。
+- Test fixtureだけがbounded deadline内で`total_member_count >= 33`を観測してからlatency sampleへ進む案を採用する。Production APIは各時点の
+  valid snapshotを返すままとし、readiness待ちはfixture ownerに限定する。
+
+Named aggregateを次の順で追加分割し、前項を個別検証・commitするまで後項を完了にしない。
+
+1. **PTY sanitizerのlarge-pipeline readiness race除去**
+   - 範囲: Product-owned PTY native acceptance fixtureのbounded readiness waitとfocused sanitizer／通常test。
+   - 対象外: Production PTY code、process cap、33-process fixture、5 ms threshold、retry、`dart_appkit`。
+   - 完了条件: 33 total／32 retained／1以上omittedをsample前に確認し、通常／ASan+UBSanで後続signal・burst・exit・owner 0までpassする。
+2. **Serial 8-gate inventoryとfinal evidence checker完了**
+   - 元のnamed aggregate着手条件を継承し、修正後のfresh aggregateをretry wrapperなしで先頭から完走させる。
+
+### PTY sanitizer large-pipeline readiness raceの修正・検証
+
+- Product codeとsnapshot APIのnon-blocking契約には変更を加えず、`PtyCapabilityTests.cc`の33-process fixtureだけに3秒のbounded
+  readiness waitを追加した。Benchmark sample前にsnapshotがAVAILABLE、retained member 32、total member 33、omitted memberが
+  `total - retained`であることを要求する。
+- 33-process fixture、32-process hard cap、64回のlatency sample、p95 5 ms threshold、後続のsignal／UTF-8／burst／exit／reap／owner
+  検証は変更していない。Deadline内にreadyにならなければtestは従来どおりfail closedする。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make dpty-native-test`はpass。Large pipelineはtotal 33／retained 32、p50 272 us、
+  p95 316 usで、全PTY capability testが完走した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make product-native-sanitizer`はpass。PTY、renderer、AppleScript、App Intents、Notesの
+  5 suiteと11 artifactが完走し、exact final lineは
+  `PRODUCT_NATIVE_SANITIZER_PASS suites=5 artifacts=11 asan_artifacts=11 ubsan_artifacts=9 architecture=arm64`だった。
+- 同じ`product-native-sanitizer`をretry wrapperなしで独立してもう一度実行し、同じsuite／artifact countとexact final lineで再度passした。
+  Readiness不足で25〜28 memberを観測していた失敗は2連続のsanitizer runで再発せず、後続検証も連鎖失敗しなかった。

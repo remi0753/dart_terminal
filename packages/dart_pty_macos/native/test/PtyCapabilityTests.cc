@@ -685,8 +685,9 @@ void TestInteractiveSession(Api* api) {
   Expect(WaitForMarker(&events, "__DPTY_SIGINT__130", std::chrono::seconds(3)),
          "SIGINT reaches the foreground process group");
 
+  constexpr int kLargePipelineProcessCount = 33;
   std::string large_pipeline;
-  for (int index = 0; index < 33; ++index) {
+  for (int index = 0; index < kLargePipelineProcessCount; ++index) {
     if (!large_pipeline.empty()) {
       large_pipeline += " | ";
     }
@@ -712,8 +713,29 @@ void TestInteractiveSession(Api* api) {
   }
   Expect(observed_large_foreground,
          "large pipeline has a distinct foreground group");
-  std::vector<int64_t> foreground_snapshot_latencies;
   DptyForegroundJobSnapshotV1 large_job = {};
+  bool observed_complete_large_foreground = false;
+  const Clock::time_point complete_large_foreground_deadline =
+      Clock::now() + std::chrono::seconds(3);
+  while (Clock::now() < complete_large_foreground_deadline) {
+    large_job = {};
+    large_job.struct_size = sizeof(large_job);
+    large_job.abi_version = DPTY_ABI_VERSION;
+    if (api->foreground_job_snapshot(session, &large_job) ==
+            DPTY_STATUS_OK &&
+        large_job.disposition == DPTY_FOREGROUND_JOB_AVAILABLE &&
+        large_job.member_count == DPTY_FOREGROUND_PROCESS_LIMIT &&
+        large_job.total_member_count >= kLargePipelineProcessCount &&
+        large_job.omitted_member_count ==
+            large_job.total_member_count - large_job.member_count) {
+      observed_complete_large_foreground = true;
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  Expect(observed_complete_large_foreground,
+         "large pipeline reaches the omission boundary before benchmarking");
+  std::vector<int64_t> foreground_snapshot_latencies;
   for (int sample = 0; sample < 64; ++sample) {
     large_job.struct_size = sizeof(large_job);
     large_job.abi_version = DPTY_ABI_VERSION;
@@ -739,7 +761,7 @@ void TestInteractiveSession(Api* api) {
             << large_job.total_member_count << " p50_us=" << p50_microseconds
             << " p95_us=" << p95_microseconds << '\n';
   Expect(large_job.member_count == DPTY_FOREGROUND_PROCESS_LIMIT &&
-             large_job.total_member_count >= 33 &&
+             large_job.total_member_count >= kLargePipelineProcessCount &&
              large_job.omitted_member_count ==
                  large_job.total_member_count - large_job.member_count &&
              large_job.omitted_member_count >= 1,
