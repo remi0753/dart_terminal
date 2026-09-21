@@ -118,6 +118,7 @@ final class TerminalNoteNativePresentationState {
     this.differentiateWithoutColor = false,
     this.reduceMotion = false,
     this.systemBadgeVisible = false,
+    this.onReturnEnabled = false,
     this.locale = TerminalNotesLocale.english,
     this.bodyFontMilliPoints = 15000,
   }) : assert(
@@ -133,6 +134,7 @@ final class TerminalNoteNativePresentationState {
   final bool differentiateWithoutColor;
   final bool reduceMotion;
   final bool systemBadgeVisible;
+  final bool onReturnEnabled;
   final TerminalNotesLocale locale;
   final int bodyFontMilliPoints;
 }
@@ -329,6 +331,7 @@ final class TerminalNoteNativeSurfaceAdapter
       differentiateWithoutColor: presentation.differentiateWithoutColor,
       reduceMotion: presentation.reduceMotion,
       systemBadgeVisible: presentation.systemBadgeVisible,
+      onReturnEnabled: presentation.onReturnEnabled,
       locale: presentation.locale,
       draftGeneration: projection.draftGeneration,
       bodyFontMilliPoints: presentation.bodyFontMilliPoints,

@@ -67,6 +67,7 @@ TerminalNotesProjection _projection({
   differentiateWithoutColor: true,
   reduceMotion: true,
   systemBadgeVisible: true,
+  onReturnEnabled: true,
   locale: locale,
   bodyFontMilliPoints: 24000,
   cards:
@@ -105,6 +106,7 @@ void _testCanonicalRoundTrip() {
         decoded.differentiateWithoutColor &&
         decoded.reduceMotion &&
         decoded.systemBadgeVisible &&
+        decoded.onReturnEnabled &&
         decoded.locale == TerminalNotesLocale.english &&
         decoded.bodyFontMilliPoints == 24000,
     'appearance and accessibility flags',
@@ -253,7 +255,7 @@ void _testMalformedPackets() {
   }
 
   rejected('unknown version', (Uint8List bytes) => bytes[8] = 2);
-  rejected('unknown projection flag', (Uint8List bytes) => bytes[15] = 0x80);
+  rejected('reserved projection header', (Uint8List bytes) => bytes[100] = 1);
   rejected('unknown card flag', (Uint8List bytes) => bytes[152] = 0x80);
   rejected('reserved card field', (Uint8List bytes) => bytes[156] = 1);
   rejected('duplicate token', (Uint8List bytes) {
@@ -316,8 +318,12 @@ void _testSurfaceFacade() {
         TerminalNotesIntentKind.showCurrent.index == 16 &&
         TerminalNotesIntentKind.showDetached.index == 17 &&
         TerminalNotesIntentKind.previousPage.index == 18 &&
-        TerminalNotesIntentKind.nextPage.index == 19,
-    'navigation intent ABI values are append-only and fixed',
+        TerminalNotesIntentKind.nextPage.index == 19 &&
+        TerminalNotesIntentKind.saveAlwaysAvailable.index == 20 &&
+        TerminalNotesIntentKind.saveOnReturn.index == 21 &&
+        TerminalNotesIntentKind.armOnReturn.index == 22 &&
+        TerminalNotesIntentKind.makeAlwaysAvailable.index == 23,
+    'navigation and On Return intent ABI values are append-only and fixed',
   );
   final _FakeBindings bindings = _FakeBindings();
   final TerminalNotesNativeSurface surface = TerminalNotesNativeSurface(
@@ -355,6 +361,7 @@ void _testSurfaceFacade() {
   _expect(
     !interaction.editorDirty &&
         !interaction.confirmingDiscard &&
+        interaction.onReturnEnabled &&
         interaction.focusTarget == TerminalNotesNativeFocusTarget.none &&
         surface.focus(TerminalNotesNativeFocusTarget.rail) &&
         !surface.focus(TerminalNotesNativeFocusTarget.editor) &&
@@ -500,6 +507,7 @@ class _FakeBindings implements TerminalNotesNativeBindings {
         differentiateWithoutColor: false,
         reduceMotion: false,
         systemBadgeVisible: false,
+        onReturnEnabled: true,
         featureState: 2,
         surfaceState: 1,
         section: 0,

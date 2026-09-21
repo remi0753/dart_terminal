@@ -957,6 +957,23 @@ final class TerminalNoteProductSubsystem
       );
     }
 
+    final bool onReturnIntent =
+        intent.kind == TerminalNotesIntentKind.saveAlwaysAvailable ||
+        intent.kind == TerminalNotesIntentKind.saveOnReturn ||
+        intent.kind == TerminalNotesIntentKind.armOnReturn ||
+        intent.kind == TerminalNotesIntentKind.makeAlwaysAvailable;
+    if (onReturnIntent && !_configuration.onReturnEnabled) {
+      return _completeNativeIntent(
+        paneId: paneId,
+        surface: surface,
+        intent: intent,
+        disposition: TerminalNotesResultDisposition.rejected,
+        storeRevision: intent.expectedStoreRevision,
+        projectionGeneration: intent.projectionGeneration,
+        topologyDisposition: TerminalNoteProductTopologyDisposition.rejected,
+      );
+    }
+
     TerminalNoteApprovedExportPath? exportDestination;
     if (intent.kind == TerminalNotesIntentKind.export) {
       final TerminalNoteSurfaceProjection? projection =
@@ -1030,6 +1047,14 @@ final class TerminalNoteProductSubsystem
       TerminalNotesIntentKind.cancel =>
         TerminalNoteSurfaceIntentKind.cancelEditor,
       TerminalNotesIntentKind.save => TerminalNoteSurfaceIntentKind.save,
+      TerminalNotesIntentKind.saveAlwaysAvailable =>
+        TerminalNoteSurfaceIntentKind.saveAlwaysAvailable,
+      TerminalNotesIntentKind.saveOnReturn =>
+        TerminalNoteSurfaceIntentKind.saveOnReturn,
+      TerminalNotesIntentKind.armOnReturn =>
+        TerminalNoteSurfaceIntentKind.armOnReturn,
+      TerminalNotesIntentKind.makeAlwaysAvailable =>
+        TerminalNoteSurfaceIntentKind.makeAlwaysAvailable,
       TerminalNotesIntentKind.changeColor =>
         TerminalNoteSurfaceIntentKind.changeColor,
       TerminalNotesIntentKind.moveEarlier =>
@@ -1045,8 +1070,10 @@ final class TerminalNoteProductSubsystem
       TerminalNotesIntentKind.export => TerminalNoteSurfaceIntentKind.export,
     };
 
-    final bool durable = switch (authorityKind) {
+    final bool requiresTimestamp = switch (authorityKind) {
       TerminalNoteSurfaceIntentKind.save ||
+      TerminalNoteSurfaceIntentKind.saveAlwaysAvailable ||
+      TerminalNoteSurfaceIntentKind.saveOnReturn ||
       TerminalNoteSurfaceIntentKind.changeColor ||
       TerminalNoteSurfaceIntentKind.moveEarlier ||
       TerminalNoteSurfaceIntentKind.moveLater ||
@@ -1056,7 +1083,7 @@ final class TerminalNoteProductSubsystem
       TerminalNoteSurfaceIntentKind.reattach => true,
       _ => false,
     };
-    final int? timestamp = durable ? _clock() : null;
+    final int? timestamp = requiresTimestamp ? _clock() : null;
     if (timestamp != null &&
         (timestamp < 0 ||
             timestamp > TerminalNoteAuthorityLimits.maximumSequence)) {
@@ -1134,7 +1161,11 @@ final class TerminalNoteProductSubsystem
             TerminalNoteAuthorityMutationDisposition.failed =>
               TerminalNotesResultDisposition.unavailable,
             TerminalNoteAuthorityMutationDisposition.rejected
-                when authorityKind == TerminalNoteSurfaceIntentKind.save &&
+                when (authorityKind == TerminalNoteSurfaceIntentKind.save ||
+                        authorityKind ==
+                            TerminalNoteSurfaceIntentKind.saveAlwaysAvailable ||
+                        authorityKind ==
+                            TerminalNoteSurfaceIntentKind.saveOnReturn) &&
                     authorityResult.mutationFailure ==
                         TerminalNoteMutationFailure.revisionConflict =>
               TerminalNotesResultDisposition.conflict,
@@ -1456,6 +1487,7 @@ final class TerminalNoteProductSubsystem
     differentiateWithoutColor: presentation.differentiateWithoutColor,
     reduceMotion: presentation.reduceMotion,
     systemBadgeVisible: presentation.systemBadgeVisible,
+    onReturnEnabled: configuration.onReturnEnabled,
     locale: presentation.locale,
     bodyFontMilliPoints: (configuration.fontSize * 1000).round(),
   );

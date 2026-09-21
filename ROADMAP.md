@@ -130,6 +130,12 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
     - [x] S1 restart/fault/close/quit product vectorを実装する
     - [x] Developer JIT/Release AOT named acceptanceと全監査を完了する
 - [ ] CM-11 S2 On Returnをproductへ統合する
+  （[`cm-11-s2-on-return-product-integration.md`](docs/contextual-memory/cm-11-s2-on-return-product-integration.md)
+  を参照して実施する）
+  - [x] explicit arm/re-arm native UIとatomic product mutationを接続する
+  - [ ] eligible focus lifecycleとsingle non-blocking railを接続する
+  - [ ] visible acknowledgement、shutdown-away、crash境界を接続する
+  - [ ] S2両runtime product acceptanceと全監査を完了する
 - [ ] CM-12 R0 hidden qualificationを完了する
 - [ ] CM-13 R1 internal S1/S2 opt-inを完了する
 - [ ] CM-14 R2 public S1/S2 opt-inを完了する

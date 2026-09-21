@@ -20,6 +20,7 @@ Future<void> _testStrictProjectionConversionAndLastGood() async {
           differentiateWithoutColor: true,
           reduceMotion: true,
           systemBadgeVisible: true,
+          onReturnEnabled: true,
           locale: TerminalNotesLocale.japanese,
           bodyFontMilliPoints: 24000,
         ),
@@ -56,6 +57,7 @@ Future<void> _testStrictProjectionConversionAndLastGood() async {
         native.differentiateWithoutColor &&
         native.reduceMotion &&
         native.systemBadgeVisible &&
+        native.onReturnEnabled &&
         native.locale == TerminalNotesLocale.japanese &&
         native.bodyFontMilliPoints == 24000 &&
         native.section == TerminalNotesCollectionSection.current &&
@@ -226,6 +228,7 @@ final class _FakeNativeChannel implements TerminalNoteNativeSurfaceChannel {
       differentiateWithoutColor: projection.differentiateWithoutColor,
       reduceMotion: projection.reduceMotion,
       systemBadgeVisible: projection.systemBadgeVisible,
+      onReturnEnabled: projection.onReturnEnabled,
       featureState: projection.featureState,
       surfaceState: projection.surfaceState,
       section: projection.section,

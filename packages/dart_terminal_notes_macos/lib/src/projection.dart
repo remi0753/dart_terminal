@@ -213,6 +213,7 @@ final class TerminalNotesProjection {
     this.differentiateWithoutColor = false,
     this.reduceMotion = false,
     this.systemBadgeVisible = false,
+    this.onReturnEnabled = false,
     this.locale = TerminalNotesLocale.english,
     this.draftGeneration = 0,
     this.bodyFontMilliPoints = 15000,
@@ -289,6 +290,7 @@ final class TerminalNotesProjection {
   final bool differentiateWithoutColor;
   final bool reduceMotion;
   final bool systemBadgeVisible;
+  final bool onReturnEnabled;
   final TerminalNotesLocale locale;
   final int draftGeneration;
   final int bodyFontMilliPoints;
@@ -308,6 +310,7 @@ abstract final class TerminalNotesProjectionCodec {
   static const int _flagDifferentiateWithoutColor = 1 << 4;
   static const int _flagReduceMotion = 1 << 5;
   static const int _flagSystemBadgeVisible = 1 << 6;
+  static const int _flagOnReturnEnabled = 1 << 7;
   static const int _knownFlags =
       _flagPresentationEligible |
       _flagReadyCue |
@@ -315,7 +318,8 @@ abstract final class TerminalNotesProjectionCodec {
       _flagIncreaseContrast |
       _flagDifferentiateWithoutColor |
       _flagReduceMotion |
-      _flagSystemBadgeVisible;
+      _flagSystemBadgeVisible |
+      _flagOnReturnEnabled;
   static const int _cardFlagDue = 1 << 0;
   static const int _knownCardFlags = _cardFlagDue;
 
@@ -560,6 +564,7 @@ abstract final class TerminalNotesProjectionCodec {
       differentiateWithoutColor: flags & _flagDifferentiateWithoutColor != 0,
       reduceMotion: flags & _flagReduceMotion != 0,
       systemBadgeVisible: flags & _flagSystemBadgeVisible != 0,
+      onReturnEnabled: flags & _flagOnReturnEnabled != 0,
       bodyFontMilliPoints: bodyFontMilliPoints,
     );
   }
@@ -575,6 +580,7 @@ abstract final class TerminalNotesProjectionCodec {
     }
     if (projection.reduceMotion) flags |= _flagReduceMotion;
     if (projection.systemBadgeVisible) flags |= _flagSystemBadgeVisible;
+    if (projection.onReturnEnabled) flags |= _flagOnReturnEnabled;
     return flags;
   }
 

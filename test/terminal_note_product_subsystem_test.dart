@@ -10,6 +10,7 @@ Future<void> main() => runTerminalNoteProductSubsystemTests();
 
 Future<void> runTerminalNoteProductSubsystemTests() async {
   await _testProductionAuthorityAndTopologyLifecycle();
+  await _testOnReturnProductIntentBridge();
   await _testOrderedShutdownAndExactContextRestart();
   await _testStartupFailureStaysContentFree();
 }
@@ -1135,6 +1136,183 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
     );
   } finally {
     if (temporary.existsSync()) temporary.deleteSync(recursive: true);
+  }
+}
+
+Future<void> _testOnReturnProductIntentBridge() async {
+  final Directory temporary = await Directory.systemTemp.createTemp(
+    'dart-terminal-note-on-return-product-',
+  );
+  final Directory root = Directory(await temporary.resolveSymbolicLinks());
+  TerminalNoteProductSubsystem? enabled;
+  TerminalNoteProductSubsystem? disabled;
+  try {
+    final _FakeProductNativeChannel enabledChannel = _FakeProductNativeChannel(
+      nextAttachment: TerminalNotesAttachDisposition.attached,
+    );
+    final TerminalNoteSubsystemStartResult enabledStart =
+        await TerminalNoteProductSubsystem.start(
+          configuration: const TerminalNoteFeatureConfiguration(
+            notes: true,
+            notesOnReturn: true,
+            notesNextPrompt: false,
+            fontSize: 15,
+          ),
+          environment: <String, String>{
+            'XDG_STATE_HOME': '${root.path}/enabled',
+          },
+          authorityGeneration: 301,
+          restoration: null,
+          initialPaneIdsInTraversalOrder: const <PaneId>[PaneId(1)],
+          ensureQuickTerminalContext: false,
+          updatedAtUtcMicros: 6000,
+          copyEffect: (_) => true,
+          exportDestinationChooser: (_) => null,
+          initializeNativeCapability: () {},
+          surfaceFactory: () => enabledChannel,
+          clock: () => 6001,
+        );
+    enabled = enabledStart.runtime! as TerminalNoteProductSubsystem;
+    await enabled.attachSurface(
+      paneId: const PaneId(1),
+      configuration: _surfaceConfiguration(
+        handle: 61,
+        visibility: TerminalNoteSurfaceVisibility.expanded,
+        foreground: true,
+        occluded: false,
+      ),
+    );
+    TerminalNotesProjection projection = enabledChannel.projections.last;
+    _expect(
+      projection.onReturnEnabled,
+      'effective On Return capability reaches the native projection',
+    );
+    enabledChannel.intents.add(
+      _nativeIntent(
+        projection,
+        eventGeneration: 1,
+        kind: TerminalNotesIntentKind.beginCreate,
+      ),
+    );
+    await enabled.pumpSurfaceIntent(const PaneId(1));
+    projection = enabledChannel.projections.last;
+    enabledChannel.intents.add(
+      _nativeIntent(
+        projection,
+        eventGeneration: 2,
+        kind: TerminalNotesIntentKind.saveOnReturn,
+        color: TerminalNotesColor.yellow,
+        body: 'return product note',
+      ),
+    );
+    final TerminalNoteProductTopologyResult saved = await enabled
+        .pumpSurfaceIntent(const PaneId(1));
+    projection = enabledChannel.projections.last;
+    _expect(
+      saved.isAccepted &&
+          projection.cards.single.triggerKind ==
+              TerminalNotesTriggerKind.onReturn &&
+          projection.cards.single.triggerPhase ==
+              TerminalNotesTriggerPhase.onReturnArmedHere &&
+          enabledChannel.results.last.disposition ==
+              TerminalNotesResultDisposition.accepted,
+      'native Save On Return maps to one durable armed product projection',
+    );
+
+    enabledChannel.intents.add(
+      _nativeIntent(
+        projection,
+        eventGeneration: 3,
+        kind: TerminalNotesIntentKind.makeAlwaysAvailable,
+        cardToken: projection.cards.single.token,
+      ),
+    );
+    final TerminalNoteProductTopologyResult madeAlways = await enabled
+        .pumpSurfaceIntent(const PaneId(1));
+    projection = enabledChannel.projections.last;
+    enabledChannel.intents.add(
+      _nativeIntent(
+        projection,
+        eventGeneration: 4,
+        kind: TerminalNotesIntentKind.armOnReturn,
+        cardToken: projection.cards.single.token,
+      ),
+    );
+    final TerminalNoteProductTopologyResult rearmed = await enabled
+        .pumpSurfaceIntent(const PaneId(1));
+    projection = enabledChannel.projections.last;
+    _expect(
+      madeAlways.isAccepted &&
+          rearmed.isAccepted &&
+          projection.cards.single.triggerKind ==
+              TerminalNotesTriggerKind.onReturn &&
+          projection.cards.single.triggerPhase ==
+              TerminalNotesTriggerPhase.onReturnArmedHere,
+      'standalone Always and Re-arm intents round-trip through the product',
+    );
+
+    final _FakeProductNativeChannel disabledChannel = _FakeProductNativeChannel(
+      nextAttachment: TerminalNotesAttachDisposition.attached,
+    );
+    final TerminalNoteSubsystemStartResult disabledStart =
+        await TerminalNoteProductSubsystem.start(
+          configuration: const TerminalNoteFeatureConfiguration(
+            notes: true,
+            notesOnReturn: false,
+            notesNextPrompt: false,
+            fontSize: 15,
+          ),
+          environment: <String, String>{
+            'XDG_STATE_HOME': '${root.path}/disabled',
+          },
+          authorityGeneration: 302,
+          restoration: null,
+          initialPaneIdsInTraversalOrder: const <PaneId>[PaneId(2)],
+          ensureQuickTerminalContext: false,
+          updatedAtUtcMicros: 6100,
+          copyEffect: (_) => true,
+          exportDestinationChooser: (_) => null,
+          initializeNativeCapability: () {},
+          surfaceFactory: () => disabledChannel,
+          clock: () => 6101,
+        );
+    disabled = disabledStart.runtime! as TerminalNoteProductSubsystem;
+    await disabled.attachSurface(
+      paneId: const PaneId(2),
+      configuration: _surfaceConfiguration(
+        handle: 62,
+        visibility: TerminalNoteSurfaceVisibility.expanded,
+        foreground: true,
+        occluded: false,
+      ),
+    );
+    final TerminalNotesProjection disabledProjection =
+        disabledChannel.projections.last;
+    disabledChannel.intents.add(
+      _nativeIntent(
+        disabledProjection,
+        eventGeneration: 1,
+        kind: TerminalNotesIntentKind.saveOnReturn,
+        color: TerminalNotesColor.yellow,
+        body: 'must not enter authority',
+      ),
+    );
+    final TerminalNoteProductTopologyResult rejected = await disabled
+        .pumpSurfaceIntent(const PaneId(2));
+    _expect(
+      !disabledProjection.onReturnEnabled &&
+          rejected.disposition ==
+              TerminalNoteProductTopologyDisposition.rejected &&
+          disabledChannel.projections.last.storeRevision ==
+              disabledProjection.storeRevision &&
+          disabledChannel.results.last.disposition ==
+              TerminalNotesResultDisposition.rejected,
+      'disabled On Return has no native entry and rejects injected intents',
+    );
+  } finally {
+    if (enabled != null && !enabled.isStopped) await enabled.shutdown();
+    if (disabled != null && !disabled.isStopped) await disabled.shutdown();
+    if (temporary.existsSync()) await temporary.delete(recursive: true);
   }
 }
 

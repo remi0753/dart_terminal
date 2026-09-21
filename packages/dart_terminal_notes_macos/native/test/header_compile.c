@@ -14,6 +14,13 @@ _Static_assert(sizeof(DtnPresentationSnapshotV1) == 232u,
                "presentation snapshot ABI layout changed");
 _Static_assert(sizeof(DtnSurfaceIntentV1) == 112u,
                "intent ABI layout changed");
+_Static_assert(DTN_INTENT_NEXT_PAGE == 19u,
+               "existing intent ABI value changed");
+_Static_assert(DTN_INTENT_SAVE_ALWAYS_AVAILABLE == 20u &&
+                   DTN_INTENT_SAVE_ON_RETURN == 21u &&
+                   DTN_INTENT_ARM_ON_RETURN == 22u &&
+                   DTN_INTENT_MAKE_ALWAYS_AVAILABLE == 23u,
+               "On Return intent ABI values changed");
 _Static_assert(sizeof(DtnSurfaceResultV1) == 88u,
                "result ABI layout changed");
 

@@ -12,7 +12,8 @@
 #import <QuartzCore/QuartzCore.h>
 
 static const uint8_t kDtnProjectionFlagPresentationEligible = 1u << 0;
-static const uint8_t kDtnProjectionKnownFlags = 0x7fu;
+static const uint8_t kDtnProjectionFlagOnReturnEnabled = 1u << 7;
+static const uint8_t kDtnProjectionKnownFlags = 0xffu;
 static const uint32_t kDtnCardFlagDue = 1u << 0;
 
 typedef struct DtnParsedProjection {
@@ -460,6 +461,7 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 @property(nonatomic, strong) NSScrollView* textScrollView;
 @property(nonatomic, strong) NSTextView* textView;
 @property(nonatomic, strong) NSSegmentedControl* colorControl;
+@property(nonatomic, strong) NSSegmentedControl* showControl;
 @property(nonatomic, strong) NSButton* saveButton;
 @property(nonatomic, strong) NSButton* cancelButton;
 @property(nonatomic, strong) DtnFlippedView* discardConfirmation;
@@ -470,10 +472,13 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 @property(nonatomic, copy) void (^onInteractionChanged)(void);
 @property(nonatomic, copy) NSString* baselineBody;
 @property(nonatomic) uint32_t baselineColor;
+@property(nonatomic) uint32_t baselineShowTiming;
 @property(nonatomic) uint64_t draftGeneration;
 @property(nonatomic) BOOL japaneseLocale;
 - (void)beginDraft:(NSString*)body
              color:(uint32_t)color
+        showTiming:(uint32_t)showTiming
+   onReturnEnabled:(BOOL)onReturnEnabled
    draftGeneration:(uint64_t)draftGeneration
     bodyFontPoints:(CGFloat)bodyFontPoints
     japaneseLocale:(BOOL)japaneseLocale;
@@ -521,6 +526,16 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     [_colorControl setAccessibilityElement:YES];
     [_colorControl setAccessibilityRole:NSAccessibilityRadioGroupRole];
     [self addSubview:_colorControl];
+
+    _showControl = [[NSSegmentedControl alloc] initWithFrame:NSZeroRect];
+    _showControl.segmentCount = 2;
+    [_showControl setLabel:@"Always" forSegment:0];
+    [_showControl setLabel:@"On Return" forSegment:1];
+    _showControl.selectedSegment = 0;
+    [_showControl setAccessibilityLabel:@"Show note"];
+    [_showControl setAccessibilityElement:YES];
+    [_showControl setAccessibilityRole:NSAccessibilityRadioGroupRole];
+    [self addSubview:_showControl];
 
     _saveButton = [NSButton buttonWithTitle:@"Save" target:nil action:nil];
     _saveButton.keyEquivalent = @"\r";
@@ -571,6 +586,8 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 
 - (void)beginDraft:(NSString*)body
              color:(uint32_t)color
+        showTiming:(uint32_t)showTiming
+   onReturnEnabled:(BOOL)onReturnEnabled
    draftGeneration:(uint64_t)draftGeneration
     bodyFontPoints:(CGFloat)bodyFontPoints
     japaneseLocale:(BOOL)japaneseLocale {
@@ -580,6 +597,7 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   self.japaneseLocale = japaneseLocale;
   self.baselineBody = body;
   self.baselineColor = color;
+  self.baselineShowTiming = showTiming;
   self.draftGeneration = draftGeneration;
   [self.textView.undoManager disableUndoRegistration];
   self.textView.string = body;
@@ -587,6 +605,8 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   [self.textView.undoManager removeAllActions];
   self.textView.font = [NSFont systemFontOfSize:bodyFontPoints];
   self.colorControl.selectedSegment = color;
+  self.showControl.hidden = !onReturnEnabled;
+  self.showControl.selectedSegment = showTiming;
   self.textView.selectedRange = NSMakeRange(body.length, 0);
   self.errorLabel.hidden = YES;
   [self hideDiscardConfirmation];
@@ -594,6 +614,9 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     [self setAccessibilityLabel:@"ノートエディタ"];
     [self.textView setAccessibilityLabel:@"ノート本文"];
     [self.colorControl setAccessibilityLabel:@"ノートの色"];
+    [self.showControl setAccessibilityLabel:@"ノートを表示するタイミング"];
+    [self.showControl setLabel:@"常に表示" forSegment:0];
+    [self.showControl setLabel:@"Return時" forSegment:1];
     self.saveButton.title = @"保存";
     self.cancelButton.title = @"キャンセル";
     self.confirmationLabel.stringValue = @"変更を破棄しますか？";
@@ -603,6 +626,9 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     [self setAccessibilityLabel:@"Note editor"];
     [self.textView setAccessibilityLabel:@"Note body"];
     [self.colorControl setAccessibilityLabel:@"Note color"];
+    [self.showControl setAccessibilityLabel:@"Show note"];
+    [self.showControl setLabel:@"Always" forSegment:0];
+    [self.showControl setLabel:@"On Return" forSegment:1];
     self.saveButton.title = @"Save";
     self.cancelButton.title = @"Cancel";
     self.confirmationLabel.stringValue = @"Discard changes?";
@@ -613,7 +639,9 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 
 - (BOOL)isDirty {
   return ![self.textView.string isEqualToString:self.baselineBody] ||
-         self.colorControl.selectedSegment != self.baselineColor;
+         self.colorControl.selectedSegment != self.baselineColor ||
+         (!self.showControl.hidden &&
+          self.showControl.selectedSegment != self.baselineShowTiming);
 }
 
 - (BOOL)validateForSave {
@@ -653,6 +681,8 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   [self.textView.undoManager enableUndoRegistration];
   [self.textView.undoManager removeAllActions];
   self.baselineBody = @"";
+  self.baselineShowTiming = 0u;
+  self.showControl.selectedSegment = 0;
   self.draftGeneration = 0u;
   self.errorLabel.hidden = YES;
   [self hideDiscardConfirmation];
@@ -702,8 +732,10 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     ];
   }
   NSMutableArray* children = [NSMutableArray
-      arrayWithObjects:self.textScrollView, self.colorControl, self.saveButton,
-                       self.cancelButton, nil];
+      arrayWithObjects:self.textScrollView, self.showControl,
+                       self.colorControl, self.saveButton, self.cancelButton,
+                       nil];
+  if (self.showControl.hidden) [children removeObject:self.showControl];
   if (!self.errorLabel.hidden) [children addObject:self.errorLabel];
   return children;
 }
@@ -712,9 +744,13 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   [super layout];
   const CGFloat width = self.bounds.size.width;
   const CGFloat height = self.bounds.size.height;
-  self.colorControl.frame = NSMakeRect(10, 10, fmax(0, width - 20), 26);
+  self.showControl.frame = NSMakeRect(10, 10, fmax(0, width - 20), 26);
+  self.colorControl.frame = NSMakeRect(10, self.showControl.hidden ? 10 : 40,
+                                       fmax(0, width - 20), 26);
+  const CGFloat editor_top = self.showControl.hidden ? 44 : 74;
   self.textScrollView.frame =
-      NSMakeRect(10, 44, fmax(0, width - 20), fmax(60, height - 112));
+      NSMakeRect(10, editor_top, fmax(0, width - 20),
+                 fmax(60, height - editor_top - 68));
   self.errorLabel.frame =
       NSMakeRect(10, fmax(44, height - 62), fmax(0, width - 20), 18);
   self.cancelButton.frame =
@@ -748,6 +784,8 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 @property(nonatomic, strong) DtnFlippedView* actionBar;
 @property(nonatomic, copy) NSArray<NSButton*>* actionButtons;
 @property(nonatomic, strong) NSSegmentedControl* cardColorControl;
+@property(nonatomic, strong) NSSegmentedControl* cardShowControl;
+@property(nonatomic, strong) NSButton* rearmButton;
 @property(nonatomic, strong) NSScrollView* scrollView;
 @property(nonatomic, strong) DtnFlippedView* cardList;
 @property(nonatomic, strong) DtnNoteEditorView* editor;
@@ -892,6 +930,23 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     _cardColorControl.target = self;
     _cardColorControl.action = @selector(onCardColor:);
     [_actionBar addSubview:_cardColorControl];
+    _cardShowControl = [[NSSegmentedControl alloc] initWithFrame:NSZeroRect];
+    _cardShowControl.segmentCount = 2;
+    [_cardShowControl setLabel:@"Always" forSegment:0];
+    [_cardShowControl setLabel:@"On Return" forSegment:1];
+    _cardShowControl.selectedSegment = 0;
+    [_cardShowControl setAccessibilityLabel:@"Show selected note"];
+    [_cardShowControl setAccessibilityElement:YES];
+    [_cardShowControl setAccessibilityRole:NSAccessibilityRadioGroupRole];
+    _cardShowControl.target = self;
+    _cardShowControl.action = @selector(onCardShow:);
+    [_actionBar addSubview:_cardShowControl];
+    _rearmButton = [NSButton buttonWithTitle:@"Re-arm"
+                                      target:self
+                                      action:@selector(onRearm:)];
+    [_rearmButton setAccessibilityElement:YES];
+    [_rearmButton setAccessibilityRole:NSAccessibilityButtonRole];
+    [_actionBar addSubview:_rearmButton];
     _scrollView = [[NSScrollView alloc] initWithFrame:NSZeroRect];
     _scrollView.hasVerticalScroller = YES;
     _scrollView.drawsBackground = NO;
@@ -910,6 +965,8 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     _editor.cancelButton.action = @selector(onCancel:);
     _editor.colorControl.target = self;
     _editor.colorControl.action = @selector(onDraftColor:);
+    _editor.showControl.target = self;
+    _editor.showControl.action = @selector(onDraftShow:);
     _editor.discardButton.target = self;
     _editor.discardButton.action = @selector(onDiscard:);
     _editor.keepEditingButton.target = self;
@@ -1031,7 +1088,13 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 - (void)onSave:(id)sender {
   (void)sender;
   if (![self.editor validateForSave]) return;
-  [self emitIntent:DTN_INTENT_SAVE
+  uint32_t kind = DTN_INTENT_SAVE;
+  if (!self.editor.showControl.hidden) {
+    kind = self.editor.showControl.selectedSegment == 1
+               ? DTN_INTENT_SAVE_ON_RETURN
+               : DTN_INTENT_SAVE_ALWAYS_AVAILABLE;
+  }
+  [self emitIntent:kind
                body:self.editor.textView.string
               color:(uint32_t)self.editor.colorControl.selectedSegment
               token:self.projection.selected_token];
@@ -1080,12 +1143,52 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   dtn_notify_surface(self.nativeSurface);
 }
 
+- (void)onDraftShow:(id)sender {
+  (void)sender;
+  self.editor.errorLabel.hidden = YES;
+  dtn_notify_surface(self.nativeSurface);
+}
+
 - (void)onCardColor:(id)sender {
   (void)sender;
   [self emitIntent:DTN_INTENT_CHANGE_COLOR
                body:nil
               color:(uint32_t)self.cardColorControl.selectedSegment
               token:self.projection.selected_token];
+}
+
+- (void)onCardShow:(id)sender {
+  (void)sender;
+  DtnCardModel* model = [self selectedModel];
+  const NSInteger current = model != nil && model.triggerKind == 1u ? 1 : 0;
+  const NSInteger requested = self.cardShowControl.selectedSegment;
+  self.cardShowControl.selectedSegment = current;
+  if (model == nil || model.status != 0u || model.triggerKind == 2u ||
+      (self.projection.projection_flags &
+       kDtnProjectionFlagOnReturnEnabled) == 0u ||
+      requested == current) {
+    return;
+  }
+  [self emitIntent:requested == 1 ? DTN_INTENT_ARM_ON_RETURN
+                                  : DTN_INTENT_MAKE_ALWAYS_AVAILABLE
+               body:nil
+              color:DTN_NO_COLOR
+              token:model.token];
+}
+
+- (void)onRearm:(id)sender {
+  (void)sender;
+  DtnCardModel* model = [self selectedModel];
+  if (model == nil || model.status != 0u || model.triggerKind != 1u ||
+      !model.due ||
+      (self.projection.projection_flags &
+       kDtnProjectionFlagOnReturnEnabled) == 0u) {
+    return;
+  }
+  [self emitIntent:DTN_INTENT_ARM_ON_RETURN
+               body:nil
+              color:DTN_NO_COLOR
+              token:model.token];
 }
 
 - (void)onEarlier:(id)sender {
@@ -1165,6 +1268,8 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   if (!enabled) {
     for (NSButton* button in self.actionButtons) button.enabled = NO;
     self.cardColorControl.enabled = NO;
+    self.cardShowControl.enabled = NO;
+    self.rearmButton.enabled = NO;
   } else {
     DtnCardModel* selected = [self selectedModel];
     const BOOL has_selection = selected != nil;
@@ -1182,10 +1287,20 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     self.actionButtons[6].enabled = YES;
     self.actionButtons[7].enabled = has_selection;
     self.cardColorControl.enabled = current && has_selection;
+    const BOOL on_return_enabled =
+        (self.projection.projection_flags &
+         kDtnProjectionFlagOnReturnEnabled) != 0u;
+    self.cardShowControl.enabled =
+        on_return_enabled && current && has_selection &&
+        selected.status == 0u && selected.triggerKind != 2u;
+    self.rearmButton.enabled =
+        self.cardShowControl.enabled && selected.triggerKind == 1u &&
+        selected.due;
   }
   self.editor.saveButton.enabled = enabled;
   self.editor.cancelButton.enabled = enabled;
   self.editor.colorControl.enabled = enabled;
+  self.editor.showControl.enabled = enabled;
   self.editor.discardButton.enabled = enabled;
   self.editor.keepEditingButton.enabled = enabled;
 }
@@ -1312,9 +1427,20 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   for (NSUInteger index = 0; index < self.actionButtons.count; ++index) {
     self.actionButtons[index].title = action_titles[index];
   }
+  [self.cardShowControl setLabel:japanese ? @"常に表示" : @"Always"
+                       forSegment:0];
+  [self.cardShowControl setLabel:japanese ? @"Return時" : @"On Return"
+                       forSegment:1];
+  [self.cardShowControl
+      setAccessibilityLabel:japanese ? @"選択したノートを表示するタイミング"
+                                     : @"Show selected note"];
+  self.rearmButton.title = japanese ? @"再設定" : @"Re-arm";
+  [self.rearmButton setAccessibilityLabel:self.rearmButton.title];
   DtnCardModel* selected_model = [self selectedModel];
   const BOOL has_selection = selected_model != nil;
   const BOOL current = projection.section == DTN_SECTION_CURRENT;
+  const BOOL on_return_enabled =
+      (projection.projection_flags & kDtnProjectionFlagOnReturnEnabled) != 0u;
   self.actionButtons[0].enabled =
       has_selection && (current || selected_model.order > 0u);
   self.actionButtons[1].enabled =
@@ -1328,13 +1454,24 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   self.actionButtons[6].enabled = YES;
   self.actionButtons[7].enabled = has_selection;
   self.cardColorControl.enabled = current && has_selection;
+  self.cardShowControl.hidden = !on_return_enabled || !current;
+  self.rearmButton.hidden =
+      !on_return_enabled || !current || !has_selection ||
+      selected_model.triggerKind != 1u || !selected_model.due;
+  self.cardShowControl.enabled =
+      on_return_enabled && current && has_selection &&
+      selected_model.status == 0u && selected_model.triggerKind != 2u;
+  self.rearmButton.enabled = !self.rearmButton.hidden;
   if (has_selection) {
     self.cardColorControl.selectedSegment = (NSInteger)selected_model.color;
+    self.cardShowControl.selectedSegment =
+        selected_model.triggerKind == 1u ? 1 : 0;
   } else {
     for (NSInteger index = 0; index < self.cardColorControl.segmentCount;
          ++index) {
-      [self.cardColorControl setSelected:NO forSegment:index];
+    [self.cardColorControl setSelected:NO forSegment:index];
     }
+    self.cardShowControl.selectedSegment = 0;
   }
   [self.cardColorControl setAccessibilityLabel:japanese ? @"ノートの色"
                                                     : @"Note color"];
@@ -1351,8 +1488,12 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
       self.locallyClosedEditor = NO;
       NSString* baseline = selected_model == nil ? @"" : selected_model.body;
       const uint32_t color = selected_model == nil ? 1u : selected_model.color;
+      const uint32_t show_timing =
+          selected_model != nil && selected_model.triggerKind == 1u ? 1u : 0u;
       [self.editor beginDraft:baseline
                         color:color
+                   showTiming:show_timing
+              onReturnEnabled:on_return_enabled
               draftGeneration:projection.draft_generation
                bodyFontPoints:font_points
                japaneseLocale:japanese];
@@ -1497,9 +1638,11 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   self.pageRangeLabel.frame =
       NSMakeRect(86, 3, fmax(0, self.pagingBar.bounds.size.width - 172), 18);
   const BOOL editor_visible = !self.editor.hidden;
+  const BOOL show_timing = !self.cardShowControl.hidden;
   self.actionBar.hidden = editor_visible;
   self.actionBar.frame =
-      NSMakeRect(12, detached ? 94 : 60, fmax(0, rail_width - 24), 88);
+      NSMakeRect(12, detached ? 94 : 60, fmax(0, rail_width - 24),
+                 show_timing ? 118 : 88);
   const CGFloat action_width =
       fmax(0, (self.actionBar.bounds.size.width - 18) / 4);
   for (NSUInteger index = 0; index < self.actionButtons.count; ++index) {
@@ -1509,8 +1652,19 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
         NSMakeRect(column * (action_width + 6), row * 28, action_width, 24);
   }
   self.cardColorControl.frame =
-      NSMakeRect(0, 58, self.actionBar.bounds.size.width, 26);
-  const CGFloat content_y = editor_visible ? 62 : (detached ? 188 : 154);
+      NSMakeRect(0, show_timing ? 88 : 58,
+                 self.actionBar.bounds.size.width, 26);
+  const CGFloat rearm_width = self.rearmButton.hidden ? 0 : 76;
+  self.cardShowControl.frame =
+      NSMakeRect(0, 58,
+                 fmax(0, self.actionBar.bounds.size.width - rearm_width -
+                              (rearm_width > 0 ? 6 : 0)),
+                 26);
+  self.rearmButton.frame =
+      NSMakeRect(fmax(0, self.actionBar.bounds.size.width - rearm_width), 58,
+                 rearm_width, 26);
+  const CGFloat content_y =
+      editor_visible ? 62 : (detached ? 188 : 154) + (show_timing ? 30 : 0);
   const NSRect content_frame =
       NSMakeRect(12, content_y, fmax(0, rail_width - 24),
                  fmax(0, self.rail.bounds.size.height - content_y - 12));
@@ -1520,7 +1674,10 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     [self.rail setAccessibilityChildren:@[ self.toolbar, self.editor ]];
     self.sectionControl.nextKeyView = self.editor.textView;
     self.editor.textView.nextKeyView = self.editor.colorControl;
-    self.editor.colorControl.nextKeyView = self.editor.saveButton;
+    self.editor.colorControl.nextKeyView = self.editor.showControl.hidden
+        ? self.editor.saveButton
+        : self.editor.showControl;
+    self.editor.showControl.nextKeyView = self.editor.saveButton;
     self.editor.saveButton.nextKeyView = self.editor.cancelButton;
     self.editor.cancelButton.nextKeyView = self.sectionControl;
     self.editor.keepEditingButton.nextKeyView = self.editor.discardButton;
@@ -1533,6 +1690,10 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
                        : @[ self.toolbar, self.scrollView, self.actionBar ]];
     NSMutableArray* action_children =
         [NSMutableArray arrayWithObject:self.cardColorControl];
+    if (!self.cardShowControl.hidden) {
+      [action_children addObject:self.cardShowControl];
+    }
+    if (!self.rearmButton.hidden) [action_children addObject:self.rearmButton];
     [action_children addObjectsFromArray:self.actionButtons];
     [self.actionBar setAccessibilityChildren:action_children];
     self.sectionControl.nextKeyView =
@@ -1541,7 +1702,13 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     self.nextPageButton.nextKeyView = self.closeButton;
     self.createButton.nextKeyView = self.closeButton;
     self.closeButton.nextKeyView = self.cardColorControl;
-    self.cardColorControl.nextKeyView = self.actionButtons.firstObject;
+    self.cardColorControl.nextKeyView = self.cardShowControl.hidden
+        ? self.actionButtons.firstObject
+        : self.cardShowControl;
+    self.cardShowControl.nextKeyView = self.rearmButton.hidden
+        ? self.actionButtons.firstObject
+        : self.rearmButton;
+    self.rearmButton.nextKeyView = self.actionButtons.firstObject;
     for (NSUInteger index = 0; index + 1 < self.actionButtons.count; ++index) {
       self.actionButtons[index].nextKeyView = self.actionButtons[index + 1];
     }
@@ -2244,7 +2411,12 @@ static bool dtn_result_reserved_zero(const DtnSurfaceResultV1* result) {
 }
 
 static bool dtn_intent_kind_commits(uint32_t kind) {
-  return kind == DTN_INTENT_SAVE || kind == DTN_INTENT_CHANGE_COLOR ||
+  return kind == DTN_INTENT_SAVE ||
+         kind == DTN_INTENT_SAVE_ALWAYS_AVAILABLE ||
+         kind == DTN_INTENT_SAVE_ON_RETURN ||
+         kind == DTN_INTENT_ARM_ON_RETURN ||
+         kind == DTN_INTENT_MAKE_ALWAYS_AVAILABLE ||
+         kind == DTN_INTENT_CHANGE_COLOR ||
          kind == DTN_INTENT_MOVE_EARLIER ||
          kind == DTN_INTENT_MOVE_LATER || kind == DTN_INTENT_RESOLVE ||
          kind == DTN_INTENT_REOPEN || kind == DTN_INTENT_DELETE ||
@@ -2272,7 +2444,7 @@ int32_t dtn_surface_request_intent(DtnSurface* surface,
   }
   if (![NSThread isMainThread]) return DTN_STATUS_WRONG_THREAD;
   if (!surface->initialized || !dtn_intent_reserved_zero(intent) ||
-      intent->kind > DTN_INTENT_NEXT_PAGE ||
+      intent->kind > DTN_INTENT_MAKE_ALWAYS_AVAILABLE ||
       intent->event_generation == 0u || intent->event_generation > INT64_MAX ||
       intent->payload_bytes > DTN_MAX_INTENT_PAYLOAD_BYTES ||
       (intent->payload_bytes == 0u) != (payload == NULL) ||
@@ -2288,6 +2460,9 @@ int32_t dtn_surface_request_intent(DtnSurface* surface,
   if (surface->has_pending_intent) return DTN_STATUS_BUSY;
 
   const bool payload_kind = intent->kind == DTN_INTENT_SAVE ||
+                            intent->kind ==
+                                DTN_INTENT_SAVE_ALWAYS_AVAILABLE ||
+                            intent->kind == DTN_INTENT_SAVE_ON_RETURN ||
                             intent->kind == DTN_INTENT_COPY;
   if (payload_kind != (intent->payload_bytes > 0u) ||
       (payload_kind &&
@@ -2295,15 +2470,28 @@ int32_t dtn_surface_request_intent(DtnSurface* surface,
     return DTN_STATUS_INVALID_ARGUMENT;
   }
   const bool color_kind = intent->kind == DTN_INTENT_SAVE ||
+                          intent->kind ==
+                              DTN_INTENT_SAVE_ALWAYS_AVAILABLE ||
+                          intent->kind == DTN_INTENT_SAVE_ON_RETURN ||
                           intent->kind == DTN_INTENT_CHANGE_COLOR;
   if ((color_kind && intent->color > 5u) ||
       (!color_kind && intent->color != DTN_NO_COLOR)) {
+    return DTN_STATUS_INVALID_ARGUMENT;
+  }
+  const bool timing_save =
+      intent->kind == DTN_INTENT_SAVE_ALWAYS_AVAILABLE ||
+      intent->kind == DTN_INTENT_SAVE_ON_RETURN;
+  if (timing_save &&
+      (surface->projection.projection_flags &
+       kDtnProjectionFlagOnReturnEnabled) == 0u) {
     return DTN_STATUS_INVALID_ARGUMENT;
   }
 
   const uint32_t editor_mode = surface->projection.editor_mode;
   const uint64_t selected = surface->projection.selected_token;
   if (intent->kind == DTN_INTENT_SAVE ||
+      intent->kind == DTN_INTENT_SAVE_ALWAYS_AVAILABLE ||
+      intent->kind == DTN_INTENT_SAVE_ON_RETURN ||
       intent->kind == DTN_INTENT_CANCEL) {
     if (editor_mode == DTN_EDITOR_INACTIVE ||
         intent->draft_generation == 0u ||
@@ -2364,6 +2552,15 @@ int32_t dtn_surface_request_intent(DtnSurface* surface,
     if (intent->card_token != 0u) return DTN_STATUS_INVALID_ARGUMENT;
   } else if (intent->kind == DTN_INTENT_REATTACH) {
     if (surface->projection.section != DTN_SECTION_DETACHED ||
+        !dtn_surface_has_card_token(surface, intent->card_token)) {
+      return DTN_STATUS_INVALID_ARGUMENT;
+    }
+  } else if (intent->kind == DTN_INTENT_ARM_ON_RETURN ||
+             intent->kind == DTN_INTENT_MAKE_ALWAYS_AVAILABLE) {
+    if ((surface->projection.projection_flags &
+         kDtnProjectionFlagOnReturnEnabled) == 0u ||
+        surface->projection.section != DTN_SECTION_CURRENT ||
+        surface->projection.editor_mode != DTN_EDITOR_INACTIVE ||
         !dtn_surface_has_card_token(surface, intent->card_token)) {
       return DTN_STATUS_INVALID_ARGUMENT;
     }
@@ -2492,7 +2689,9 @@ int32_t dtn_surface_apply_result(DtnSurface* surface,
     }
   } else {
     if ((result->disposition == DTN_RESULT_CONFLICT &&
-         pending.kind != DTN_INTENT_SAVE) ||
+         pending.kind != DTN_INTENT_SAVE &&
+         pending.kind != DTN_INTENT_SAVE_ALWAYS_AVAILABLE &&
+         pending.kind != DTN_INTENT_SAVE_ON_RETURN) ||
         result->new_store_revision != pending.expected_store_revision ||
         result->new_projection_generation != pending.projection_generation) {
       return DTN_STATUS_INVALID_ARGUMENT;

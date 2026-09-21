@@ -39,6 +39,7 @@ final class TerminalNotesNativeRawSnapshot {
     required this.differentiateWithoutColor,
     required this.reduceMotion,
     required this.systemBadgeVisible,
+    this.onReturnEnabled = false,
     required this.featureState,
     required this.surfaceState,
     required this.section,
@@ -75,6 +76,7 @@ final class TerminalNotesNativeRawSnapshot {
   final bool differentiateWithoutColor;
   final bool reduceMotion;
   final bool systemBadgeVisible;
+  final bool onReturnEnabled;
   final int featureState;
   final int surfaceState;
   final int section;
@@ -399,6 +401,7 @@ final class TerminalNotesNativeFfiBindings
         differentiateWithoutColor: projectionFlags & (1 << 4) != 0,
         reduceMotion: projectionFlags & (1 << 5) != 0,
         systemBadgeVisible: projectionFlags & (1 << 6) != 0,
+        onReturnEnabled: projectionFlags & (1 << 7) != 0,
         featureState: snapshot.ref.featureState,
         surfaceState: snapshot.ref.surfaceState,
         section: snapshot.ref.section,

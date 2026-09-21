@@ -107,6 +107,10 @@ enum TerminalNoteSurfaceIntentKind {
   beginEdit,
   cancelEditor,
   save,
+  saveAlwaysAvailable,
+  saveOnReturn,
+  armOnReturn,
+  makeAlwaysAvailable,
   changeColor,
   moveEarlier,
   moveLater,
@@ -1001,6 +1005,10 @@ final class TerminalNoteAuthority {
           }),
         );
       case TerminalNoteSurfaceIntentKind.save:
+      case TerminalNoteSurfaceIntentKind.saveAlwaysAvailable:
+      case TerminalNoteSurfaceIntentKind.saveOnReturn:
+      case TerminalNoteSurfaceIntentKind.armOnReturn:
+      case TerminalNoteSurfaceIntentKind.makeAlwaysAvailable:
       case TerminalNoteSurfaceIntentKind.changeColor:
       case TerminalNoteSurfaceIntentKind.moveEarlier:
       case TerminalNoteSurfaceIntentKind.moveLater:
@@ -1015,7 +1023,7 @@ final class TerminalNoteAuthority {
           cardToken: cardToken,
           draftGeneration: draftGeneration,
           expectedStoreRevision: expectedStoreRevision,
-          updatedAtUtcMicros: updatedAtUtcMicros!,
+          updatedAtUtcMicros: updatedAtUtcMicros,
           body: body,
           color: color,
         );
@@ -1635,10 +1643,18 @@ final class TerminalNoteAuthority {
     required int? updatedAtUtcMicros,
     required TerminalNoteApprovedExportPath? exportDestination,
   }) => switch (kind) {
-    TerminalNoteSurfaceIntentKind.save =>
+    TerminalNoteSurfaceIntentKind.save ||
+    TerminalNoteSurfaceIntentKind.saveAlwaysAvailable ||
+    TerminalNoteSurfaceIntentKind.saveOnReturn =>
       body != null &&
           color != null &&
           updatedAtUtcMicros != null &&
+          exportDestination == null,
+    TerminalNoteSurfaceIntentKind.armOnReturn ||
+    TerminalNoteSurfaceIntentKind.makeAlwaysAvailable =>
+      body == null &&
+          color == null &&
+          updatedAtUtcMicros == null &&
           exportDestination == null,
     TerminalNoteSurfaceIntentKind.copy =>
       body != null &&
@@ -1760,7 +1776,7 @@ final class TerminalNoteAuthority {
     required TerminalNoteCardToken? cardToken,
     required int draftGeneration,
     required BigInt expectedStoreRevision,
-    required int updatedAtUtcMicros,
+    required int? updatedAtUtcMicros,
     required String? body,
     required NoteColorKey? color,
   }) async {
@@ -1774,7 +1790,13 @@ final class TerminalNoteAuthority {
         !reattaching) {
       return _invalidSurfaceIntent(surface);
     }
-    final bool saving = kind == TerminalNoteSurfaceIntentKind.save;
+    final bool saving =
+        kind == TerminalNoteSurfaceIntentKind.save ||
+        kind == TerminalNoteSurfaceIntentKind.saveAlwaysAvailable ||
+        kind == TerminalNoteSurfaceIntentKind.saveOnReturn;
+    final bool triggerOnly =
+        kind == TerminalNoteSurfaceIntentKind.armOnReturn ||
+        kind == TerminalNoteSurfaceIntentKind.makeAlwaysAvailable;
     final NoteId? selectedNoteId = saving
         ? surface.selectedNoteId
         : _projectedNoteId(surface, cardToken);
@@ -1796,43 +1818,144 @@ final class TerminalNoteAuthority {
           : selectedNote.attachment.contextId == pane.contextId;
       if (!validAttachment) return _invalidSurfaceIntent(surface);
     }
+    if (triggerOnly &&
+        (selectedNote == null || selectedNote.status != NoteStatus.active)) {
+      return _invalidSurfaceIntent(surface);
+    }
+    if (kind == TerminalNoteSurfaceIntentKind.makeAlwaysAvailable &&
+        _document.snapshot.triggerFor(selectedNote!.id) == null) {
+      return _invalidSurfaceIntent(surface);
+    }
 
     NoteId? createdNoteId;
+    TerminalNoteMutationResult applyShowTiming({
+      required TerminalNoteMutationResult base,
+      required NoteId noteId,
+      required bool onReturn,
+    }) {
+      if (base.disposition == TerminalNoteMutationDisposition.rejected) {
+        return base;
+      }
+      TerminalNoteMutationResult retained = base;
+      TerminalNoteSnapshot working = base.snapshot;
+      if (working.triggerFor(noteId) != null) {
+        final NoteRecord note = working.noteFor(noteId)!;
+        final TerminalNoteMutationResult canceled = working.cancelTrigger(
+          noteId: noteId,
+          expectedStoreRevision: working.storeRevision,
+          expectedNoteRevision: note.revision,
+        );
+        if (canceled.disposition == TerminalNoteMutationDisposition.rejected) {
+          return canceled;
+        }
+        if (canceled.disposition == TerminalNoteMutationDisposition.accepted) {
+          retained = canceled;
+          working = canceled.snapshot;
+        }
+      }
+      if (!onReturn) return retained;
+      final NoteRecord note = working.noteFor(noteId)!;
+      return working.armOnReturn(
+        noteId: noteId,
+        isEligible: surface.foreground && !surface.occluded,
+        expectedStoreRevision: working.storeRevision,
+        expectedNoteRevision: note.revision,
+      );
+    }
+
     late final TerminalNoteAuthorityTransition transition;
     switch (kind) {
       case TerminalNoteSurfaceIntentKind.save:
+      case TerminalNoteSurfaceIntentKind.saveAlwaysAvailable:
+      case TerminalNoteSurfaceIntentKind.saveOnReturn:
         if (surface.editorMode == TerminalNoteEditorMode.creating) {
           transition = (TerminalNoteSnapshot snapshot) {
             createdNoteId = _noteIdGenerator.next(
               excluding: snapshot.notes.keys,
             );
+            final TerminalNoteMutationResult created = snapshot.createNote(
+              id: createdNoteId!,
+              contextId: pane.contextId,
+              body: body!,
+              color: color!,
+              utcMicros: updatedAtUtcMicros!,
+              expectedStoreRevision: expectedStoreRevision,
+            );
             return TerminalNoteAuthorityMutationPlan(
-              mutation: snapshot.createNote(
-                id: createdNoteId!,
-                contextId: pane.contextId,
-                body: body!,
-                color: color!,
-                utcMicros: updatedAtUtcMicros,
-                expectedStoreRevision: expectedStoreRevision,
-              ),
+              mutation: kind == TerminalNoteSurfaceIntentKind.save
+                  ? created
+                  : applyShowTiming(
+                      base: created,
+                      noteId: createdNoteId!,
+                      onReturn:
+                          kind == TerminalNoteSurfaceIntentKind.saveOnReturn,
+                    ),
             );
           };
           break;
         } else {
           if (selectedNote == null) return _invalidSurfaceIntent(surface);
-          transition = (TerminalNoteSnapshot snapshot) =>
-              TerminalNoteAuthorityMutationPlan(
-                mutation: snapshot.editNote(
-                  noteId: selectedNote.id,
-                  body: body!,
-                  color: color!,
-                  updatedAtUtcMicros: updatedAtUtcMicros,
-                  expectedStoreRevision: expectedStoreRevision,
-                  expectedNoteRevision: selectedNote.revision,
-                ),
-              );
+          transition = (TerminalNoteSnapshot snapshot) {
+            final TerminalNoteMutationResult edited = snapshot.editNote(
+              noteId: selectedNote.id,
+              body: body!,
+              color: color!,
+              updatedAtUtcMicros: updatedAtUtcMicros!,
+              expectedStoreRevision: expectedStoreRevision,
+              expectedNoteRevision: selectedNote.revision,
+            );
+            return TerminalNoteAuthorityMutationPlan(
+              mutation: kind == TerminalNoteSurfaceIntentKind.save
+                  ? edited
+                  : applyShowTiming(
+                      base: edited,
+                      noteId: selectedNote.id,
+                      onReturn:
+                          kind == TerminalNoteSurfaceIntentKind.saveOnReturn,
+                    ),
+            );
+          };
           break;
         }
+      case TerminalNoteSurfaceIntentKind.armOnReturn:
+        transition = (TerminalNoteSnapshot snapshot) {
+          final NoteRecord note = snapshot.noteFor(selectedNote!.id)!;
+          TerminalNoteSnapshot working = snapshot;
+          if (snapshot.triggerFor(note.id) != null) {
+            final TerminalNoteMutationResult canceled = snapshot.cancelTrigger(
+              noteId: note.id,
+              expectedStoreRevision: snapshot.storeRevision,
+              expectedNoteRevision: note.revision,
+            );
+            if (canceled.disposition ==
+                TerminalNoteMutationDisposition.rejected) {
+              return TerminalNoteAuthorityMutationPlan(mutation: canceled);
+            }
+            working = canceled.snapshot;
+          }
+          final NoteRecord current = working.noteFor(note.id)!;
+          return TerminalNoteAuthorityMutationPlan(
+            mutation: working.armOnReturn(
+              noteId: note.id,
+              isEligible: surface.foreground && !surface.occluded,
+              expectedStoreRevision: working.storeRevision,
+              expectedNoteRevision: current.revision,
+            ),
+          );
+        };
+        break;
+      case TerminalNoteSurfaceIntentKind.makeAlwaysAvailable:
+        transition = (TerminalNoteSnapshot snapshot) {
+          final NoteRecord note = snapshot.noteFor(selectedNote!.id)!;
+          return TerminalNoteAuthorityMutationPlan(
+            mutation: snapshot.cancelTrigger(
+              noteId: note.id,
+              expectedStoreRevision: expectedStoreRevision,
+              expectedNoteRevision: note.revision,
+            ),
+          );
+        };
+        break;
       case TerminalNoteSurfaceIntentKind.changeColor:
         if (selectedNote == null) return _invalidSurfaceIntent(surface);
         transition = (TerminalNoteSnapshot snapshot) =>
@@ -1841,7 +1964,7 @@ final class TerminalNoteAuthority {
                 noteId: selectedNote.id,
                 body: selectedNote.body.value,
                 color: color!,
-                updatedAtUtcMicros: updatedAtUtcMicros,
+                updatedAtUtcMicros: updatedAtUtcMicros!,
                 expectedStoreRevision: expectedStoreRevision,
                 expectedNoteRevision: selectedNote.revision,
               ),
@@ -1879,13 +2002,13 @@ final class TerminalNoteAuthority {
             mutation: detachedReorder
                 ? snapshot.reorderDetachedNotes(
                     orderedNoteIds: notes.map((NoteRecord note) => note.id),
-                    updatedAtUtcMicros: updatedAtUtcMicros,
+                    updatedAtUtcMicros: updatedAtUtcMicros!,
                     expectedStoreRevision: expectedStoreRevision,
                   )
                 : snapshot.reorderAttachedNotes(
                     contextId: pane.contextId,
                     orderedNoteIds: notes.map((NoteRecord note) => note.id),
-                    updatedAtUtcMicros: updatedAtUtcMicros,
+                    updatedAtUtcMicros: updatedAtUtcMicros!,
                     expectedStoreRevision: expectedStoreRevision,
                   ),
           );
@@ -1897,7 +2020,7 @@ final class TerminalNoteAuthority {
             TerminalNoteAuthorityMutationPlan(
               mutation: snapshot.resolveNote(
                 noteId: selectedNote.id,
-                updatedAtUtcMicros: updatedAtUtcMicros,
+                updatedAtUtcMicros: updatedAtUtcMicros!,
                 expectedStoreRevision: expectedStoreRevision,
                 expectedNoteRevision: selectedNote.revision,
               ),
@@ -1909,7 +2032,7 @@ final class TerminalNoteAuthority {
             TerminalNoteAuthorityMutationPlan(
               mutation: snapshot.reopenNote(
                 noteId: selectedNote.id,
-                updatedAtUtcMicros: updatedAtUtcMicros,
+                updatedAtUtcMicros: updatedAtUtcMicros!,
                 expectedStoreRevision: expectedStoreRevision,
                 expectedNoteRevision: selectedNote.revision,
               ),
@@ -1920,7 +2043,7 @@ final class TerminalNoteAuthority {
         transition = (TerminalNoteSnapshot snapshot) {
           final TerminalNoteMutationResult mutation = snapshot.deleteNote(
             noteId: selectedNote.id,
-            updatedAtUtcMicros: updatedAtUtcMicros,
+            updatedAtUtcMicros: updatedAtUtcMicros!,
             expectedStoreRevision: expectedStoreRevision,
             expectedNoteRevision: selectedNote.revision,
           );
@@ -1945,7 +2068,7 @@ final class TerminalNoteAuthority {
               mutation: snapshot.reattachNote(
                 noteId: selectedNote.id,
                 contextId: pane.contextId,
-                updatedAtUtcMicros: updatedAtUtcMicros,
+                updatedAtUtcMicros: updatedAtUtcMicros!,
                 expectedStoreRevision: expectedStoreRevision,
                 expectedNoteRevision: selectedNote.revision,
               ),
@@ -1973,7 +2096,7 @@ final class TerminalNoteAuthority {
           bodyUtf8Bytes: body == null ? 0 : utf8.encode(body).length,
           transition: transition,
           onBeforePublication: () {
-            if (kind == TerminalNoteSurfaceIntentKind.save) {
+            if (saving) {
               surface
                 ..selectedNoteId = createdNoteId ?? selectedNoteId
                 ..editorMode = TerminalNoteEditorMode.inactive

@@ -339,12 +339,13 @@ int main(int argc, const char* argv[]) {
                                             unsupported.size()) ==
                    DTN_STATUS_UNSUPPORTED_VERSION,
                "version rejection");
-  std::vector<uint8_t> unknown_flag = packet(2u, 5u);
-  unknown_flag[15u] = 0x80u;
-  ok &= expect(dtn_surface_apply_projection(surface, unknown_flag.data(),
-                                            unknown_flag.size()) ==
+  std::vector<uint8_t> noncanonical_header = packet(2u, 5u);
+  noncanonical_header[100u] = 1u;
+  ok &= expect(dtn_surface_apply_projection(surface,
+                                            noncanonical_header.data(),
+                                            noncanonical_header.size()) ==
                    DTN_STATUS_INVALID_ARGUMENT,
-               "unknown flag rejection");
+               "reserved header rejection");
   std::vector<uint8_t> collapsed_body = packet(2u, 5u);
   collapsed_body[14u] = DTN_VISIBILITY_COLLAPSED;
   ok &= expect(dtn_surface_apply_projection(surface, collapsed_body.data(),
@@ -977,7 +978,7 @@ int main(int argc, const char* argv[]) {
   editor_window.contentView = editor_host;
   NSView* editor_note_view =
       (__bridge NSView*)dtn_surface_native_view(editor_surface);
-  std::vector<uint8_t> editor_packet = packet(1u, 4u, {"baseline"}, 0x01u);
+  std::vector<uint8_t> editor_packet = packet(1u, 4u, {"baseline"}, 0x81u);
   editor_packet[83u] = DTN_EDITOR_EDITING;
   write_u16(editor_packet, 86u, 1u);
   write_u64(editor_packet, 108u, 1u);
@@ -997,6 +998,8 @@ int main(int argc, const char* argv[]) {
       editor_view == nil ? nil : [editor_view valueForKey:@"textView"];
   NSSegmentedControl* draft_color =
       editor_view == nil ? nil : [editor_view valueForKey:@"colorControl"];
+  NSSegmentedControl* draft_show =
+      editor_view == nil ? nil : [editor_view valueForKey:@"showControl"];
   NSButton* save_button = find_button_with_title(editor_view, @"保存");
   NSButton* cancel_button =
       find_button_with_title(editor_view, @"キャンセル");
@@ -1020,6 +1023,9 @@ int main(int argc, const char* argv[]) {
                    save_button != nil && cancel_button != nil &&
                    discard_button != nil && keep_editing_button != nil &&
                    draft_color.segmentCount == 6 &&
+                   draft_show.segmentCount == 2 && !draft_show.hidden &&
+                   [[draft_show labelForSegment:0] isEqualToString:@"常に表示"] &&
+                   [[draft_show labelForSegment:1] isEqualToString:@"Return時"] &&
                    semantic_buttons.count == 8u &&
                    card_color.segmentCount == 6 &&
                    [[editor_view accessibilityRole]
@@ -1035,9 +1041,10 @@ int main(int argc, const char* argv[]) {
   NSArray* editor_children = [editor_view accessibilityChildren];
   ok &= expect(editor_rail_children.count == 2u &&
                    editor_rail_children[1] == editor_view &&
-                   editor_children.count == 4u &&
+                   editor_children.count == 5u &&
                    text_view.nextKeyView == draft_color &&
-                   draft_color.nextKeyView == save_button &&
+                   draft_color.nextKeyView == draft_show &&
+                   draft_show.nextKeyView == save_button &&
                    save_button.nextKeyView == cancel_button &&
                    cancel_button.nextKeyView != nil,
                "editor VoiceOver tree and keyboard order are deterministic");
@@ -1192,6 +1199,8 @@ int main(int argc, const char* argv[]) {
   replace_text(text_view, @"仮名のメモ");
   draft_color.selectedSegment = 2;
   [draft_color sendAction:draft_color.action to:draft_color.target];
+  draft_show.selectedSegment = 1;
+  [draft_show sendAction:draft_show.action to:draft_show.target];
   [text_view setSelectedRange:NSMakeRange(2u, 1u)];
   const NSRange saved_selection = text_view.selectedRange;
   const BOOL saved_can_undo = text_view.undoManager.canUndo;
@@ -1205,14 +1214,14 @@ int main(int argc, const char* argv[]) {
                                        editor_payload,
                                        sizeof(editor_payload)) ==
                        DTN_STATUS_OK &&
-                   editor_taken.kind == DTN_INTENT_SAVE &&
+                   editor_taken.kind == DTN_INTENT_SAVE_ON_RETURN &&
                    editor_taken.event_generation == 1u &&
                    editor_taken.draft_generation == 1u &&
                    editor_taken.color == 2u &&
                    editor_taken.payload_bytes == expected_editor_body.length &&
                    std::memcmp(editor_payload, expected_editor_body.bytes,
                                expected_editor_body.length) == 0,
-               "Save emits committed Japanese body and draft color");
+               "Save emits committed Japanese body, color, and On Return timing");
   DtnSurfaceResultV1 editor_conflict = {};
   editor_conflict.struct_size = sizeof(editor_conflict);
   editor_conflict.version = DTN_RESULT_VERSION;
@@ -1416,6 +1425,85 @@ int main(int argc, const char* argv[]) {
   dtn_surface_destroy(editor_surface);
   ok &= expect(dtn_debug_live_surfaces() == 1u,
                "isolated editor surface releases all native ownership");
+
+  DtnSurface* timing_surface = dtn_surface_create();
+  NSWindow* timing_window = [[NSWindow alloc]
+      initWithContentRect:NSMakeRect(0, 0, 640, 480)
+                styleMask:NSWindowStyleMaskBorderless
+                  backing:NSBackingStoreBuffered
+                    defer:NO];
+  NSView* timing_host =
+      [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 640, 480)];
+  timing_window.contentView = timing_host;
+  NSView* timing_view =
+      (__bridge NSView*)dtn_surface_native_view(timing_surface);
+  std::vector<uint8_t> timing_packet = packet(1u, 4u, {"due"}, 0x81u);
+  mark_cards_due(timing_packet, 1u);
+  ok &= expect(dtn_surface_apply_projection(
+                   timing_surface, timing_packet.data(), timing_packet.size()) ==
+                       DTN_STATUS_OK &&
+                   dtn_surface_update_layout(timing_surface, &normal_layout) ==
+                       DTN_STATUS_OK &&
+                   dtn_surface_attach_to_host(
+                       timing_surface, (__bridge void*)timing_host) ==
+                       DTN_STATUS_OK,
+               "On Return action surface projection and attachment");
+  NSSegmentedControl* card_show =
+      [timing_view valueForKey:@"cardShowControl"];
+  NSButton* rearm_button = [timing_view valueForKey:@"rearmButton"];
+  ok &= expect(card_show != nil && !card_show.hidden && card_show.enabled &&
+                   card_show.segmentCount == 2u &&
+                   card_show.selectedSegment == 1 && rearm_button != nil &&
+                   !rearm_button.hidden && rearm_button.enabled &&
+                   [rearm_button.title isEqualToString:@"Re-arm"],
+               "selected due card exposes GUI Show timing and explicit Re-arm");
+  [rearm_button performClick:nil];
+  DtnSurfaceIntentV1 timing_taken = {};
+  timing_taken.struct_size = sizeof(timing_taken);
+  timing_taken.version = DTN_INTENT_VERSION;
+  uint8_t timing_payload[DTN_MAX_INTENT_PAYLOAD_BYTES] = {};
+  ok &= expect(dtn_surface_take_intent(timing_surface, &timing_taken,
+                                       timing_payload,
+                                       sizeof(timing_payload)) ==
+                       DTN_STATUS_OK &&
+                   timing_taken.kind == DTN_INTENT_ARM_ON_RETURN &&
+                   timing_taken.event_generation == 1u &&
+                   timing_taken.card_token == 1u &&
+                   timing_taken.payload_bytes == 0u,
+               "explicit Re-arm emits one body-free append-only intent");
+  DtnSurfaceResultV1 timing_rejected = {};
+  timing_rejected.struct_size = sizeof(timing_rejected);
+  timing_rejected.version = DTN_RESULT_VERSION;
+  timing_rejected.surface_generation = 7u;
+  timing_rejected.projection_generation = 1u;
+  timing_rejected.event_generation = 1u;
+  timing_rejected.draft_generation = 0u;
+  timing_rejected.new_store_revision = 4u;
+  timing_rejected.new_projection_generation = 1u;
+  timing_rejected.disposition = DTN_RESULT_REJECTED;
+  ok &= expect(dtn_surface_apply_result(timing_surface, &timing_rejected) ==
+                   DTN_STATUS_OK,
+               "rejected Re-arm restores timing controls");
+  card_show.selectedSegment = 0;
+  [card_show sendAction:card_show.action to:card_show.target];
+  timing_taken = {};
+  timing_taken.struct_size = sizeof(timing_taken);
+  timing_taken.version = DTN_INTENT_VERSION;
+  ok &= expect(dtn_surface_take_intent(timing_surface, &timing_taken,
+                                       timing_payload,
+                                       sizeof(timing_payload)) ==
+                       DTN_STATUS_OK &&
+                   timing_taken.kind == DTN_INTENT_MAKE_ALWAYS_AVAILABLE &&
+                   timing_taken.event_generation == 2u &&
+                   timing_taken.card_token == 1u,
+               "Show Always emits one body-free append-only intent");
+  timing_rejected.event_generation = 2u;
+  ok &= expect(dtn_surface_apply_result(timing_surface, &timing_rejected) ==
+                   DTN_STATUS_OK,
+               "rejected Show timing restores semantic ownership");
+  dtn_surface_destroy(timing_surface);
+  ok &= expect(dtn_debug_live_surfaces() == 1u,
+               "On Return action surface releases all native ownership");
 
   DtnSurface* navigation_surface = dtn_surface_create();
   NSView* navigation_view =

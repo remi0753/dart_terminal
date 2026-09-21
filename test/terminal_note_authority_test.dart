@@ -13,6 +13,7 @@ Future<void> runTerminalNoteAuthorityTests() async {
   await _testProjectionAcknowledgementAndClose();
   await _testExpandedProjectionHardBounds();
   await _testSurfaceSemanticMutationContract();
+  await _testOnReturnSurfaceMutationContract();
   await _testDetachedPagingReorderAndExplicitReattach();
   await _testSixtyFourPaneAndSessionBound();
   await _testApplicationShutdownAndReopen();
@@ -1359,6 +1360,190 @@ Future<void> _testSurfaceSemanticMutationContract() async {
         projection.cards.isEmpty &&
         projection.totalCount == 1,
     'closing removes content from the projection without deleting the Note',
+  );
+  await authority.stop();
+}
+
+Future<void> _testOnReturnSurfaceMutationContract() async {
+  final _FakeAuthorityStore store = _FakeAuthorityStore();
+  final TerminalNoteAuthority authority = await _startAuthority(
+    store,
+    noteIdGenerator: TerminalNoteIdGenerator.forTesting(
+      () => List<int>.filled(16, 0x71),
+    ),
+  );
+  final _FakeNoteSurface surface = _FakeNoteSurface();
+  TerminalNoteSurfaceProjection projection = authority
+      .attachSurface(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        port: surface,
+      )
+      .projection!;
+  projection = authority
+      .updateSurface(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        surfaceGeneration: projection.surfaceGeneration,
+        visibility: TerminalNoteSurfaceVisibility.expanded,
+        foreground: true,
+        occluded: false,
+      )
+      .projection!;
+  var event = 0;
+
+  Future<TerminalNoteSurfaceIntentResult> intent(
+    TerminalNoteSurfaceIntentKind kind, {
+    TerminalNoteCardToken? cardToken,
+    String? body,
+    NoteColorKey? color,
+    int? timestamp,
+  }) async {
+    final TerminalNoteSurfaceIntentResult result = await authority
+        .submitSurfaceIntent(
+          sequence: authority.nextSequence(),
+          paneId: const PaneId(1),
+          surfaceGeneration: projection.surfaceGeneration,
+          projectionGeneration: projection.projectionGeneration,
+          eventGeneration: ++event,
+          draftGeneration: projection.draftGeneration,
+          cardToken: cardToken,
+          expectedStoreRevision: projection.storeRevision,
+          kind: kind,
+          updatedAtUtcMicros: timestamp,
+          body: body,
+          color: color,
+        );
+    if (result.projection != null) projection = result.projection!;
+    return result;
+  }
+
+  await intent(TerminalNoteSurfaceIntentKind.beginCreate);
+  final int commitsBeforeCreate = store.commitCount;
+  final BigInt revisionBeforeCreate = authority.document.snapshot.storeRevision;
+  final TerminalNoteSurfaceIntentResult created = await intent(
+    TerminalNoteSurfaceIntentKind.saveOnReturn,
+    body: 'return to this',
+    color: NoteColorKey.yellow,
+    timestamp: 300,
+  );
+  final NoteId noteId = authority.document.snapshot.notes.keys.single;
+  final NoteTriggerRecord createdTrigger = authority.document.snapshot
+      .triggerFor(noteId)!;
+  _expect(
+    created.disposition == TerminalNoteAuthorityMutationDisposition.committed &&
+        store.commitCount == commitsBeforeCreate + 1 &&
+        authority.document.snapshot.storeRevision ==
+            revisionBeforeCreate + BigInt.two &&
+        createdTrigger.kind == NoteTriggerKind.onReturn &&
+        createdTrigger.phase == NoteTriggerPhase.onReturnArmedHere &&
+        authority.document.snapshot.deliveryFor(noteId) == null &&
+        projection.cards.single.triggerKind == NoteTriggerKind.onReturn &&
+        projection.editorMode == TerminalNoteEditorMode.inactive,
+    'create and On Return arm publish through one physical durable commit',
+  );
+
+  await intent(
+    TerminalNoteSurfaceIntentKind.beginEdit,
+    cardToken: projection.cards.single.token,
+  );
+  final int commitsBeforeAlways = store.commitCount;
+  final TerminalNoteSurfaceIntentResult madeAlways = await intent(
+    TerminalNoteSurfaceIntentKind.saveAlwaysAvailable,
+    cardToken: projection.selectedToken,
+    body: 'always available',
+    color: NoteColorKey.blue,
+    timestamp: 301,
+  );
+  _expect(
+    madeAlways.disposition ==
+            TerminalNoteAuthorityMutationDisposition.committed &&
+        store.commitCount == commitsBeforeAlways + 1 &&
+        authority.document.snapshot.triggerFor(noteId) == null &&
+        authority.document.snapshot.deliveryFor(noteId) == null &&
+        projection.cards.single.triggerKind == null,
+    'edit and Always Available cancel the trigger in one physical commit',
+  );
+
+  final int commitsBeforeArm = store.commitCount;
+  final TerminalNoteSurfaceIntentResult armed = await intent(
+    TerminalNoteSurfaceIntentKind.armOnReturn,
+    cardToken: projection.cards.single.token,
+  );
+  final BigInt legacyGeneration = authority.document.snapshot
+      .triggerFor(noteId)!
+      .generation;
+  _expect(
+    armed.isAccepted &&
+        store.commitCount == commitsBeforeArm + 1 &&
+        authority.document.snapshot.triggerFor(noteId)!.phase ==
+            NoteTriggerPhase.onReturnArmedHere,
+    'selected passive card can be armed explicitly',
+  );
+
+  await intent(
+    TerminalNoteSurfaceIntentKind.beginEdit,
+    cardToken: projection.selectedToken,
+  );
+  final TerminalNoteSurfaceIntentResult legacySaved = await intent(
+    TerminalNoteSurfaceIntentKind.save,
+    cardToken: projection.selectedToken,
+    body: 'legacy save preserves timing',
+    color: NoteColorKey.green,
+    timestamp: 302,
+  );
+  _expect(
+    legacySaved.isAccepted &&
+        authority.document.snapshot.triggerFor(noteId)!.generation ==
+            legacyGeneration &&
+        authority.document.snapshot.triggerFor(noteId)!.phase ==
+            NoteTriggerPhase.onReturnArmedHere,
+    'legacy S1 Save preserves an existing trigger exactly',
+  );
+
+  authority.observeEligibleFocus(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    isEligible: false,
+  );
+  authority.observeEligibleFocus(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    isEligible: true,
+  );
+  await authority.whenIdle();
+  projection = surface.applied.last;
+  _expect(
+    authority.document.snapshot.deliveryFor(noteId) != null &&
+        projection.cards.first.due,
+    'fixture reaches durable due before explicit re-arm',
+  );
+
+  final int commitsBeforeRearm = store.commitCount;
+  final TerminalNoteSurfaceIntentResult rearmed = await intent(
+    TerminalNoteSurfaceIntentKind.armOnReturn,
+    cardToken: projection.cards.first.token,
+  );
+  _expect(
+    rearmed.isAccepted &&
+        store.commitCount == commitsBeforeRearm + 1 &&
+        authority.document.snapshot.deliveryFor(noteId) == null &&
+        authority.document.snapshot.triggerFor(noteId)!.phase ==
+            NoteTriggerPhase.onReturnArmedHere,
+    'due On Return card is atomically re-armed without an intermediate publish',
+  );
+
+  final int commitsBeforeCancel = store.commitCount;
+  final TerminalNoteSurfaceIntentResult cancelled = await intent(
+    TerminalNoteSurfaceIntentKind.makeAlwaysAvailable,
+    cardToken: projection.cards.single.token,
+  );
+  _expect(
+    cancelled.isAccepted &&
+        store.commitCount == commitsBeforeCancel + 1 &&
+        authority.document.snapshot.triggerFor(noteId) == null &&
+        authority.document.snapshot.deliveryFor(noteId) == null,
+    'selected armed card becomes Always Available in one durable commit',
   );
   await authority.stop();
 }

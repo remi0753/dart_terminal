@@ -37,6 +37,10 @@ enum TerminalNotesIntentKind {
   showDetached,
   previousPage,
   nextPage,
+  saveAlwaysAvailable,
+  saveOnReturn,
+  armOnReturn,
+  makeAlwaysAvailable,
 }
 
 enum TerminalNotesResultDisposition {
@@ -158,6 +162,7 @@ final class TerminalNotesNativeSnapshot {
     required this.differentiateWithoutColor,
     required this.reduceMotion,
     required this.systemBadgeVisible,
+    this.onReturnEnabled = false,
     required this.featureState,
     required this.surfaceState,
     required this.section,
@@ -195,6 +200,7 @@ final class TerminalNotesNativeSnapshot {
   final bool differentiateWithoutColor;
   final bool reduceMotion;
   final bool systemBadgeVisible;
+  final bool onReturnEnabled;
   final TerminalNotesFeatureState featureState;
   final TerminalNotesSurfaceState surfaceState;
   final TerminalNotesCollectionSection section;
@@ -376,6 +382,7 @@ final class TerminalNotesNativeSurface {
       differentiateWithoutColor: raw.differentiateWithoutColor,
       reduceMotion: raw.reduceMotion,
       systemBadgeVisible: raw.systemBadgeVisible,
+      onReturnEnabled: raw.onReturnEnabled,
       featureState: TerminalNotesFeatureState.values[raw.featureState],
       surfaceState: TerminalNotesSurfaceState.values[raw.surfaceState],
       section: TerminalNotesCollectionSection.values[raw.section],
@@ -515,6 +522,8 @@ final class TerminalNotesNativeSurface {
         TerminalNotesIntentKind.values[raw.kind];
     final bool payloadKind =
         kind == TerminalNotesIntentKind.save ||
+        kind == TerminalNotesIntentKind.saveAlwaysAvailable ||
+        kind == TerminalNotesIntentKind.saveOnReturn ||
         kind == TerminalNotesIntentKind.copy;
     if (payloadKind != raw.payload.isNotEmpty) {
       throw const TerminalNotesNativeException('takeIntent.payload', -1);
