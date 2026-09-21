@@ -153,22 +153,9 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
     - [x] versioned content-free evidenceと全hard gateを接続する
   - [ ] named aggregateとarm64/x86_64/Universal auditを接続する
     - [x] versioned cross-architecture Note capability/resource equality auditを実装する
-      - [x] 汎用runtime builderのcross-target helper native-assets mappingを修正する
-      - [x] fresh 4 bundle equality auditとversioned evidenceを完了する
     - [ ] R0 named aggregateへfull gate inventoryを接続する
-      - [x] PTY sanitizerのlarge-pipeline readiness raceを除去する
-      - [ ] serial 8-gate inventoryとfinal evidence checkerを完了する
-        - [x] exact serial inventoryとfail-closed checker contractを実装する
-        - [x] product-owned generic macOS entropy packageへdirect FFI boundaryを分離する
-        - [ ] fresh 8-gate aggregateとfinal evidence checkerを完走する
-          - [x] default-off Note action catalogのruntime smoke count driftを修正する
-          - [ ] 修正後のfresh 8-gate aggregateを先頭から完走する
-            - [x] display-testのcurrent prompt readiness raceを除去する
-            - [ ] prompt readiness修正後のfresh 8-gate aggregateを先頭から完走する
-              - [x] windowless状態のNew Window action admissionを修正する
-              - [ ] New Window admission修正後のfresh 8-gate aggregateを先頭から完走する
-                - [x] user-actions fixtureのforeground activation readinessを固定する
-                - [ ] foreground activation修正後のfresh 8-gate aggregateを先頭から完走する
+      - [x] exact serial inventoryとfail-closed checker contractを実装する
+      - [ ] fresh 8-gate aggregateとfinal evidence checkerを完走する
   - [ ] manual IME/keyboard/VoiceOver/appearance/TUI checklistとR0 stage decisionを完了する
 - [ ] CM-13 R1 internal S1/S2 opt-inを完了する
 - [ ] CM-14 R2 public S1/S2 opt-inを完了する

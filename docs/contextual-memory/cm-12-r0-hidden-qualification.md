@@ -1107,3 +1107,87 @@ passした。いずれもtest assertionまたはproduct failureではない。
 - `git diff --check`はpass。Sibling `dart_appkit`にはcode、API、test、dart_terminal固有概念を追加していない。同repositoryの既存user変更3件
   （`docs/BUILDING_DART_ENGINE.md`、`scripts/bootstrap_dart_engine.sh`、`scripts/build_dart_engine.sh`）は変更もstageもしていない。
 - Fresh aggregateが生成したbudget evidenceはこのsubtaskの変更ではないため、subtask commitから除外し、次のaggregate子タスクでgate 1から再生成・判定する。
+
+### Fresh named aggregate 6回目の阻害
+
+Foreground activation修正commit後、`CI=true DART_SUPPRESS_ANALYTICS=true make RUNTIME_ARCH=arm64 contextual-memory-r0-qualification`を
+retry wrapperなしでgate 1から再実行した。Gate 1のfresh budget evidenceとgate 2のcross-architecture evidenceはpassしたが、gate 3
+`terminal-notes-acceptance`内のRelease AOT window-interaction acceptanceが
+`reopened window reused a stale interaction identity`でstatus 70となり停止した。Gate 4〜8とfinal checkerは未実行で、final R0 summaryは
+出ていない。このaggregateは失敗後に再試行していない。
+
+このrunで確定した結果:
+
+- Budget evidenceはinputs 4／sources 6、combined first-visible p95 19,834 us／100,000 us、periodic timer 0、display link 0、request timeout
+  timer 1、content-freeでpassした。
+- Cross-architecture evidenceは4 bundles、21 resources、1,388,080 bytes、8 Note images、arm64／x86_64／Universal、sentinel 0、absolute
+  path 0、content-freeでpassした。
+- Gate 3はNotes codec／asset／host／capability、native sanitizerを通過し、Developer JIT window interactionも3,074 msでpassした。
+  Release AOTは最初の追加window（pane 3）をcleanに閉じ、次の追加window用pane 4をstartした後、10秒以内に`state.windowCount == 3`、
+  `authority.windowCount == 3`、active windowがretained／直前に閉じたidentityのどちらでもない、という複合条件を満たさず停止した。
+  Cleanupは4 sessionすべてを回収したが、acceptance exceptionのためprocess statusは70だった。
+
+調査で確認した事実と仮説:
+
+- `TerminalApplicationState.createWindow`のwindow identityは単調増加し、今回もpane 3のwindow close後にpane 4が新規作成されている。State allocatorが
+  identityを再利用する実装ではない。
+- `TerminalProductHierarchyActionCoordinator._createWindow`はlogical windowを作成した時点でactiveにするが、その後のPTY `pane.start()`をawaitし、
+  完了後に初めてnative hierarchyをreconcileする。Await中は既存native windowのfocus eventが`state.activateWindow`を呼べるため、新規windowの
+  projection直前にactive identityが既存windowへ戻る競合余地がある。
+- 既存unit contractは「New Windowはstarted paneを持つ新規windowをactiveにする」と明示している。したがって、単にacceptanceからactive identity条件を
+  外すことは製品契約を弱める。
+- 失敗messageは複合predicateに対するものなので、active identity driftが第一仮説であり、unit testで`pane.start()`中のactive-window変更を再現してから
+  修正を確定する。Authority countまたはwindow countが原因なら、この仮説を固定せず観測に合わせて見直す。
+
+検討した選択肢:
+
+- AggregateまたはRelease AOTだけをretryする案は、一発のfresh graphという完了条件を満たさず競合を残すため不採用。
+- Timeout延長／固定sleepは、新規windowのactive identityを復元しないため不採用。
+- Acceptanceのactive identity条件を削除する、またはfixtureからsynthetic focusを注入する案は、New Windowの既存製品契約を隠すため不採用。
+- `dart_appkit`のwindow／focus APIまたは汎用runnerを変更する案は、product-owned asynchronous action transactionの問題を汎用libraryへ持ち込むため
+  不採用。
+- Product hierarchy coordinatorがNew Windowのpane start完了後、単一native reconcileの直前に、その作成対象がまだliveであることを確認してactive
+  identityを確定する案を第一候補とする。Unit testでstart待機中の既存window activationを再現し、New Window完了後のactive identityとprojection回数を
+  固定する。
+
+Fresh aggregate子タスクを次の順に追加分割する。
+
+1. **Pane start中のNew Window active identity drift除去**
+   - 目的: asynchronous pane start中のnative focus eventにより、New Window actionの作成対象がprojection前にactive ownershipを失わないようにする。
+   - 範囲: Product-owned hierarchy action coordinator、deterministic unit regression、Developer JIT／Release AOT window-interaction acceptance、関連
+     generated freshness。
+   - 対象外: State identity allocator、window ID再利用、AppKit API、`dart_appkit`、timeout、acceptance条件緩和、aggregate retry。
+   - 依存: Monotonic `TerminalApplicationState` identity、serialized action dispatcher、single reconciliation contract、close後のwindow reuse acceptance。
+   - 完了条件: Pane start待機中に既存windowがactiveへ戻っても、成功したNew Window actionはfresh live windowをactiveにして一回だけprojectし、両runtime
+     window-interaction acceptanceが一回でpassする。Failure cleanup、busy admission、明示的な後続focus eventの既存挙動を変えない。
+   - 検証: Focused formatter／analyzer／unit test、両runtime window interaction、正規generator freshness、root `make test`、diff／隣接repository audit。
+2. **Active identity修正後のfresh 8-gate aggregate完走**
+   - 元のaggregate完了条件を継承し、修正commit後にgate 1からretry wrapperなしで再実行する。
+
+### New Window active identity driftの決定論的確認
+
+Product hierarchy action unit testへ、New Windowのlogical作成後／pane start完了前に既存windowをactiveへ戻すbarrier vectorを追加した。現行実装は
+fresh windowを単調増加identityで作成し、projectionも一回実行する一方、action完了後の`activeWindowId`が既存windowのままとなり、追加した
+`New Window restores its live action identity before one projection`で期待どおりfailした。これによりaggregateの複合predicateについて、window countや
+authority同期ではなく、asynchronous pane start境界のactive identity driftをproduct-owned原因として再現できた。
+
+修正はNew Window経路だけに、pane start成功後かつsingle reconcile直前のlive target activationを追加する。New Tab／Split、state allocator、native focus
+event、AppKit bridge、汎用runnerは変更しない。Pane start failureは既存どおりlogical paneをrollbackし、成功していないactionがactive identityを再確定する
+ことはない。
+
+### New Window active identity drift修正の完了結果
+
+- `TerminalProductHierarchyActionCoordinator`のNew Window経路は、pane start成功後にpaneのlive locationが作成対象windowと一致することを検証し、single
+  reconcile直前にそのwindowをactiveへ再確定する。Targetがstaleならactionはfail closedとなり、既存rollback経路へ入る。
+- Deterministic unit vectorはstart barrier中に既存windowをactiveへ戻し、修正前に期待どおりfail、修正後にfresh window active／reconcile 1／change
+  notification 1でpassした。Focused formatterは2 filesを整形し、analyzerはissue 0、focused hierarchy-action testはpassした。
+- `make RUNTIME_ARCH=arm64 runtime-window-interaction-integration`はDeveloper JIT 2,251 ms、Release AOT 4,350 msでpassした。Close後のfresh
+  identity、terminal owner、4 session clean shutdown、text client／native handle 0まで両modeで完走した。
+- 正規generatorでPhase 7 AppKit acceptance、Ghostty P0/P1 gap inventory、release-candidate daily-use matrixを更新した。Ghostty inventoryには意味差分がなく、
+  Phase 7 source hashとそれをbindするrelease-candidate hashだけが更新対象となった。
+- Root `make test`は全package／native／generated／privacy／distribution／root suiteをpassした。Rootは393 files／format 0 changes、analyze issue 0、
+  `dart_terminal tests passed`。PTY large pipelineはtotal 33／retained 32／p95 284 us、Note store acceptanceは20 runs／commit p95
+  47,112 us／primitive p95 15,686 usだった。`git diff --check`もpassした。
+- `dart_appkit`にはcode、API、test、dart_terminal固有概念を追加していない。隣接repositoryに元からあるuser変更3件は変更もstageもしていない。
+- ユーザー指示に従い、ROADMAPは個別不具合の履歴を列挙せず、完了済みのexact aggregate contractと未完了のfresh aggregateという成果単位へ整理した。
+  各阻害、選択肢、修正、検証結果は本メモを正本として保持する。

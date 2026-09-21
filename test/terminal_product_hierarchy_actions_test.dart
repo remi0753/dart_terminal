@@ -9,6 +9,7 @@ Future<void> runTerminalProductHierarchyActionTests() async {
   await _testWindowlessCreationAndMutationAdmission();
   await _testCreationAndExistingMutations();
   await _testExplicitWorkingDirectoryCreation();
+  await _testNewWindowRetainsActionIdentityAcrossPaneStart();
   await _testSerializationFailureAndDisposal();
   await _testAggregatePaneAvailabilityBound();
 }
@@ -175,6 +176,38 @@ Future<void> _testCreationAndExistingMutations() async {
   _expect(
     harness.reconcileCount == 12 && harness.changedCount == 12,
     'every successful action projects and publishes exactly once',
+  );
+  await harness.state.shutdown();
+}
+
+Future<void> _testNewWindowRetainsActionIdentityAcrossPaneStart() async {
+  final _Harness harness = _Harness();
+  final TerminalWindowState initial = await harness.createInitialWindow();
+  final TerminalActionDispatcher dispatcher = harness.dispatcher();
+  final Completer<void> startBarrier = Completer<void>();
+  harness.nextStartBarrier = startBarrier;
+
+  final Future<TerminalActionDispatchResult> pending = dispatcher.dispatch(
+    TerminalActionId.newWindow,
+  );
+  await Future<void>.delayed(Duration.zero);
+  final TerminalWindowState created = harness.state.windows.singleWhere(
+    (TerminalWindowState window) => window.id != initial.id,
+  );
+  _expect(
+    harness.state.activeWindowId == created.id && harness.reconcileCount == 0,
+    'logical creation reserves the new active identity before pane startup',
+  );
+
+  harness.state.activateWindow(initial.id);
+  startBarrier.complete();
+  final TerminalActionDispatchResult result = await pending;
+  _expect(
+    result.disposition == TerminalActionDispatchDisposition.executed &&
+        harness.state.activeWindowId == created.id &&
+        harness.reconcileCount == 1 &&
+        harness.changedCount == 1,
+    'New Window restores its live action identity before one projection',
   );
   await harness.state.shutdown();
 }

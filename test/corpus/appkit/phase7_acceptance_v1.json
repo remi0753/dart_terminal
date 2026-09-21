@@ -71,7 +71,7 @@
         },
         {
           "path": "lib/src/terminal_product_hierarchy_actions.dart",
-          "sha256": "2b9a7a78f302243421bbc74b51d9830df62a5f8a706fae614ef4eeb3cd245e38"
+          "sha256": "1cae8b41b31ae9c29980937b0a0eacdb2b065a52b27851137a204d8b2b43ee5c"
         }
       ],
       "unit_tests": [
@@ -93,7 +93,7 @@
         {
           "path": "test/terminal_product_hierarchy_actions_test.dart",
           "entrypoint": "runTerminalProductHierarchyActionTests",
-          "sha256": "a066fdbbb621266e19f7c52d85e9df8be54127a9cafe43132f2bfbdcab5071c7"
+          "sha256": "6477aeac1e0fcb5a4001514e5c09531c1a8ebe477b0f75fe138fe72fe36dbc0e"
         },
         {
           "path": "test/frame_scheduler_test.dart",

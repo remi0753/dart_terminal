@@ -252,7 +252,10 @@ final class TerminalProductHierarchyActionCoordinator {
     final TerminalWindowState window = await state.createWindow(
       _configurationFactory(source),
     );
-    await _startAndProject(window.selectedTab.focusedPaneId);
+    await _startAndProject(
+      window.selectedTab.focusedPaneId,
+      activateWindowId: window.id,
+    );
   }
 
   Future<void> _createTab() async {
@@ -275,10 +278,22 @@ final class TerminalProductHierarchyActionCoordinator {
     await _startAndProject(pane.id);
   }
 
-  Future<void> _startAndProject(PaneId paneId) async {
+  Future<void> _startAndProject(
+    PaneId paneId, {
+    TerminalWindowId? activateWindowId,
+  }) async {
     final TerminalPane pane = state.paneForId(paneId)!;
     try {
       await pane.start();
+      if (activateWindowId != null) {
+        final TerminalPaneLocation? location = state.locationForPane(paneId);
+        if (location?.windowId != activateWindowId) {
+          throw StateError(
+            'new terminal window became stale during pane start',
+          );
+        }
+        state.activateWindow(activateWindowId);
+      }
       _project();
     } on Object catch (error, stackTrace) {
       if (state.paneForId(paneId) != null) {
