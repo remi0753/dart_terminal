@@ -8,6 +8,7 @@ Future<void> main() => runTerminalNoteApplicationCoordinatorTests();
 
 Future<void> runTerminalNoteApplicationCoordinatorTests() async {
   await _testDisabledCompositionOwnsNoRuntime();
+  await _testAutomaticRailPreservesTerminalOwner();
   await _testTopologySurfaceInteractionAndShutdown();
 }
 
@@ -39,6 +40,158 @@ Future<void> _testDisabledCompositionOwnsNoRuntime() async {
     'disabled composition allocates no Note runtime, binding, or surface',
   );
   await coordinator.shutdown();
+}
+
+Future<void> _testAutomaticRailPreservesTerminalOwner() async {
+  final int interactionBaseline =
+      TerminalNoteApplicationCoordinator.debugLiveInteractionAdapterCount;
+  final List<_CoordinatorFakeSession> sessions = <_CoordinatorFakeSession>[];
+  final TerminalApplicationState state = TerminalApplicationState();
+  final TerminalWindowState window = await state.createWindow(
+    _configuration(sessions),
+  );
+  final PaneId paneId = window.selectedTab.focusedPaneId;
+  final _FakeNoteTopologyRuntime runtime = _FakeNoteTopologyRuntime(<PaneId>{
+    paneId,
+  });
+  final TerminalNoteApplicationCoordinator coordinator =
+      await TerminalNoteApplicationCoordinator.start(
+        launchConfiguration: const TerminalNoteFeatureConfiguration(
+          notes: true,
+          notesOnReturn: true,
+          notesNextPrompt: false,
+          fontSize: 15,
+        ),
+        initialBindings: <TerminalNoteApplicationPaneBinding>[
+          TerminalNoteApplicationPaneBinding(
+            paneId: paneId,
+            windowId: window.id,
+          ),
+        ],
+        factory: (_) => TerminalNoteSubsystemStartResult.available(runtime),
+      );
+  final TerminalWindowInteractionAuthority authority =
+      TerminalWindowInteractionAuthority(state);
+  final TerminalWindowInteractionRouter router =
+      TerminalWindowInteractionRouter(authority);
+  var terminalFocusRequests = 0;
+  final TerminalNoteProductTopologyResult attached = await coordinator
+      .synchronizeSurface(
+        paneId: paneId,
+        windowId: window.id,
+        configuration: _surfaceConfiguration(31),
+        interactionAuthority: authority,
+        interactionRouter: router,
+        focusTerminal: () {
+          terminalFocusRequests++;
+          return true;
+        },
+      );
+  final int generation = runtime.surfaces[paneId]!;
+  runtime.notify(
+    paneId,
+    TerminalNoteProductInteractionSnapshot(
+      surfaceGeneration: generation,
+      visibility: TerminalNoteSurfaceVisibility.expanded,
+      automaticPresentation: true,
+      editorMode: TerminalNoteEditorMode.inactive,
+      draftGeneration: 0,
+      editorDirty: false,
+      confirmingDiscard: false,
+    ),
+  );
+  await _drainSurfaceEvents();
+  await coordinator.synchronizeSurface(
+    paneId: paneId,
+    windowId: window.id,
+    configuration: _surfaceConfiguration(32),
+    interactionAuthority: authority,
+    interactionRouter: router,
+    focusTerminal: () {
+      terminalFocusRequests++;
+      return true;
+    },
+  );
+  _expect(
+    attached.isAccepted &&
+        coordinator.notesVisibleForPane(paneId) &&
+        runtime.pumpCount == 1 &&
+        runtime.focusRequests.isEmpty &&
+        terminalFocusRequests == 0 &&
+        authority.snapshotForWindow(window.id)?.owner.kind ==
+            TerminalWindowInteractionOwnerKind.terminal,
+    'automatic due rail and renderer refresh preserve terminal input owner',
+  );
+
+  final bool down = coordinator.handlePointerEvent(
+    paneId: paneId,
+    phase: TerminalNoteApplicationPointerPhase.down,
+    x: 750,
+    y: 250,
+  );
+  final bool up = coordinator.handlePointerEvent(
+    paneId: paneId,
+    phase: TerminalNoteApplicationPointerPhase.up,
+    x: 750,
+    y: 250,
+  );
+  _expect(
+    down &&
+        up &&
+        runtime.focusRequests.single ==
+            (paneId, TerminalNoteProductFocusTarget.rail) &&
+        authority.snapshotForWindow(window.id)?.owner.kind ==
+            TerminalWindowInteractionOwnerKind.noteRail &&
+        terminalFocusRequests == 0,
+    'explicit pointer interaction transfers the automatic rail normally',
+  );
+
+  runtime.notify(
+    paneId,
+    TerminalNoteProductInteractionSnapshot(
+      surfaceGeneration: generation,
+      visibility: TerminalNoteSurfaceVisibility.expanded,
+      editorMode: TerminalNoteEditorMode.creating,
+      draftGeneration: 1,
+      editorDirty: false,
+      confirmingDiscard: false,
+    ),
+  );
+  await _drainSurfaceEvents();
+  runtime.notify(
+    paneId,
+    TerminalNoteProductInteractionSnapshot(
+      surfaceGeneration: generation,
+      visibility: TerminalNoteSurfaceVisibility.expanded,
+      automaticPresentation: true,
+      editorMode: TerminalNoteEditorMode.inactive,
+      draftGeneration: 0,
+      editorDirty: false,
+      confirmingDiscard: false,
+    ),
+  );
+  await _drainSurfaceEvents();
+  _expect(
+    runtime.focusRequests.length == 3 &&
+        runtime.focusRequests[1] ==
+            (paneId, TerminalNoteProductFocusTarget.editor) &&
+        runtime.focusRequests.last ==
+            (paneId, TerminalNoteProductFocusTarget.rail) &&
+        authority.snapshotForWindow(window.id)?.owner.kind ==
+            TerminalWindowInteractionOwnerKind.noteRail &&
+        terminalFocusRequests == 0,
+    'automatic projection resolves an already-owned editor to its rail without touching terminal focus',
+  );
+
+  await coordinator.shutdown();
+  router.dispose();
+  authority.dispose();
+  await state.shutdown();
+  _expect(
+    TerminalNoteApplicationCoordinator.debugLiveInteractionAdapterCount ==
+        interactionBaseline,
+    'automatic rail fixture releases its interaction ownership',
+  );
 }
 
 Future<void> _testTopologySurfaceInteractionAndShutdown() async {

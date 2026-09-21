@@ -215,3 +215,89 @@ commitされた後だけ消費する。
 
 第1サブタスクの未検証事項と阻害要因はない。Eligible focus、automatic single rail、visible acknowledgement、
 shutdown-awayは後続サブタスクの順序どおり未実装である。
+
+## 2026-09-21: 第2サブタスク着手
+
+- ROADMAPを再確認し、CM-11の先頭未完了が「eligible focus lifecycleとsingle non-blocking railを接続する」
+  であることを確認した。
+- 本サブタスクはvisible-card acknowledgement、delivery consume、shutdown-away、crash boundaryを変更しない。
+  Dueは表示しても保持し、次サブタスクでactual layout acknowledgementへ接続する。
+- Applicationは既に`application active && window visible/focused && active window && selected tab && focused pane`を
+  `foreground`へ、pane/zoom visibilityとwindow occlusionを`occluded`へ合成している。Note rail/editorへの
+  first-responder移動はこれらを変えないため、productのexact eligibilityを`foreground && !occluded`とする。
+- Eligibilityはnative Note hostのattach成功可否から独立したcontext lifecycleである。Productはpaneごとのlast valueを
+  保持し、`notes-on-return=true`のときだけinitial valueと実edgeをauthorityへ渡す。Duplicate surface/layout/
+  appearance updateではlifecycle ingressを発生させず、disabled時はlifecycle workを0にする。
+- Authorityはmemory-only eligible visit generationを持ち、new/restored dueをeligible surfaceへvisitごとに一回だけ
+  auto-presentする。Current section、先頭page、DeliverySequence FIFOのfirst due cardを選ぶが、editor active中は
+  draftを侵害せずpresentationを延期する。User close後の同一visitではreopenせず、次visitまたは新surface generationの
+  unacknowledged recoveryでは再表示を許す。
+- Automatic expansionは通常のuser openと区別するcontent-free authority projection stateとしてproductまで伝える。
+  Application coordinatorはこの状態でrail/editor focus APIを呼ばず、terminalのsole input owner、first responder、
+  DEC focus report、PTY bytesを維持する。利用者が実際にrailをpointer操作した時だけ既存interaction authority経由で
+  Note ownershipへ移る。
+- `dart_appkit`は変更せず、既存generic window/view eventとrenderer identityだけを利用する。
+
+### 第2サブタスクの実装
+
+- Productにpane単位のlast eligible値を追加し、On Return有効時だけattach前の初期値と
+  `foreground && !occluded`の変化をauthorityへ渡した。Native host attachが失敗してもcontext lifecycleは失われず、
+  同じ値のlayout、appearance、Note first-responder updateはedgeを増やさない。Pane closeとsubsystem teardownで
+  memory-only値を破棄する。
+- Authorityにeligible visit generationとsurface単位のlast/pending automatic visitを追加した。Initial/restored dueまたは
+  return commit後にdueがある場合、Current、先頭page、DeliverySequence FIFOのfirst dueを選び、visitあたり一度だけ
+  expanded railとしてprojectionする。Native projection拒否時はpendingを保持し、replacement surfaceは同じvisitの
+  unacknowledged dueを再projectionできる。
+- Automatic railは通常のroot surface再同期が渡す既定`collapsed`では閉じず、明示的なuser intentが
+  `automaticPresentation`を解除するまでauthority-owned visibilityを保持する。これによりresize/appearance updateで
+  railが消えること、および`collapsed + automaticPresentation`という不正projectionを防いだ。User Close後は同一visitの
+  duplicate updateで再openせず、次のeligible visitでは未ack dueを再表示する。
+- Editor active中はautomatic selection/visibilityを書き換えず、draftとdeliveryを保持する。Cancel時は既にユーザーが
+  開いたrailにdue cardが現れる通常のeditor→rail解決を使い、automatic扱いにして消えたeditorをinteraction ownerへ
+  残さない。Durable Save後などにautomatic projectionと同じsurfaceのeditor ownerが重なる場合だけcoordinatorが
+  editor→railを解決し、terminalまたは別surfaceのownerにはfocus要求を出さない。
+- Application coordinatorはautomatic railの通常同期ではnative rail/editor focus APIもterminal focus callbackも呼ばない。
+  Pointer downが実際にrailへ入った場合だけ既存two-phase interaction authorityでNote railへ所有権を移す。
+- Quick Terminalは専用app codeを汎用libraryへ追加せず、既存のpersistent quick contextと同じproduct eligibility APIを
+  使用する。Hide/occlude→returnでstandard paneと同じdue/automatic/focus契約になることをproduct testで固定した。
+- 64 live contextそれぞれへ`true, false, true`をcommit待ち中に投入し、contextあたり2 edgeのhard boundと
+  `lastObservedEligibility`によるfinal-state coalescingを確認した。
+
+### 第2サブタスクで検討した選択肢
+
+- Surfaceのattach成功後だけeligibilityを観測する案は、renderer fault中のaway/returnを失うため不採用とした。
+  Context lifecycleをnative ownershipから独立させ、再attach時に最新のeligible visitとdueをprojectionする。
+- Automatic returnで常にrail focusを要求する案は、terminal input owner、DEC focus report、mouse/TUI routingを変えるため
+  不採用とした。Projectionへcontent-freeなautomatic bitだけを持たせ、pointer操作までは既存ownerを維持する。
+- Automatic railを毎surface updateで再openする案は、ユーザーのCloseを無効化するため不採用とした。Visit markerは
+  projection成功時だけcommitし、同一surface/visitでは一度、replacement surfaceではat-least-once recoveryを許す。
+- Editor終了直後を無条件にautomatic扱いする試行は、projection上はinactiveでもinteraction authorityに旧editor ownerを
+  残し得るため取り消した。既にNoteを操作中なら通常のeditor→rail解決、terminal ownerならnon-blocking automatic rail、
+  というownership別の境界にした。
+
+### 第2サブタスクの検証（focused）
+
+- 変更7 Dart fileの`dart analyze`: pass、issue 0。
+- `dart run test/terminal_note_authority_test.dart`: pass。Arm時delivery 0、away→return、FIFO selection、visit一回、
+  duplicate layout保持、manual Close抑止、later visit再表示、replacement recovery、active draft保護、64-context pressureを確認した。
+- `dart run test/terminal_note_product_subsystem_test.dart`: pass。Exact eligibility、duplicate coalescing、standard paneと
+  Quick Terminalのhide/return、disabled entry 0、native focus request 0を確認した。
+- `dart run test/terminal_note_application_coordinator_test.dart`: pass。Terminal ownerを維持するautomatic rail、明示pointerでの
+  rail transfer、既存editor ownerだけをrailへ解決する境界、renderer refresh時focus callback 0を確認した。
+- 最初に3本の`dart run`を並行実行した際、共有`.dart_tool/lib`のnative build hookが競合し、coordinator testだけが
+  `libdart_durable_file_macos.dylib`を一時的に見つけられず失敗した。同じtestを単独実行するとpassしたため、以後の
+  Dart/native asset testは同じworktree内で直列実行する。
+
+- `make terminal-notes-capability-audit`: pass
+  (`TERMINAL_NOTES_CAPABILITY_AUDIT_PASS ... dart_appkit=generic`)。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: pass。383 Dart filesのformat、root analyze、全native/package/root、
+  Developer JIT/Release AOT host acceptance、privacy/restoration/shell/distributionを含む全gateが通過した。
+- 隣接`dart_appkit`で`CI=true DART_SUPPRESS_ANALYTICS=true make test`: exit 0。
+  `GENERIC_REPOSITORY_AUDIT_PASS paths=148 text_files=147`と全native/Dart/runtime/example testが通過した。
+  実行前後とも既存の`docs/BUILDING_DART_ENGINE.md`、`scripts/bootstrap_dart_engine.sh`、
+  `scripts/build_dart_engine.sh`だけが変更状態で、本サブタスクは一切変更していない。
+- `git diff --check`: pass。変更は本メモ、4 source file、3 focused test fileだけで、秘密情報、生成物、
+  debug用変更、無関係な差分はない。
+
+第2サブタスクの未検証事項と阻害要因はない。Visible acknowledgement、shutdown-away、crash boundaryは
+後続サブタスクの順序どおり変更していない。

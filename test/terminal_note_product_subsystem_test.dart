@@ -1150,6 +1150,14 @@ Future<void> _testOnReturnProductIntentBridge() async {
     final _FakeProductNativeChannel enabledChannel = _FakeProductNativeChannel(
       nextAttachment: TerminalNotesAttachDisposition.attached,
     );
+    final _FakeProductNativeChannel quickChannel = _FakeProductNativeChannel(
+      nextAttachment: TerminalNotesAttachDisposition.attached,
+    );
+    final Queue<_FakeProductNativeChannel> enabledChannels =
+        Queue<_FakeProductNativeChannel>.of(<_FakeProductNativeChannel>[
+          enabledChannel,
+          quickChannel,
+        ]);
     final TerminalNoteSubsystemStartResult enabledStart =
         await TerminalNoteProductSubsystem.start(
           configuration: const TerminalNoteFeatureConfiguration(
@@ -1164,12 +1172,12 @@ Future<void> _testOnReturnProductIntentBridge() async {
           authorityGeneration: 301,
           restoration: null,
           initialPaneIdsInTraversalOrder: const <PaneId>[PaneId(1)],
-          ensureQuickTerminalContext: false,
+          ensureQuickTerminalContext: true,
           updatedAtUtcMicros: 6000,
           copyEffect: (_) => true,
           exportDestinationChooser: (_) => null,
           initializeNativeCapability: () {},
-          surfaceFactory: () => enabledChannel,
+          surfaceFactory: enabledChannels.removeFirst,
           clock: () => 6001,
         );
     enabled = enabledStart.runtime! as TerminalNoteProductSubsystem;
@@ -1249,6 +1257,241 @@ Future<void> _testOnReturnProductIntentBridge() async {
           projection.cards.single.triggerPhase ==
               TerminalNotesTriggerPhase.onReturnArmedHere,
       'standalone Always and Re-arm intents round-trip through the product',
+    );
+
+    final BigInt armedRevision = projection.storeRevision;
+    for (final (bool foreground, bool occluded) in <(bool, bool)>[
+      (true, false),
+      (true, false),
+    ]) {
+      await enabled.updateSurface(
+        paneId: const PaneId(1),
+        configuration: _surfaceConfiguration(
+          handle: 61,
+          visibility: TerminalNoteSurfaceVisibility.collapsed,
+          foreground: foreground,
+          occluded: occluded,
+        ),
+      );
+    }
+    projection = enabledChannel.projections.last;
+    _expect(
+      projection.storeRevision == armedRevision &&
+          projection.dueCount == 0 &&
+          projection.visibility == TerminalNotesVisibility.expanded,
+      'same-pane Note UI and duplicate presentation updates create no edge',
+    );
+
+    for (final (bool foreground, bool occluded) in <(bool, bool)>[
+      (false, false),
+      (false, true),
+      (true, true),
+    ]) {
+      await enabled.updateSurface(
+        paneId: const PaneId(1),
+        configuration: _surfaceConfiguration(
+          handle: 61,
+          visibility: TerminalNoteSurfaceVisibility.collapsed,
+          foreground: foreground,
+          occluded: occluded,
+        ),
+      );
+    }
+    projection = await _waitForNativeProjection(
+      enabledChannel,
+      (TerminalNotesProjection candidate) =>
+          candidate.cards.length == 1 &&
+          candidate.cards.single.triggerPhase ==
+              TerminalNotesTriggerPhase.onReturnArmedAway,
+    );
+    _expect(
+      projection.storeRevision == armedRevision + BigInt.one &&
+          projection.dueCount == 0,
+      'app/window/tab/pane loss and occlusion variants collapse to one away edge',
+    );
+
+    await enabled.updateSurface(
+      paneId: const PaneId(1),
+      configuration: _surfaceConfiguration(
+        handle: 61,
+        visibility: TerminalNoteSurfaceVisibility.collapsed,
+        foreground: true,
+        occluded: false,
+      ),
+    );
+    projection = await _waitForNativeProjection(
+      enabledChannel,
+      (TerminalNotesProjection candidate) =>
+          candidate.dueCount == 1 &&
+          candidate.visibility == TerminalNotesVisibility.expanded &&
+          candidate.cards.first.due,
+    );
+    final TerminalNoteProductInteractionSnapshot automatic = enabled
+        .interactionSnapshotForPane(const PaneId(1))!;
+    _expect(
+      projection.storeRevision == armedRevision + BigInt.from(2) &&
+          automatic.automaticPresentation &&
+          automatic.visibility == TerminalNoteSurfaceVisibility.expanded &&
+          enabledChannel.focusTargets.isEmpty,
+      'one eligible return commits due and presents one non-focusing rail',
+    );
+    final TerminalNoteProductTopologyResult duplicateLayout = await enabled
+        .updateSurface(
+          paneId: const PaneId(1),
+          configuration: _surfaceConfiguration(
+            handle: 61,
+            visibility: TerminalNoteSurfaceVisibility.collapsed,
+            foreground: true,
+            occluded: false,
+          ),
+        );
+    projection = enabledChannel.projections.last;
+    _expect(
+      duplicateLayout.isAccepted &&
+          projection.visibility == TerminalNotesVisibility.expanded &&
+          enabled
+              .interactionSnapshotForPane(const PaneId(1))!
+              .automaticPresentation &&
+          enabledChannel.focusTargets.isEmpty,
+      'duplicate layout updates preserve the automatic rail and terminal focus',
+    );
+
+    enabledChannel.intents.add(
+      _nativeIntent(
+        projection,
+        eventGeneration: 5,
+        kind: TerminalNotesIntentKind.close,
+      ),
+    );
+    final TerminalNoteProductTopologyResult closed = await enabled
+        .pumpSurfaceIntent(const PaneId(1));
+    projection = enabledChannel.projections.last;
+    await enabled.updateSurface(
+      paneId: const PaneId(1),
+      configuration: _surfaceConfiguration(
+        handle: 61,
+        visibility: TerminalNoteSurfaceVisibility.collapsed,
+        foreground: true,
+        occluded: false,
+      ),
+    );
+    projection = enabledChannel.projections.last;
+    _expect(
+      closed.isAccepted &&
+          projection.visibility == TerminalNotesVisibility.collapsed &&
+          projection.dueCount == 1 &&
+          !enabled
+              .interactionSnapshotForPane(const PaneId(1))!
+              .automaticPresentation,
+      'manual close stays collapsed for duplicate updates in the same visit',
+    );
+
+    await enabled.updateSurface(
+      paneId: const PaneId(1),
+      configuration: _surfaceConfiguration(
+        handle: 61,
+        visibility: TerminalNoteSurfaceVisibility.collapsed,
+        foreground: false,
+        occluded: true,
+      ),
+    );
+    await enabled.updateSurface(
+      paneId: const PaneId(1),
+      configuration: _surfaceConfiguration(
+        handle: 61,
+        visibility: TerminalNoteSurfaceVisibility.collapsed,
+        foreground: true,
+        occluded: false,
+      ),
+    );
+    projection = enabledChannel.projections.last;
+    _expect(
+      projection.visibility == TerminalNotesVisibility.expanded &&
+          projection.cards.first.due &&
+          enabled
+              .interactionSnapshotForPane(const PaneId(1))!
+              .automaticPresentation,
+      'a later eligible visit re-presents the unacknowledged due once',
+    );
+
+    final TerminalNoteProductTopologyResult quickBound = await enabled.bindPane(
+      paneId: const PaneId(90),
+      kind: TerminalNoteContextKind.quickTerminal,
+    );
+    final TerminalNoteProductTopologyResult quickAttached = await enabled
+        .attachSurface(
+          paneId: const PaneId(90),
+          configuration: _surfaceConfiguration(
+            handle: 90,
+            visibility: TerminalNoteSurfaceVisibility.expanded,
+            foreground: true,
+            occluded: false,
+          ),
+        );
+    TerminalNotesProjection quickProjection = quickChannel.projections.last;
+    quickChannel.intents.add(
+      _nativeIntent(
+        quickProjection,
+        eventGeneration: 1,
+        kind: TerminalNotesIntentKind.beginCreate,
+      ),
+    );
+    await enabled.pumpSurfaceIntent(const PaneId(90));
+    quickProjection = quickChannel.projections.last;
+    quickChannel.intents.add(
+      _nativeIntent(
+        quickProjection,
+        eventGeneration: 2,
+        kind: TerminalNotesIntentKind.saveOnReturn,
+        color: TerminalNotesColor.blue,
+        body: 'quick terminal return note',
+      ),
+    );
+    final TerminalNoteProductTopologyResult quickSaved = await enabled
+        .pumpSurfaceIntent(const PaneId(90));
+    await enabled.updateSurface(
+      paneId: const PaneId(90),
+      configuration: _surfaceConfiguration(
+        handle: 90,
+        visibility: TerminalNoteSurfaceVisibility.collapsed,
+        foreground: false,
+        occluded: true,
+      ),
+    );
+    quickProjection = await _waitForNativeProjection(
+      quickChannel,
+      (TerminalNotesProjection candidate) =>
+          candidate.cards.length == 1 &&
+          candidate.cards.single.triggerPhase ==
+              TerminalNotesTriggerPhase.onReturnArmedAway,
+    );
+    await enabled.updateSurface(
+      paneId: const PaneId(90),
+      configuration: _surfaceConfiguration(
+        handle: 90,
+        visibility: TerminalNoteSurfaceVisibility.collapsed,
+        foreground: true,
+        occluded: false,
+      ),
+    );
+    quickProjection = await _waitForNativeProjection(
+      quickChannel,
+      (TerminalNotesProjection candidate) =>
+          candidate.dueCount == 1 &&
+          candidate.visibility == TerminalNotesVisibility.expanded &&
+          candidate.cards.first.due,
+    );
+    _expect(
+      quickBound.disposition ==
+              TerminalNoteProductTopologyDisposition.noChange &&
+          quickAttached.isAccepted &&
+          quickSaved.isAccepted &&
+          quickProjection.cards.single.body == 'quick terminal return note' &&
+          enabled
+              .interactionSnapshotForPane(const PaneId(90))!
+              .automaticPresentation &&
+          quickChannel.focusTargets.isEmpty,
+      'Quick Terminal hide and eligible return reuse its context and present without focus transfer',
     );
 
     final _FakeProductNativeChannel disabledChannel = _FakeProductNativeChannel(
@@ -1626,6 +1869,20 @@ TerminalNotesNativeIntent _nativeIntent(
   color: color,
   body: body,
 );
+
+Future<TerminalNotesProjection> _waitForNativeProjection(
+  _FakeProductNativeChannel channel,
+  bool Function(TerminalNotesProjection projection) predicate,
+) async {
+  for (var attempt = 0; attempt < 200; attempt++) {
+    if (channel.projections.isNotEmpty) {
+      final TerminalNotesProjection projection = channel.projections.last;
+      if (predicate(projection)) return projection;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
+  throw StateError('timed out waiting for native Note projection');
+}
 
 void _expect(bool condition, String message) {
   if (!condition) throw StateError(message);

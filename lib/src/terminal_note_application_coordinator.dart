@@ -357,11 +357,7 @@ final class TerminalNoteApplicationCoordinator {
       final TerminalNoteProductInteractionSnapshot? snapshot = runtime
           .interactionSnapshotForPane(paneId);
       if (snapshot == null ||
-          !_synchronizeInteraction(
-            surface,
-            snapshot,
-            forceRailWhenCollapsed: true,
-          )) {
+          !_synchronizeInteraction(surface, snapshot, forceNoteFocus: true)) {
         return true;
       }
       final TerminalWindowConsumedGestureResult gesture = surface.interaction
@@ -710,7 +706,7 @@ final class TerminalNoteApplicationCoordinator {
   bool _synchronizeInteraction(
     _TerminalNoteApplicationSurface surface,
     TerminalNoteProductInteractionSnapshot snapshot, {
-    bool forceRailWhenCollapsed = false,
+    bool forceNoteFocus = false,
   }) {
     final TerminalWindowNoteInteractionAdapter interaction =
         surface.interaction;
@@ -725,8 +721,17 @@ final class TerminalNoteApplicationCoordinator {
         )) {
       return false;
     }
+    if (snapshot.automaticPresentation &&
+        snapshot.editorMode == TerminalNoteEditorMode.inactive &&
+        !forceNoteFocus) {
+      final bool resolvesOwnedEditor =
+          owner?.owner.kind == TerminalWindowInteractionOwnerKind.noteEditor &&
+          owner?.owner.paneId == surface.paneId &&
+          owner?.owner.surfaceGeneration == snapshot.surfaceGeneration;
+      if (!resolvesOwnedEditor) return true;
+    }
     if (snapshot.visibility == TerminalNoteSurfaceVisibility.collapsed &&
-        !forceRailWhenCollapsed) {
+        !forceNoteFocus) {
       final bool ownsThisSurface =
           owner?.owner.isNoteOwner == true &&
           owner?.owner.paneId == surface.paneId &&

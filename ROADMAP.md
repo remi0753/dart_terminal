@@ -133,7 +133,7 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
   （[`cm-11-s2-on-return-product-integration.md`](docs/contextual-memory/cm-11-s2-on-return-product-integration.md)
   を参照して実施する）
   - [x] explicit arm/re-arm native UIとatomic product mutationを接続する
-  - [ ] eligible focus lifecycleとsingle non-blocking railを接続する
+  - [x] eligible focus lifecycleとsingle non-blocking railを接続する
   - [ ] visible acknowledgement、shutdown-away、crash境界を接続する
   - [ ] S2両runtime product acceptanceと全監査を完了する
 - [ ] CM-12 R0 hidden qualificationを完了する

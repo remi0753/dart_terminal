@@ -14,6 +14,7 @@ Future<void> runTerminalNoteAuthorityTests() async {
   await _testExpandedProjectionHardBounds();
   await _testSurfaceSemanticMutationContract();
   await _testOnReturnSurfaceMutationContract();
+  await _testOnReturnAutomaticRailContract();
   await _testDetachedPagingReorderAndExplicitReattach();
   await _testSixtyFourPaneAndSessionBound();
   await _testApplicationShutdownAndReopen();
@@ -1548,6 +1549,375 @@ Future<void> _testOnReturnSurfaceMutationContract() async {
   await authority.stop();
 }
 
+Future<void> _testOnReturnAutomaticRailContract() async {
+  final _FakeAuthorityStore store = _FakeAuthorityStore();
+  final TerminalNoteAuthority authority = await _startAuthority(store);
+  final TerminalNoteContextId contextId = authority.contextForPane(
+    const PaneId(1),
+  )!;
+  final _FakeNoteSurface firstSurface = _FakeNoteSurface();
+  var projection = authority
+      .attachSurface(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        port: firstSurface,
+      )
+      .projection!;
+  final TerminalNoteLifecycleResult initialEligible = authority
+      .observeEligibleFocus(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        isEligible: true,
+      );
+  projection = authority
+      .updateSurface(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        surfaceGeneration: projection.surfaceGeneration,
+        visibility: TerminalNoteSurfaceVisibility.collapsed,
+        foreground: true,
+        occluded: false,
+      )
+      .projection!;
+  await authority.whenIdle();
+  await _mutate(
+    authority,
+    source: 91,
+    event: 1,
+    transition: _createNote(
+      contextId: contextId,
+      noteId: _noteId(91),
+      body: 'automatic return rail',
+      timestamp: 400,
+    ),
+  );
+  await _mutate(
+    authority,
+    source: 91,
+    event: 2,
+    transition: (TerminalNoteSnapshot snapshot) {
+      final NoteRecord note = snapshot.noteFor(_noteId(91))!;
+      return TerminalNoteAuthorityMutationPlan(
+        mutation: snapshot.armOnReturn(
+          noteId: note.id,
+          isEligible: true,
+          expectedStoreRevision: snapshot.storeRevision,
+          expectedNoteRevision: note.revision,
+        ),
+      );
+    },
+  );
+  projection = firstSurface.applied.last;
+  _expect(
+    initialEligible.isAccepted &&
+        projection.visibility == TerminalNoteSurfaceVisibility.collapsed &&
+        !projection.automaticPresentation &&
+        projection.dueCount == 0,
+    'arming during the current eligible visit does not present or deliver',
+  );
+
+  authority.observeEligibleFocus(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    isEligible: false,
+  );
+  authority.updateSurface(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    surfaceGeneration: projection.surfaceGeneration,
+    visibility: projection.visibility,
+    foreground: false,
+    occluded: false,
+  );
+  await authority.whenIdle();
+  projection = firstSurface.applied.last;
+  _expect(
+    authority.document.snapshot.triggerFor(_noteId(91))!.phase ==
+            NoteTriggerPhase.onReturnArmedAway &&
+        projection.visibility == TerminalNoteSurfaceVisibility.collapsed,
+    'an exact away edge durably arms away without opening the rail',
+  );
+
+  authority.observeEligibleFocus(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    isEligible: true,
+  );
+  authority.updateSurface(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    surfaceGeneration: projection.surfaceGeneration,
+    visibility: projection.visibility,
+    foreground: true,
+    occluded: false,
+  );
+  await authority.whenIdle();
+  projection = firstSurface.applied.last;
+  _expect(
+    projection.visibility == TerminalNoteSurfaceVisibility.expanded &&
+        projection.automaticPresentation &&
+        projection.section == TerminalNoteCollectionSection.current &&
+        projection.pageStart == 0 &&
+        projection.cards.first.due &&
+        projection.selectedToken == projection.cards.first.token &&
+        authority.document.snapshot.deliveryFor(_noteId(91)) != null,
+    'away-to-return durably becomes due and opens one FIFO Current rail',
+  );
+  projection = authority
+      .updateSurface(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        surfaceGeneration: projection.surfaceGeneration,
+        visibility: TerminalNoteSurfaceVisibility.collapsed,
+        foreground: true,
+        occluded: false,
+      )
+      .projection!;
+  _expect(
+    projection.visibility == TerminalNoteSurfaceVisibility.expanded &&
+        projection.automaticPresentation &&
+        projection.cards.first.due,
+    'duplicate layout updates preserve the automatic rail until a user intent',
+  );
+
+  final TerminalNoteSurfaceIntentResult closed = await authority
+      .submitSurfaceIntent(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        surfaceGeneration: projection.surfaceGeneration,
+        projectionGeneration: projection.projectionGeneration,
+        eventGeneration: 1,
+        draftGeneration: 0,
+        cardToken: null,
+        expectedStoreRevision: projection.storeRevision,
+        kind: TerminalNoteSurfaceIntentKind.close,
+      );
+  projection = closed.projection!;
+  final TerminalNoteLifecycleResult duplicate = authority.observeEligibleFocus(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    isEligible: true,
+  );
+  projection = authority
+      .updateSurface(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        surfaceGeneration: projection.surfaceGeneration,
+        visibility: projection.visibility,
+        foreground: true,
+        occluded: false,
+      )
+      .projection!;
+  _expect(
+    closed.isAccepted &&
+        duplicate.disposition == TerminalNoteLifecycleDisposition.duplicate &&
+        projection.visibility == TerminalNoteSurfaceVisibility.collapsed &&
+        !projection.automaticPresentation &&
+        authority.document.snapshot.deliveryFor(_noteId(91)) != null,
+    'manual close suppresses duplicate re-open for the same eligible visit',
+  );
+
+  authority.observeEligibleFocus(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    isEligible: false,
+  );
+  authority.updateSurface(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    surfaceGeneration: projection.surfaceGeneration,
+    visibility: projection.visibility,
+    foreground: false,
+    occluded: true,
+  );
+  await authority.whenIdle();
+  authority.observeEligibleFocus(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    isEligible: true,
+  );
+  projection = authority
+      .updateSurface(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        surfaceGeneration: projection.surfaceGeneration,
+        visibility: projection.visibility,
+        foreground: true,
+        occluded: false,
+      )
+      .projection!;
+  _expect(
+    projection.visibility == TerminalNoteSurfaceVisibility.expanded &&
+        projection.automaticPresentation &&
+        projection.cards.first.due,
+    'a later eligible visit may re-present the still-unacknowledged due card',
+  );
+
+  final TerminalNoteSurfaceResult detached = await authority.detachSurface(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    surfaceGeneration: projection.surfaceGeneration,
+  );
+  final _FakeNoteSurface replacement = _FakeNoteSurface();
+  projection = authority
+      .attachSurface(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        port: replacement,
+      )
+      .projection!;
+  projection = authority
+      .updateSurface(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        surfaceGeneration: projection.surfaceGeneration,
+        visibility: TerminalNoteSurfaceVisibility.collapsed,
+        foreground: true,
+        occluded: false,
+      )
+      .projection!;
+  _expect(
+    detached.disposition == TerminalNoteSurfaceDisposition.applied &&
+        projection.visibility == TerminalNoteSurfaceVisibility.expanded &&
+        projection.automaticPresentation &&
+        projection.cards.first.due &&
+        firstSurface.disposeCount == 1,
+    'a replacement surface re-presents unacknowledged due without a new edge',
+  );
+
+  final TerminalNoteAuthorityMutationResult secondPane = await authority
+      .bindPane(sequence: authority.nextSequence(), paneId: const PaneId(2));
+  final TerminalNoteContextId secondContext = authority.contextForPane(
+    const PaneId(2),
+  )!;
+  final _FakeNoteSurface draftSurface = _FakeNoteSurface();
+  var draftProjection = authority
+      .attachSurface(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(2),
+        port: draftSurface,
+      )
+      .projection!;
+  authority.observeEligibleFocus(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(2),
+    isEligible: true,
+  );
+  draftProjection = authority
+      .updateSurface(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(2),
+        surfaceGeneration: draftProjection.surfaceGeneration,
+        visibility: TerminalNoteSurfaceVisibility.collapsed,
+        foreground: true,
+        occluded: false,
+      )
+      .projection!;
+  await authority.whenIdle();
+  await _mutate(
+    authority,
+    source: 92,
+    event: 1,
+    transition: _createNote(
+      contextId: secondContext,
+      noteId: _noteId(92),
+      body: 'deferred behind active draft',
+      timestamp: 410,
+    ),
+  );
+  await _mutate(
+    authority,
+    source: 92,
+    event: 2,
+    transition: (TerminalNoteSnapshot snapshot) {
+      final NoteRecord note = snapshot.noteFor(_noteId(92))!;
+      return TerminalNoteAuthorityMutationPlan(
+        mutation: snapshot.armOnReturn(
+          noteId: note.id,
+          isEligible: true,
+          expectedStoreRevision: snapshot.storeRevision,
+          expectedNoteRevision: note.revision,
+        ),
+      );
+    },
+  );
+  authority.observeEligibleFocus(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(2),
+    isEligible: false,
+  );
+  authority.updateSurface(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(2),
+    surfaceGeneration: draftProjection.surfaceGeneration,
+    visibility: TerminalNoteSurfaceVisibility.collapsed,
+    foreground: false,
+    occluded: false,
+  );
+  await authority.whenIdle();
+  draftProjection = draftSurface.applied.last;
+  final TerminalNoteSurfaceIntentResult draftStarted = await authority
+      .submitSurfaceIntent(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(2),
+        surfaceGeneration: draftProjection.surfaceGeneration,
+        projectionGeneration: draftProjection.projectionGeneration,
+        eventGeneration: 1,
+        draftGeneration: 0,
+        cardToken: null,
+        expectedStoreRevision: draftProjection.storeRevision,
+        kind: TerminalNoteSurfaceIntentKind.beginCreate,
+      );
+  draftProjection = draftStarted.projection!;
+  authority.observeEligibleFocus(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(2),
+    isEligible: true,
+  );
+  authority.updateSurface(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(2),
+    surfaceGeneration: draftProjection.surfaceGeneration,
+    visibility: draftProjection.visibility,
+    foreground: true,
+    occluded: false,
+  );
+  await authority.whenIdle();
+  draftProjection = draftSurface.applied.last;
+  _expect(
+    secondPane.isAccepted &&
+        draftStarted.isAccepted &&
+        draftProjection.editorMode == TerminalNoteEditorMode.creating &&
+        !draftProjection.automaticPresentation &&
+        draftProjection.dueCount == 1 &&
+        authority.document.snapshot.deliveryFor(_noteId(92)) != null,
+    'an active draft defers automatic due presentation without losing delivery',
+  );
+  final TerminalNoteSurfaceIntentResult draftCancelled = await authority
+      .submitSurfaceIntent(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(2),
+        surfaceGeneration: draftProjection.surfaceGeneration,
+        projectionGeneration: draftProjection.projectionGeneration,
+        eventGeneration: 2,
+        draftGeneration: draftProjection.draftGeneration,
+        cardToken: null,
+        expectedStoreRevision: draftProjection.storeRevision,
+        kind: TerminalNoteSurfaceIntentKind.cancelEditor,
+      );
+  draftProjection = draftCancelled.projection!;
+  _expect(
+    draftCancelled.isAccepted &&
+        draftProjection.editorMode == TerminalNoteEditorMode.inactive &&
+        !draftProjection.automaticPresentation &&
+        draftProjection.visibility == TerminalNoteSurfaceVisibility.expanded &&
+        draftProjection.cards.first.due &&
+        draftProjection.selectedToken == null,
+    'cancelling the draft reveals the due card in the existing user-owned rail',
+  );
+  await authority.stop();
+}
+
 Future<void> _testDetachedPagingReorderAndExplicitReattach() async {
   final _FakeAuthorityStore store = _FakeAuthorityStore();
   final TerminalNoteAuthority authority = await _startAuthority(store);
@@ -1779,6 +2149,56 @@ Future<void> _testSixtyFourPaneAndSessionBound() async {
         authority.liveSurfaceCount == 64 &&
         extraPane.disposition == TerminalNoteAuthorityMutationDisposition.busy,
     'topology, session, and surface ownership stop exactly at 64',
+  );
+  final Completer<void> focusPressureGate = store.blockNextCommit();
+  final Future<TerminalNoteAuthorityMutationResult> focusPressureHead = _mutate(
+    authority,
+    source: 93,
+    event: 1,
+    transition: _createNote(
+      contextId: authority.contextForPane(const PaneId(1))!,
+      noteId: _noteId(93),
+      body: 'focus pressure gate',
+      timestamp: 79,
+    ),
+  );
+  var coalescedFinalEdges = 0;
+  for (
+    var pane = 1;
+    pane <= TerminalNoteAuthorityLimits.maximumLiveContexts;
+    pane++
+  ) {
+    authority.observeEligibleFocus(
+      sequence: authority.nextSequence(),
+      paneId: PaneId(pane),
+      isEligible: true,
+    );
+    authority.observeEligibleFocus(
+      sequence: authority.nextSequence(),
+      paneId: PaneId(pane),
+      isEligible: false,
+    );
+    final TerminalNoteLifecycleResult finalEdge = authority
+        .observeEligibleFocus(
+          sequence: authority.nextSequence(),
+          paneId: PaneId(pane),
+          isEligible: true,
+        );
+    if (finalEdge.disposition == TerminalNoteLifecycleDisposition.coalesced) {
+      coalescedFinalEdges++;
+    }
+  }
+  _expect(
+    authority.pendingFocusEdgeCount == 128 && coalescedFinalEdges == 64,
+    '64-context pressure retains two ordered edges per context and coalesces '
+    'each final state',
+  );
+  focusPressureGate.complete();
+  await focusPressureHead;
+  await authority.whenIdle();
+  _expect(
+    authority.pendingFocusEdgeCount == 0,
+    '64-context focus pressure drains every final eligibility state',
   );
   final TerminalNoteAuthorityMutationResult closed = await authority.closePane(
     sequence: authority.nextSequence(),

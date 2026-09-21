@@ -1370,6 +1370,16 @@ final class TerminalNoteAuthority {
       return _lifecycleResult(TerminalNoteLifecycleDisposition.duplicate);
     }
     pane.lastObservedEligibility = isEligible;
+    if (isEligible) {
+      if (pane.eligibleVisitGeneration >=
+          TerminalNoteProjectionLimits.maximumGeneration) {
+        pane.eligibleVisitGeneration = 1;
+        final _LiveNoteSurface? surface = pane.surface;
+        if (surface != null) surface.lastAutomaticPresentationVisit = 0;
+      } else {
+        pane.eligibleVisitGeneration++;
+      }
+    }
     final bool atEdgeLimit =
         pane.focusEdges.length >= TerminalNoteLimits.maximumCoalescedFocusEdges;
     if (!atEdgeLimit) pane.focusEdges.add(isEligible);
@@ -1486,10 +1496,11 @@ final class TerminalNoteAuthority {
         disposition: TerminalNoteSurfaceDisposition.stale,
       );
     }
+    if (!surface.automaticPresentation) surface.visibility = visibility;
     surface
-      ..visibility = visibility
       ..foreground = foreground
       ..occluded = occluded;
+    _prepareAutomaticDuePresentation(pane, surface);
     return _applySurfaceProjection(pane, surface);
   }
 
@@ -1742,6 +1753,12 @@ final class TerminalNoteAuthority {
     final TerminalNoteEditorMode previousEditorMode = surface.editorMode;
     final int previousDraftGeneration = surface.draftGeneration;
     final int previousNextDraftGeneration = surface.nextDraftGeneration;
+    final bool previousAutomaticPresentation = surface.automaticPresentation;
+    final int previousPendingAutomaticPresentationVisit =
+        surface.pendingAutomaticPresentationVisit;
+    surface
+      ..automaticPresentation = false
+      ..pendingAutomaticPresentationVisit = 0;
     update();
     final TerminalNoteSurfaceResult applied = _applySurfaceProjection(
       pane,
@@ -1760,7 +1777,10 @@ final class TerminalNoteAuthority {
       ..selectedNoteId = previousSelectedNoteId
       ..editorMode = previousEditorMode
       ..draftGeneration = previousDraftGeneration
-      ..nextDraftGeneration = previousNextDraftGeneration;
+      ..nextDraftGeneration = previousNextDraftGeneration
+      ..automaticPresentation = previousAutomaticPresentation
+      ..pendingAutomaticPresentationVisit =
+          previousPendingAutomaticPresentationVisit;
     return _surfaceIntentResult(
       applied.disposition == TerminalNoteSurfaceDisposition.unavailable
           ? TerminalNoteAuthorityMutationDisposition.unavailable
@@ -2096,6 +2116,9 @@ final class TerminalNoteAuthority {
           bodyUtf8Bytes: body == null ? 0 : utf8.encode(body).length,
           transition: transition,
           onBeforePublication: () {
+            surface
+              ..automaticPresentation = false
+              ..pendingAutomaticPresentationVisit = 0;
             if (saving) {
               surface
                 ..selectedNoteId = createdNoteId ?? selectedNoteId
@@ -2265,6 +2288,7 @@ final class TerminalNoteAuthority {
               surface.visibility == TerminalNoteSurfaceVisibility.expanded &&
               surface.foreground &&
               !surface.occluded,
+          automaticPresentation: surface.automaticPresentation,
           activeCount: contextProjection.activeCount,
           dueCount: contextProjection.dueCount,
           section: surface.section,
@@ -2292,6 +2316,12 @@ final class TerminalNoteAuthority {
       ..latest = candidate
       ..noteIdsByToken = noteIdsByToken
       ..acknowledgedTokens.clear();
+    if (surface.pendingAutomaticPresentationVisit != 0) {
+      surface
+        ..lastAutomaticPresentationVisit =
+            surface.pendingAutomaticPresentationVisit
+        ..pendingAutomaticPresentationVisit = 0;
+    }
     return TerminalNoteSurfaceResult(
       disposition: TerminalNoteSurfaceDisposition.applied,
       projection: candidate,
@@ -2301,8 +2331,48 @@ final class TerminalNoteAuthority {
   void _refreshAllSurfaces() {
     for (final _LiveNotePane pane in _livePanes.values) {
       final _LiveNoteSurface? surface = pane.surface;
-      if (surface != null) _applySurfaceProjection(pane, surface);
+      if (surface != null) {
+        _prepareAutomaticDuePresentation(pane, surface);
+        _applySurfaceProjection(pane, surface);
+      }
     }
+  }
+
+  void _prepareAutomaticDuePresentation(
+    _LiveNotePane pane,
+    _LiveNoteSurface surface,
+  ) {
+    final int visit = pane.eligibleVisitGeneration;
+    if (visit == 0 ||
+        pane.lastObservedEligibility != true ||
+        !surface.foreground ||
+        surface.occluded ||
+        surface.editorMode != TerminalNoteEditorMode.inactive ||
+        surface.lastAutomaticPresentationVisit == visit ||
+        surface.pendingAutomaticPresentationVisit == visit) {
+      return;
+    }
+    final TerminalNoteContextProjection projection;
+    try {
+      projection = _document.snapshot.projectionFor(pane.contextId);
+    } on Object {
+      return;
+    }
+    NoteRecord? firstDue;
+    for (final NoteRecord note in projection.orderedNotes) {
+      if (_document.snapshot.deliveryFor(note.id) != null) {
+        firstDue = note;
+        break;
+      }
+    }
+    if (firstDue == null) return;
+    surface
+      ..visibility = TerminalNoteSurfaceVisibility.expanded
+      ..section = TerminalNoteCollectionSection.current
+      ..pageStart = 0
+      ..selectedNoteId = firstDue.id
+      ..automaticPresentation = true
+      ..pendingAutomaticPresentationVisit = visit;
   }
 
   Future<void> _disposeSurface(_LiveNoteSurface surface) async {
@@ -3005,6 +3075,7 @@ final class _LiveNotePane {
   _LiveNoteSurface? surface;
   bool? lastObservedEligibility;
   bool? lastDrainedEligibility;
+  var eligibleVisitGeneration = 0;
   int nextSurfaceGeneration;
   var lifecycleQueued = false;
   var retired = false;
@@ -3024,6 +3095,9 @@ final class _LiveNoteSurface {
       TerminalNoteSurfaceVisibility.collapsed;
   var foreground = false;
   var occluded = false;
+  var automaticPresentation = false;
+  var lastAutomaticPresentationVisit = 0;
+  var pendingAutomaticPresentationVisit = 0;
   var nextProjectionGeneration = 1;
   var section = TerminalNoteCollectionSection.current;
   var pageStart = 0;

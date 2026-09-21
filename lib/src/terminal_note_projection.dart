@@ -86,6 +86,7 @@ final class TerminalNoteSurfaceProjection {
     required this.storeRevision,
     required this.visibility,
     required this.presentationEligible,
+    this.automaticPresentation = false,
     required this.activeCount,
     required this.dueCount,
     this.section = TerminalNoteCollectionSection.current,
@@ -136,7 +137,10 @@ final class TerminalNoteSurfaceProjection {
         (visibility == TerminalNoteSurfaceVisibility.collapsed &&
             (this.cards.isNotEmpty ||
                 selectedToken != null ||
-                editorMode == TerminalNoteEditorMode.editing))) {
+                editorMode == TerminalNoteEditorMode.editing ||
+                automaticPresentation)) ||
+        (automaticPresentation &&
+            editorMode != TerminalNoteEditorMode.inactive)) {
       throw ArgumentError('Note surface projection is invalid');
     }
   }
@@ -150,6 +154,7 @@ final class TerminalNoteSurfaceProjection {
   final BigInt storeRevision;
   final TerminalNoteSurfaceVisibility visibility;
   final bool presentationEligible;
+  final bool automaticPresentation;
   final int activeCount;
   final int dueCount;
   final TerminalNoteCollectionSection section;

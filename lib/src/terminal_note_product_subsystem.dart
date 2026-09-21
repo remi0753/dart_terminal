@@ -34,6 +34,7 @@ final class TerminalNoteProductInteractionSnapshot {
   const TerminalNoteProductInteractionSnapshot({
     required this.surfaceGeneration,
     required this.visibility,
+    this.automaticPresentation = false,
     required this.editorMode,
     required this.draftGeneration,
     required this.editorDirty,
@@ -42,6 +43,7 @@ final class TerminalNoteProductInteractionSnapshot {
 
   final int surfaceGeneration;
   final TerminalNoteSurfaceVisibility visibility;
+  final bool automaticPresentation;
   final TerminalNoteEditorMode editorMode;
   final int draftGeneration;
   final bool editorDirty;
@@ -382,6 +384,7 @@ final class TerminalNoteProductSubsystem
   final TerminalNoteExportDestinationChooser _exportDestinationChooser;
   final Map<PaneId, TerminalNoteContextKind> _paneKinds =
       <PaneId, TerminalNoteContextKind>{};
+  final Map<PaneId, bool> _eligibleFocusByPane = <PaneId, bool>{};
   final Map<PaneId, _TerminalNoteProductSurface> _surfaces =
       <PaneId, _TerminalNoteProductSurface>{};
   TerminalNoteProductSurfaceEventHandler? _surfaceEventHandler;
@@ -525,6 +528,7 @@ final class TerminalNoteProductSubsystem
     }
     await _detachSurface(paneId);
     _paneKinds.remove(paneId);
+    _eligibleFocusByPane.remove(paneId);
     final TerminalNoteAuthorityMutationResult result = await _authority
         .closePane(
           sequence: _authority.nextSequence(),
@@ -575,6 +579,7 @@ final class TerminalNoteProductSubsystem
       return TerminalNoteProductInteractionSnapshot(
         surfaceGeneration: projection.surfaceGeneration,
         visibility: projection.visibility,
+        automaticPresentation: projection.automaticPresentation,
         editorMode: projection.editorMode,
         draftGeneration: projection.draftGeneration,
         editorDirty: native.editorDirty,
@@ -728,6 +733,9 @@ final class TerminalNoteProductSubsystem
         TerminalNoteProductTopologyDisposition.duplicate,
       );
     }
+    final TerminalNoteProductTopologyResult? lifecycleFailure =
+        _observeEligibleFocus(paneId, configuration);
+    if (lifecycleFailure != null) return lifecycleFailure;
     final TerminalNoteNativeSurfaceAdapter adapter;
     try {
       adapter = TerminalNoteNativeSurfaceAdapter(
@@ -819,6 +827,9 @@ final class TerminalNoteProductSubsystem
         TerminalNoteProductTopologyDisposition.stale,
       );
     }
+    final TerminalNoteProductTopologyResult? lifecycleFailure =
+        _observeEligibleFocus(paneId, configuration);
+    if (lifecycleFailure != null) return lifecycleFailure;
     final bool rendererChanged = !_sameRenderer(
       surface.configuration.rendererIdentity,
       configuration.rendererIdentity,
@@ -1232,6 +1243,40 @@ final class TerminalNoteProductSubsystem
     }
   }
 
+  TerminalNoteProductTopologyResult? _observeEligibleFocus(
+    PaneId paneId,
+    TerminalNoteProductSurfaceConfiguration configuration,
+  ) {
+    if (!_configuration.onReturnEnabled) return null;
+    final bool eligible = configuration.foreground && !configuration.occluded;
+    if (_eligibleFocusByPane[paneId] == eligible) return null;
+    final TerminalNoteLifecycleResult result = _authority.observeEligibleFocus(
+      sequence: _authority.nextSequence(),
+      paneId: paneId,
+      isEligible: eligible,
+    );
+    switch (result.disposition) {
+      case TerminalNoteLifecycleDisposition.accepted:
+      case TerminalNoteLifecycleDisposition.coalesced:
+      case TerminalNoteLifecycleDisposition.duplicate:
+      case TerminalNoteLifecycleDisposition.overflowed:
+        _eligibleFocusByPane[paneId] = eligible;
+        return null;
+      case TerminalNoteLifecycleDisposition.stale:
+        return const TerminalNoteProductTopologyResult(
+          TerminalNoteProductTopologyDisposition.stale,
+        );
+      case TerminalNoteLifecycleDisposition.busy:
+        return const TerminalNoteProductTopologyResult(
+          TerminalNoteProductTopologyDisposition.busy,
+        );
+      case TerminalNoteLifecycleDisposition.unavailable:
+        return const TerminalNoteProductTopologyResult(
+          TerminalNoteProductTopologyDisposition.unavailable,
+        );
+    }
+  }
+
   Future<TerminalNoteProductTopologyResult?> _hideOrRetireDetachedSurface(
     PaneId paneId,
     _TerminalNoteProductSurface surface,
@@ -1333,6 +1378,7 @@ final class TerminalNoteProductSubsystem
     );
     _surfaces.clear();
     _paneKinds.clear();
+    _eligibleFocusByPane.clear();
     Object? firstError;
     StackTrace? firstStackTrace;
     for (final _TerminalNoteProductSurface surface in remaining) {
