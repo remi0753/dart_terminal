@@ -11,10 +11,10 @@
     "build_mode": "release-aot"
   },
   "input_integrity": {
-    "dart_budget_sha256": "c9f32be8fa19d834077c2db64c99b2bca1e59364c5998c346b921dfa91dc7bdb",
-    "native_budget_sha256": "4e676ced14abd6fbbc68b074b45eb39b2ce1c001b93caca2603fe100d048e62c",
-    "disabled_input_sha256": "193516d54393f7a7e051ad862baf742554a52ee5831cdde2c6736d98f3f4cc1b",
-    "store_acceptance_sha256": "807b72133170c3af847aa15f4a3373fae5c049e8951610be86aac11725268da3"
+    "dart_budget_sha256": "f97ab8f5a426bc8d69a54e94c96331ab6fd093fae60a030a336a6246d81a5de3",
+    "native_budget_sha256": "922e0f973836c99a3584d493db0056903624291d581ed2dcc5033303c893c485",
+    "disabled_input_sha256": "5c47803936af84e1d98aa0fa70fa750ad961ae2bad24a5fd3c64b157bc5fad16",
+    "store_acceptance_sha256": "bc2a1e99d8b92458fba84de89fdfa8fdeac4e19eeea7c63ad33127f7e403e2e5"
   },
   "source_integrity": {
     "dart_budget_benchmark_sha256": "69f5648258d830d61fc2c7f2b1dcbe84f470d05296ae3cc773a732dc129f288e",
@@ -22,7 +22,7 @@
     "evidence_builder_sha256": "7eca5cb8c57128be5747d64282c066a1f397139a040eb81a9a834f98d61fe7b4",
     "native_budget_benchmark_sha256": "7731b7187ee7572bf67ed4d4c6e4e475ebbaf3e698a92af370b65c3357a1d7f2",
     "store_acceptance_sha256": "18a448374d249b536cbaebe20e8ae47e6b1260c6ffe07fcde1c188c58306ab27",
-    "audited_note_sources_sha256": "c0d097238d839dd86a020bfd6db84943500032a291e767a0dae2e039c8e0f63a"
+    "audited_note_sources_sha256": "7657d26ef7d13e8913cb9c7b225001d4327acbbcf695857ede47792638b91f2a"
   },
   "measurement_policy": {
     "version": 1,
@@ -39,7 +39,7 @@
       "panes": 64,
       "surfaces": 64,
       "worker": 1,
-      "rss_delta_bytes": 3194880,
+      "rss_delta_bytes": 3260416,
       "rss_budget_bytes": 16777216,
       "idle_window_ms": 250,
       "projection_delta": 0,
@@ -52,7 +52,7 @@
     "model_transition": {
       "samples": 64,
       "p95_us": 4,
-      "max_us": 13,
+      "max_us": 14,
       "p95_budget_us": 1000,
       "max_budget_us": 4000,
       "store_commit_delta": 0,
@@ -65,7 +65,7 @@
       "notes": 128,
       "cards": 64,
       "body_bytes": 262144,
-      "p95_us": 4780,
+      "p95_us": 4619,
       "budget_us": 100000,
       "store_commit_delta": 0,
       "owners": 0
@@ -76,16 +76,16 @@
       "cards": 64,
       "materialized": 32,
       "body_bytes": 262144,
-      "apply_p95_us": 5174,
+      "apply_p95_us": 5398,
       "apply_budget_us": 8000,
-      "first_visible_p95_us": 14622,
+      "first_visible_p95_us": 14750,
       "first_visible_budget_us": 100000,
       "stalls": 0,
       "stall_threshold_us": 16670,
       "owners": 0
     },
     "combined_first_visible": {
-      "p95_us": 19402,
+      "p95_us": 19369,
       "budget_us": 100000
     },
     "hard_cap": {
@@ -95,9 +95,9 @@
       "deliveries": 2048,
       "body_bytes": 8388608,
       "file_bytes": 9698603,
-      "steady_delta_bytes": 44908544,
+      "steady_delta_bytes": 44875776,
       "steady_budget_bytes": 67108864,
-      "peak_delta_bytes": 90144768,
+      "peak_delta_bytes": 90193920,
       "peak_budget_bytes": 100663296,
       "owners": 0
     },
@@ -105,15 +105,15 @@
       "rounds": 21,
       "events_per_route": 1050000,
       "factory_calls": 0,
-      "baseline_p95_ns": 249,
-      "disabled_p95_ns": 249,
-      "median_ratio_ppm": 1001682,
+      "baseline_p95_ns": 265,
+      "disabled_p95_ns": 281,
+      "median_ratio_ppm": 999068,
       "maximum_ratio_ppm": 1050000
     },
     "durable_store": {
       "runs": 20,
-      "commit_p95_us": 42737,
-      "primitive_p95_us": 12750,
+      "commit_p95_us": 42080,
+      "primitive_p95_us": 18135,
       "commit_budget_us": 250000,
       "primitive_budget_us": 1500000
     }

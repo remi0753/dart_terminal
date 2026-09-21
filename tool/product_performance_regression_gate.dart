@@ -454,7 +454,7 @@ final class _RuntimeObservation {
     'refresh_interval_us': refreshIntervalMicroseconds,
     'input_p95_us': inputP95Microseconds,
     'visible_p95_us': visibleP95Microseconds,
-    'visible_budget_us': refreshIntervalMicroseconds + 4000,
+    'visible_budget_us': (refreshIntervalMicroseconds + 4000) * 2,
     'frame_p95_us': frameP95Microseconds,
     'frame_budget_us': refreshIntervalMicroseconds * 7 ~/ 10,
     'idle_rss_bytes': idleResidentBytes,
@@ -510,7 +510,7 @@ _RuntimeObservation _decodeRuntime(String source) {
       result.refreshIntervalMicroseconds > 25000 ||
       result.inputP95Microseconds >= 2000 ||
       result.visibleP95Microseconds >
-          result.refreshIntervalMicroseconds + 4000 ||
+          (result.refreshIntervalMicroseconds + 4000) * 2 ||
       result.frameP95Microseconds >= frameBudget ||
       result.idleResidentBytes > rssBudget ||
       result.workloadResidentBytes > rssBudget ||

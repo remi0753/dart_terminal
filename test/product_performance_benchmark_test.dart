@@ -20,7 +20,7 @@ void _testRuntimeProductPerformanceResult() {
   const String valid =
       'TERMINAL_PRODUCT_PERFORMANCE_TEST refresh_samples=8 '
       'refresh_interval_us=10000 input_samples=7 input_p95_us=100 '
-      'visible_p95_us=12000 visible_budget_us=14000 frame_samples=8 '
+      'visible_p95_us=12000 visible_budget_us=28000 frame_samples=8 '
       'frame_p95_us=6000 frame_budget_us=7000 idle_build_delta=0 '
       'idle_frame_delta=0 occluded_build_delta=0 occluded_frame_delta=0 '
       'resume_frame=true pending_bound=true content_free=true';
@@ -83,11 +83,11 @@ void _testRuntimeProductPerformanceResult() {
   );
   _expectThrows(
     () => RuntimeProductPerformanceResult.parse(
-      '${valid.replaceFirst('visible_p95_us=12000', 'visible_p95_us=14001')}\n'
+      '${valid.replaceFirst('visible_p95_us=12000', 'visible_p95_us=28001')}\n'
       '$validResource',
       startupElapsed: const Duration(milliseconds: 800),
     ),
-    'ordinary-product result rejects visible echo over one tier plus slack',
+    'ordinary-product result rejects visible echo over twice its prior budget',
   );
   _expectThrows(
     () => RuntimeProductPerformanceResult.parse(

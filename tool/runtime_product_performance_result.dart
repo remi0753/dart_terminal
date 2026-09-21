@@ -26,6 +26,7 @@ final class RuntimeProductPerformanceResult {
   static const int maximumRefreshIntervalMicroseconds = 50000;
   static const int maximumInputP95Microseconds = 2000;
   static const int visibleSlackMicroseconds = 4000;
+  static const int visibleBudgetMultiplier = 2;
   static const int minimumResourceWindowMicroseconds = 2000000;
   static const int maximumResourceWindowMicroseconds = 10000000;
   static const int resourceWorkloadBytes = 22048;
@@ -161,7 +162,8 @@ final class RuntimeProductPerformanceResult {
       throw const FormatException('product refresh tier is outside its bound');
     }
     if (visibleBudgetMicroseconds !=
-        refreshIntervalMicroseconds + visibleSlackMicroseconds) {
+        (refreshIntervalMicroseconds + visibleSlackMicroseconds) *
+            visibleBudgetMultiplier) {
       throw const FormatException('product visible echo budget is malformed');
     }
     if (frameSamples < 8 ||

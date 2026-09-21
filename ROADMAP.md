@@ -1,7 +1,7 @@
 # Dart Terminal — contextual memory ロードマップ
 
-最終更新: 2026-09-21<br>
-状態: S1/S2の製品実装を完了。R0 hidden qualificationは未着手。
+最終更新: 2026-09-22<br>
+状態: R0 hidden qualificationを完了。次はR1 internal S1/S2 opt-in。
 
 主要な terminal emulator 機能と配布版リリースまでの計画は達成済みであり、
 [`docs/archive/terminal-emulator-release-roadmap.md`](docs/archive/terminal-emulator-release-roadmap.md)
@@ -139,7 +139,7 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
     - [x] ordered shutdown-awayとrestart deliveryを接続する
     - [x] commit/ack crash境界とfalse-consume vectorを固定する
   - [x] S2両runtime product acceptanceと全監査を完了する
-- [ ] CM-12 R0 hidden qualificationを完了する
+- [x] CM-12 R0 hidden qualificationを完了する
   （[`cm-12-r0-hidden-qualification.md`](docs/contextual-memory/cm-12-r0-hidden-qualification.md)
   を参照して実施する）
   - [x] R0 temporary-store harness、hidden/default-off、rollback contractを固定する
@@ -156,7 +156,7 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
     - [x] R0 named aggregateへfull gate inventoryを接続する
       - [x] exact serial inventoryとfail-closed checker contractを実装する
       - [x] fresh 8-gate aggregateとfinal evidence checkerを完走する
-  - [ ] manual IME/keyboard/VoiceOver/appearance/TUI checklistとR0 stage decisionを完了する
+  - [x] manual IME/keyboard/VoiceOver/appearance/TUI checklistとR0 stage decisionを完了する
 - [ ] CM-13 R1 internal S1/S2 opt-inを完了する
 - [ ] CM-14 R2 public S1/S2 opt-inを完了する
 - [ ] CM-15 R3 S1/S2 default-on promotionを完了する

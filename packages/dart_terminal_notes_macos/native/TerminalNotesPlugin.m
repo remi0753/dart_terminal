@@ -181,7 +181,72 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 - (BOOL)isFlipped { return YES; }
 @end
 
-@interface DtnNoteBadgeButton : NSButton
+@interface DtnKeyboardButton : NSButton
+@property(nonatomic, weak) NSView* previousKeyViewTarget;
+@end
+
+@implementation DtnKeyboardButton
+
+- (BOOL)acceptsFirstResponder { return YES; }
+
+- (BOOL)focusTarget:(NSView*)target {
+  return target != nil && target != self && !target.hidden &&
+         [self.window makeFirstResponder:target];
+}
+
+- (void)insertTab:(id)sender {
+  if (![self focusTarget:self.nextKeyView]) {
+    [self.window selectNextKeyView:self];
+  }
+}
+
+- (void)insertBacktab:(id)sender {
+  if (![self focusTarget:self.previousKeyViewTarget]) {
+    [self.window selectPreviousKeyView:self];
+  }
+}
+
+- (void)keyDown:(NSEvent*)event {
+  const NSEventModifierFlags modifiers =
+      event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+  const BOOL modified =
+      (modifiers & (NSEventModifierFlagCommand | NSEventModifierFlagControl |
+                    NSEventModifierFlagOption)) != 0;
+  if (!modified && event.keyCode == 53u &&
+      [NSApp sendAction:@selector(cancelOperation:) to:nil from:self]) {
+    return;
+  }
+  if (!modified && event.keyCode == 48u) {
+    if ((modifiers & NSEventModifierFlagShift) != 0) {
+      [self insertBacktab:self];
+    } else {
+      [self insertTab:self];
+    }
+    return;
+  }
+  if (!modified && (event.keyCode == 36u || event.keyCode == 49u ||
+                    event.keyCode == 76u)) {
+    if (self.enabled && self.action != nil) [self performClick:self];
+    return;
+  }
+  [super keyDown:event];
+}
+
+@end
+
+static DtnKeyboardButton* DtnButtonWithTitle(NSString* title, id target,
+                                              SEL action) {
+  DtnKeyboardButton* button =
+      [[DtnKeyboardButton alloc] initWithFrame:NSZeroRect];
+  button.title = title;
+  button.target = target;
+  button.action = action;
+  button.bezelStyle = NSBezelStyleRounded;
+  [button setButtonType:NSButtonTypeMomentaryPushIn];
+  return button;
+}
+
+@interface DtnNoteBadgeButton : DtnKeyboardButton
 @property(nonatomic) BOOL readyCue;
 @property(nonatomic) BOOL darkAppearance;
 @end
@@ -203,7 +268,6 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 }
 
 - (BOOL)isFlipped { return YES; }
-- (BOOL)acceptsFirstResponder { return YES; }
 
 - (void)drawRect:(NSRect)dirtyRect {
   (void)dirtyRect;
@@ -266,6 +330,7 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 @property(nonatomic) uint32_t bodyRgba;
 @property(nonatomic) BOOL increaseContrast;
 @property(nonatomic) BOOL interactionEnabled;
+@property(nonatomic, weak) NSView* previousKeyViewTarget;
 - (void)applyModel:(DtnCardModel*)model
               dark:(BOOL)dark
      bodyFontPoints:(CGFloat)bodyFontPoints
@@ -296,9 +361,8 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     [_chipLabel setAccessibilityElement:YES];
     [_chipLabel setAccessibilityRole:NSAccessibilityStaticTextRole];
     [self addSubview:_chipLabel];
-    _editButton = [NSButton buttonWithTitle:@"Edit"
-                                     target:self
-                                     action:@selector(onEditPressed:)];
+    _editButton =
+        DtnButtonWithTitle(@"Edit", self, @selector(onEditPressed:));
     [_editButton setAccessibilityElement:YES];
     [_editButton setAccessibilityRole:NSAccessibilityButtonRole];
     [self addSubview:_editButton];
@@ -328,8 +392,27 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 }
 
 - (void)keyDown:(NSEvent*)event {
+  const NSEventModifierFlags modifiers =
+      event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+  const BOOL modified =
+      (modifiers & (NSEventModifierFlagCommand | NSEventModifierFlagControl |
+                    NSEventModifierFlagOption)) != 0;
+  if (!modified && event.keyCode == 53u &&
+      [NSApp sendAction:@selector(cancelOperation:) to:nil from:self]) {
+    return;
+  }
+  if (!modified && event.keyCode == 48u) {
+    NSView* target = (modifiers & NSEventModifierFlagShift) != 0
+                         ? self.previousKeyViewTarget
+                         : self.nextKeyView;
+    if (target != nil && target != self && !target.hidden &&
+        [self.window makeFirstResponder:target]) {
+      return;
+    }
+  }
   NSString* characters = event.charactersIgnoringModifiers;
-  if (self.interactionEnabled && self.onSelect != nil && self.model != nil &&
+  if (!modified && self.interactionEnabled && self.onSelect != nil &&
+      self.model != nil &&
       ([characters isEqualToString:@" "] ||
        [characters isEqualToString:@"\r"])) {
     self.onSelect(self.model.token);
@@ -456,10 +539,90 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 
 @end
 
+@interface DtnKeyboardSegmentedControl : NSSegmentedControl
+@property(nonatomic, weak) NSView* previousKeyViewTarget;
+@end
+
+@implementation DtnKeyboardSegmentedControl
+
+- (BOOL)acceptsFirstResponder { return YES; }
+
+- (BOOL)focusTarget:(NSView*)target {
+  return target != nil && target != self && !target.hidden &&
+         [self.window makeFirstResponder:target];
+}
+
+- (void)insertTab:(id)sender {
+  if (![self focusTarget:self.nextKeyView]) {
+    [self.window selectNextKeyView:self];
+  }
+}
+
+- (void)insertBacktab:(id)sender {
+  if (![self focusTarget:self.previousKeyViewTarget]) {
+    [self.window selectPreviousKeyView:self];
+  }
+}
+
+- (void)selectRelativeSegment:(NSInteger)delta {
+  if (!self.enabled || self.segmentCount <= 0 || delta == 0) return;
+  NSInteger candidate = self.selectedSegment;
+  if (candidate < 0 || candidate >= self.segmentCount) {
+    candidate = delta > 0 ? -1 : self.segmentCount;
+  }
+  for (candidate += delta;
+       candidate >= 0 && candidate < self.segmentCount;
+       candidate += delta) {
+    if (![self isEnabledForSegment:candidate]) continue;
+    self.selectedSegment = candidate;
+    if (self.action != nil) [self sendAction:self.action to:self.target];
+    return;
+  }
+}
+
+- (void)keyDown:(NSEvent*)event {
+  const NSEventModifierFlags modifiers =
+      event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+  const BOOL modified =
+      (modifiers & (NSEventModifierFlagCommand | NSEventModifierFlagControl |
+                    NSEventModifierFlagOption)) != 0;
+  if (!modified && event.keyCode == 53u &&
+      [NSApp sendAction:@selector(cancelOperation:) to:nil from:self]) {
+    return;
+  }
+  if (!modified && event.keyCode == 48u) {
+    if ((modifiers & NSEventModifierFlagShift) != 0) {
+      [self insertBacktab:self];
+    } else {
+      [self insertTab:self];
+    }
+    return;
+  }
+  if (!modified && event.keyCode == 123u) {
+    [self selectRelativeSegment:-1];
+    return;
+  }
+  if (!modified && event.keyCode == 124u) {
+    [self selectRelativeSegment:1];
+    return;
+  }
+  if (!modified && (event.keyCode == 36u || event.keyCode == 49u ||
+                    event.keyCode == 76u)) {
+    if (self.enabled && self.action != nil) {
+      [self sendAction:self.action to:self.target];
+    }
+    return;
+  }
+  [super keyDown:event];
+}
+
+@end
+
 @interface DtnPlainTextView : NSTextView
 @property(nonatomic, copy) NSString* markedBaseline;
 @property(nonatomic) NSRange markedBaselineSelection;
 @property(nonatomic) NSRange markedReplacementRange;
+@property(nonatomic, weak) NSView* previousKeyViewTarget;
 - (BOOL)cancelMarkedTextRestoringBaseline;
 - (void)commitMarkedText;
 @end
@@ -478,6 +641,24 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
                                 type:(NSPasteboardType)type {
   if (![type isEqualToString:NSPasteboardTypeString]) return NO;
   return [super readSelectionFromPasteboard:pasteboard type:type];
+}
+
+- (void)insertTab:(id)sender {
+  NSView* target = self.nextKeyView;
+  if (!self.hasMarkedText && target != nil && target != self &&
+      [self.window makeFirstResponder:target]) {
+    return;
+  }
+  [super insertTab:sender];
+}
+
+- (void)insertBacktab:(id)sender {
+  NSView* target = self.previousKeyViewTarget;
+  if (!self.hasMarkedText && target != nil && target != self &&
+      [self.window makeFirstResponder:target]) {
+    return;
+  }
+  [super insertBacktab:sender];
 }
 
 - (void)setMarkedText:(id)string
@@ -601,7 +782,8 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     _textScrollView.documentView = _textView;
     [self addSubview:_textScrollView];
 
-    _colorControl = [[NSSegmentedControl alloc] initWithFrame:NSZeroRect];
+    _colorControl =
+        [[DtnKeyboardSegmentedControl alloc] initWithFrame:NSZeroRect];
     _colorControl.segmentCount = 6;
     NSArray<NSString*>* swatches = @[ @"N", @"Y", @"B", @"G", @"P", @"V" ];
     for (NSInteger index = 0; index < 6; ++index) {
@@ -613,7 +795,8 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     [_colorControl setAccessibilityRole:NSAccessibilityRadioGroupRole];
     [self addSubview:_colorControl];
 
-    _showControl = [[NSSegmentedControl alloc] initWithFrame:NSZeroRect];
+    _showControl =
+        [[DtnKeyboardSegmentedControl alloc] initWithFrame:NSZeroRect];
     _showControl.segmentCount = 2;
     [_showControl setLabel:@"Always" forSegment:0];
     [_showControl setLabel:@"On Return" forSegment:1];
@@ -623,13 +806,13 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     [_showControl setAccessibilityRole:NSAccessibilityRadioGroupRole];
     [self addSubview:_showControl];
 
-    _saveButton = [NSButton buttonWithTitle:@"Save" target:nil action:nil];
+    _saveButton = DtnButtonWithTitle(@"Save", nil, nil);
     _saveButton.keyEquivalent = @"\r";
     _saveButton.keyEquivalentModifierMask = NSEventModifierFlagCommand;
     [_saveButton setAccessibilityElement:YES];
     [_saveButton setAccessibilityRole:NSAccessibilityButtonRole];
     [self addSubview:_saveButton];
-    _cancelButton = [NSButton buttonWithTitle:@"Cancel" target:nil action:nil];
+    _cancelButton = DtnButtonWithTitle(@"Cancel", nil, nil);
     [_cancelButton setAccessibilityElement:YES];
     [_cancelButton setAccessibilityRole:NSAccessibilityButtonRole];
     [self addSubview:_cancelButton];
@@ -649,13 +832,11 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     [_discardConfirmation setAccessibilityRole:NSAccessibilityGroupRole];
     _confirmationLabel = [NSTextField labelWithString:@"Discard changes?"];
     [_discardConfirmation addSubview:_confirmationLabel];
-    _discardButton =
-        [NSButton buttonWithTitle:@"Discard" target:nil action:nil];
+    _discardButton = DtnButtonWithTitle(@"Discard", nil, nil);
     [_discardButton setAccessibilityElement:YES];
     [_discardButton setAccessibilityRole:NSAccessibilityButtonRole];
     [_discardConfirmation addSubview:_discardButton];
-    _keepEditingButton =
-        [NSButton buttonWithTitle:@"Keep Editing" target:nil action:nil];
+    _keepEditingButton = DtnButtonWithTitle(@"Keep Editing", nil, nil);
     [_keepEditingButton setAccessibilityElement:YES];
     [_keepEditingButton setAccessibilityRole:NSAccessibilityButtonRole];
     [_discardConfirmation addSubview:_keepEditingButton];
@@ -751,6 +932,7 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 - (void)showDiscardConfirmation {
   self.discardConfirmation.hidden = NO;
   self.textView.editable = NO;
+  [self.window makeFirstResponder:self.keepEditingButton];
 }
 
 - (void)hideDiscardConfirmation {
@@ -818,8 +1000,8 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     ];
   }
   NSMutableArray* children = [NSMutableArray
-      arrayWithObjects:self.textScrollView, self.showControl,
-                       self.colorControl, self.saveButton, self.cancelButton,
+      arrayWithObjects:self.textScrollView, self.colorControl,
+                       self.showControl, self.saveButton, self.cancelButton,
                        nil];
   if (self.showControl.hidden) [children removeObject:self.showControl];
   if (!self.errorLabel.hidden) [children addObject:self.errorLabel];
@@ -930,7 +1112,8 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     _titleLabel = [NSTextField labelWithString:@"Notes"];
     _titleLabel.font = [NSFont systemFontOfSize:15 weight:NSFontWeightSemibold];
     [_toolbar addSubview:_titleLabel];
-    _sectionControl = [[NSSegmentedControl alloc] initWithFrame:NSZeroRect];
+    _sectionControl =
+        [[DtnKeyboardSegmentedControl alloc] initWithFrame:NSZeroRect];
     _sectionControl.segmentCount = 2;
     [_sectionControl setLabel:@"Current" forSegment:0];
     [_sectionControl setLabel:@"Detached" forSegment:1];
@@ -938,15 +1121,11 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     _sectionControl.target = self;
     _sectionControl.action = @selector(onSection:);
     [_toolbar addSubview:_sectionControl];
-    _createButton = [NSButton buttonWithTitle:@"New"
-                                       target:self
-                                       action:@selector(onNew:)];
+    _createButton = DtnButtonWithTitle(@"New", self, @selector(onNew:));
     [_createButton setAccessibilityElement:YES];
     [_createButton setAccessibilityRole:NSAccessibilityButtonRole];
     [_toolbar addSubview:_createButton];
-    _closeButton = [NSButton buttonWithTitle:@"Close"
-                                      target:self
-                                      action:@selector(onClose:)];
+    _closeButton = DtnButtonWithTitle(@"Close", self, @selector(onClose:));
     [_closeButton setAccessibilityElement:YES];
     [_closeButton setAccessibilityRole:NSAccessibilityButtonRole];
     [_toolbar addSubview:_closeButton];
@@ -957,16 +1136,14 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     [_pagingBar setAccessibilityElement:YES];
     [_pagingBar setAccessibilityRole:NSAccessibilityGroupRole];
     [_rail addSubview:_pagingBar];
-    _previousPageButton = [NSButton buttonWithTitle:@"Previous"
-                                             target:self
-                                             action:@selector(onPreviousPage:)];
+    _previousPageButton =
+        DtnButtonWithTitle(@"Previous", self, @selector(onPreviousPage:));
     _pageRangeLabel = [NSTextField labelWithString:@"0–0 of 0"];
     _pageRangeLabel.alignment = NSTextAlignmentCenter;
     [_pageRangeLabel setAccessibilityElement:YES];
     [_pageRangeLabel setAccessibilityRole:NSAccessibilityStaticTextRole];
-    _nextPageButton = [NSButton buttonWithTitle:@"Next"
-                                         target:self
-                                         action:@selector(onNextPage:)];
+    _nextPageButton =
+        DtnButtonWithTitle(@"Next", self, @selector(onNextPage:));
     for (NSButton* button in @[ _previousPageButton, _nextPageButton ]) {
       [button setAccessibilityElement:YES];
       [button setAccessibilityRole:NSAccessibilityButtonRole];
@@ -983,21 +1160,20 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     [_actionBar setAccessibilityRole:NSAccessibilityToolbarRole];
     [_rail addSubview:_actionBar];
     NSButton* earlier =
-        [NSButton buttonWithTitle:@"Earlier" target:self action:@selector(onEarlier:)];
-    NSButton* later =
-        [NSButton buttonWithTitle:@"Later" target:self action:@selector(onLater:)];
+        DtnButtonWithTitle(@"Earlier", self, @selector(onEarlier:));
+    NSButton* later = DtnButtonWithTitle(@"Later", self, @selector(onLater:));
     NSButton* resolve =
-        [NSButton buttonWithTitle:@"Resolve" target:self action:@selector(onResolve:)];
+        DtnButtonWithTitle(@"Resolve", self, @selector(onResolve:));
     NSButton* reopen =
-        [NSButton buttonWithTitle:@"Reopen" target:self action:@selector(onReopen:)];
+        DtnButtonWithTitle(@"Reopen", self, @selector(onReopen:));
     NSButton* delete_note =
-        [NSButton buttonWithTitle:@"Delete…" target:self action:@selector(onDelete:)];
+        DtnButtonWithTitle(@"Delete…", self, @selector(onDelete:));
     NSButton* reattach =
-        [NSButton buttonWithTitle:@"Reattach" target:self action:@selector(onReattach:)];
+        DtnButtonWithTitle(@"Reattach", self, @selector(onReattach:));
     NSButton* export_notes =
-        [NSButton buttonWithTitle:@"Export" target:self action:@selector(onExport:)];
+        DtnButtonWithTitle(@"Export", self, @selector(onExport:));
     NSButton* copy_note =
-        [NSButton buttonWithTitle:@"Copy" target:self action:@selector(onCopy:)];
+        DtnButtonWithTitle(@"Copy", self, @selector(onCopy:));
     _actionButtons = @[ earlier, later, resolve, reopen, delete_note,
                         reattach, export_notes, copy_note ];
     for (NSButton* button in _actionButtons) {
@@ -1005,7 +1181,8 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
       [button setAccessibilityRole:NSAccessibilityButtonRole];
       [_actionBar addSubview:button];
     }
-    _cardColorControl = [[NSSegmentedControl alloc] initWithFrame:NSZeroRect];
+    _cardColorControl =
+        [[DtnKeyboardSegmentedControl alloc] initWithFrame:NSZeroRect];
     _cardColorControl.segmentCount = 6;
     NSArray<NSString*>* card_swatches = @[ @"N", @"Y", @"B", @"G", @"P", @"V" ];
     for (NSInteger index = 0; index < 6; ++index) {
@@ -1018,7 +1195,8 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     _cardColorControl.target = self;
     _cardColorControl.action = @selector(onCardColor:);
     [_actionBar addSubview:_cardColorControl];
-    _cardShowControl = [[NSSegmentedControl alloc] initWithFrame:NSZeroRect];
+    _cardShowControl =
+        [[DtnKeyboardSegmentedControl alloc] initWithFrame:NSZeroRect];
     _cardShowControl.segmentCount = 2;
     [_cardShowControl setLabel:@"Always" forSegment:0];
     [_cardShowControl setLabel:@"On Return" forSegment:1];
@@ -1029,9 +1207,8 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     _cardShowControl.target = self;
     _cardShowControl.action = @selector(onCardShow:);
     [_actionBar addSubview:_cardShowControl];
-    _rearmButton = [NSButton buttonWithTitle:@"Re-arm"
-                                      target:self
-                                      action:@selector(onRearm:)];
+    _rearmButton =
+        DtnButtonWithTitle(@"Re-arm", self, @selector(onRearm:));
     [_rearmButton setAccessibilityElement:YES];
     [_rearmButton setAccessibilityRole:NSAccessibilityButtonRole];
     [_actionBar addSubview:_rearmButton];
@@ -1098,6 +1275,19 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 - (void)onClose:(id)sender {
   (void)sender;
   [self emitIntent:DTN_INTENT_CLOSE body:nil color:DTN_NO_COLOR token:0u];
+}
+
+- (void)cancelOperation:(id)sender {
+  (void)sender;
+  if (!self.editor.hidden) {
+    if (!self.editor.discardConfirmation.hidden) {
+      [self.editor.keepEditingButton performClick:self];
+    } else {
+      [self.editor.cancelButton performClick:self];
+    }
+    return;
+  }
+  if (!self.rail.hidden) [self.closeButton performClick:self];
 }
 
 - (void)onNew:(id)sender {
@@ -1768,16 +1958,36 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   if (editor_visible) {
     [self.rail setAccessibilityChildren:@[ self.toolbar, self.editor ]];
     self.sectionControl.nextKeyView = self.editor.textView;
+    ((DtnKeyboardSegmentedControl*)self.sectionControl)
+        .previousKeyViewTarget = self.editor.cancelButton;
     self.editor.textView.nextKeyView = self.editor.colorControl;
+    ((DtnPlainTextView*)self.editor.textView).previousKeyViewTarget =
+        self.sectionControl;
+    ((DtnKeyboardSegmentedControl*)self.editor.colorControl)
+        .previousKeyViewTarget = self.editor.textView;
     self.editor.colorControl.nextKeyView = self.editor.showControl.hidden
         ? self.editor.saveButton
         : self.editor.showControl;
+    ((DtnKeyboardSegmentedControl*)self.editor.showControl)
+        .previousKeyViewTarget = self.editor.colorControl;
     self.editor.showControl.nextKeyView = self.editor.saveButton;
+    ((DtnKeyboardButton*)self.editor.saveButton).previousKeyViewTarget =
+        self.editor.showControl.hidden ? self.editor.colorControl
+                                       : self.editor.showControl;
     self.editor.saveButton.nextKeyView = self.editor.cancelButton;
+    ((DtnKeyboardButton*)self.editor.cancelButton).previousKeyViewTarget =
+        self.editor.saveButton;
     self.editor.cancelButton.nextKeyView = self.sectionControl;
     self.editor.keepEditingButton.nextKeyView = self.editor.discardButton;
+    ((DtnKeyboardButton*)self.editor.keepEditingButton)
+        .previousKeyViewTarget = self.editor.discardButton;
     self.editor.discardButton.nextKeyView = self.editor.keepEditingButton;
+    ((DtnKeyboardButton*)self.editor.discardButton).previousKeyViewTarget =
+        self.editor.keepEditingButton;
   } else {
+    ((DtnPlainTextView*)self.editor.textView).previousKeyViewTarget = nil;
+    ((DtnKeyboardSegmentedControl*)self.sectionControl)
+        .previousKeyViewTarget = self.actionButtons.lastObject;
     [self.rail setAccessibilityChildren:
                    detached
                        ? @[ self.toolbar, self.pagingBar, self.scrollView,
@@ -1793,17 +2003,38 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     [self.actionBar setAccessibilityChildren:action_children];
     self.sectionControl.nextKeyView =
         detached ? self.previousPageButton : self.createButton;
+    ((DtnKeyboardButton*)self.createButton).previousKeyViewTarget =
+        self.sectionControl;
+    ((DtnKeyboardButton*)self.previousPageButton).previousKeyViewTarget =
+        self.sectionControl;
     self.previousPageButton.nextKeyView = self.nextPageButton;
+    ((DtnKeyboardButton*)self.nextPageButton).previousKeyViewTarget =
+        self.previousPageButton;
     self.nextPageButton.nextKeyView = self.closeButton;
     self.createButton.nextKeyView = self.closeButton;
+    ((DtnKeyboardButton*)self.closeButton).previousKeyViewTarget =
+        detached ? self.nextPageButton : self.createButton;
     self.closeButton.nextKeyView = self.cardColorControl;
+    ((DtnKeyboardSegmentedControl*)self.cardShowControl)
+        .previousKeyViewTarget = self.cardColorControl;
     self.cardColorControl.nextKeyView = self.cardShowControl.hidden
         ? self.actionButtons.firstObject
         : self.cardShowControl;
     self.cardShowControl.nextKeyView = self.rearmButton.hidden
         ? self.actionButtons.firstObject
         : self.rearmButton;
+    ((DtnKeyboardButton*)self.rearmButton).previousKeyViewTarget =
+        self.cardShowControl;
     self.rearmButton.nextKeyView = self.actionButtons.firstObject;
+    NSView* previous_action = self.rearmButton.hidden
+                                  ? (self.cardShowControl.hidden
+                                         ? self.cardColorControl
+                                         : self.cardShowControl)
+                                  : self.rearmButton;
+    for (NSButton* button in self.actionButtons) {
+      ((DtnKeyboardButton*)button).previousKeyViewTarget = previous_action;
+      previous_action = button;
+    }
     for (NSUInteger index = 0; index + 1 < self.actionButtons.count; ++index) {
       self.actionButtons[index].nextKeyView = self.actionButtons[index + 1];
     }
@@ -1825,11 +2056,19 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
                                   : self.cardViews.firstObject;
     for (NSUInteger index = 0; index < self.cardViews.count; ++index) {
       DtnNoteCardView* card = self.cardViews[index];
+      card.previousKeyViewTarget =
+          index == 0 ? self.closeButton
+                     : self.cardViews[index - 1].editButton;
       card.nextKeyView = card.editButton;
+      ((DtnKeyboardButton*)card.editButton).previousKeyViewTarget = card;
       card.editButton.nextKeyView =
           index + 1 < self.cardViews.count ? self.cardViews[index + 1]
                                            : self.cardColorControl;
     }
+    ((DtnKeyboardSegmentedControl*)self.cardColorControl)
+        .previousKeyViewTarget =
+            self.cardViews.count == 0 ? self.closeButton
+                                      : self.cardViews.lastObject.editButton;
   }
   self.cardList.frame = NSMakeRect(
       0, 0, card_width, fmax(self.scrollView.bounds.size.height, card_y));

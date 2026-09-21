@@ -1,7 +1,7 @@
 # CM-12 R0 hidden qualification
 
-日付: 2026-09-21
-状態: 実施中
+日付: 2026-09-22
+状態: 完了
 
 ## 目的
 
@@ -1422,3 +1422,281 @@ Exact serial inventoryはgate 1〜8を順番どおり完走し、後続gateへ�
 - `dart_appkit`はgenericのままで、code、API、test、dart_terminal固有概念を追加していない。これによりnamed aggregate、full gate inventory、
   arm64／x86_64／Universal auditの自動qualification成果を完了とする。Manual claimとpromotion claimは引き続きfalseであり、CM-12の残作業は次の
   manual IME／keyboard／VoiceOver／appearance／TUI checklistとR0 stage decisionだけである。
+
+## サブタスク4: manual checklistとR0 stage decision
+
+### 着手時の目的、範囲、完了条件
+
+- 目的: R0 hidden candidateを実AppKit上で操作し、自動fixtureだけでは判定できないIME、keyboard-only、VoiceOver、appearance、scale、small-pane、
+  alternate-screen／TUI共存を確認したうえで、R0 hidden stageをpass／failのどちらかへ明示的に決定する。
+- 範囲: temporary storeへ隔離した`notes=true` candidate、Japanese IME、mouseを使わない全Note flow、collapsed／expanded accessibility treeとfocus順、
+  12／15／24 pt、light／dark／Increase Contrast／Differentiate Without Color／Reduce Motion、Retina／利用可能な外部scale、small pane、
+  alternate screen／Vim／Codex／mouse-reporting TUI、terminal geometry／input／focus非干渉、本文非保持の結果記録。
+- 対象外: R1 internal opt-in、public Settings／reference、normal releaseのdefault変更、S3、production store、telemetry、remote flag、
+  `dart_appkit`へのDart Terminal固有code、検証環境に存在しないhardware／third-party executableをpassと推測すること。
+- 依存: CM-10／CM-11のS1／S2 product UI、R0 temporary-store harness、fresh 8-gate automated qualification、Gate 7 manual matrix、
+  existing AppKit appearance／accessibility event、実PTY／Metal product path。
+- 完了条件: frozen matrixの各行へpass／fail／not available、環境、観測根拠を記録し、wrong-context attach、store corruption／overwrite、body/privacy
+  leak、unintended PTY byte、geometry change、IME／accessibility regressionを0件と確認する。必須環境を実測できない場合はpassとせずCM-12を未完了にする。
+- 検証方針: 実AppKit candidateをtemporary directoryとexplicit CLI injectionだけで起動し、keyboard／IME／accessibility tree／視覚状態／実TUIを
+  人間可読チェックリストに沿って確認する。自動証拠は補助として照合するがmanual claimの代用にはしない。結果文書、`git diff --check`、
+  worktree／隣接`dart_appkit` auditを確認し、R0 pass時だけROADMAPの本項とCM-12親項目を完了へ更新する。
+
+### Developer JIT 15 pt candidateの途中経過
+
+- macOS 26.6.2／Apple M1 arm64で、専用の`/private/tmp` state directoryと明示的な`notes=true`、On Return有効、Next Prompt無効、
+  font 15設定だけを注入したfresh Developer JIT candidateを起動した。通常user stateは使用せず、Note store／lock／backupは専用directory内だけに
+  作成された。
+- New Note shortcut、multiline editor、Save／Cancel／Discard確認、collapsed badge、explicit rail open、card selection、color変更を実UIで確認した。
+  Cardはopaqueな色面、角丸、選択border、非色依存のstatus shapeを持ち、Miro風の付箋を想起させつつterminal本文と明確に分離されている。
+- Collapsed accessibility treeはbody-freeなNotes buttonだけを公開し、explicit open後だけNotes group、toolbar、Current／Detached、list、ordered card、
+  visible body、status、actionsを公開した。Draft中にEscapeするとDiscard changes／Keep Editingを公開し、破棄後はterminal responderへ戻った。
+- 実alternate screenとmouse reporting、実Vim、実Codex TUIの各画面上でeditorを開き、draft keyがterminal accessibility valueへ入らないこと、
+  Escape／Discard後に元のTUIへ戻ることを確認した。Codexはtemporary directoryのtrust promptを許可せず、`No, quit`で終了した。
+  Note外をclickしたmouse-reporting byteはTUI本来の挙動として観測したが、Note bounds内のdraft操作からPTYへ流れたbyteは0だった。
+- Windowを264×184 pt未満へ縮小すると、treeはbody-freeな`Notes, pane too small` buttonだけになりrailは0となった。Badgeを押しても展開せず、
+  元のサイズへ戻すと同じ選択card、色、triggerでrailが復帰した。Resize自身によるPTYのSIGWINCH／shell redrawをNote由来geometry changeには数えない。
+- 現時点ではsystem input source、Full Keyboard Access、VoiceOver、appearance／accessibility preferenceを変更していない。これらは開始時の状態を控え、
+  computer-useのaction-time確認後に一つずつ変更し、各観測後に必ず復元する。12／24 ptとRelease AOT parityも未実施である。
+
+### Font matrixとRelease AOT parityの途中経過
+
+- 12 ptと24 ptは、それぞれ別のtemporary state directoryを使うfresh Developer JIT candidateで確認した。Editorのtrigger／color controls、本文、
+  Save／Cancelと、保存後cardの本文、status、Editにclipping／overlapはなく、24 ptでもline heightとcard heightが追従した。15 ptを含む3候補は
+  opaque sticky-card surfaceと読みやすい選択borderを維持した。
+- Fresh Release AOT 15 pt candidateでもcreate／save、body-free collapsed badge、explicit open、small-pane badge、通常サイズへの同一card復帰を確認した。
+  Developer JITとrole、label、layout、input ownerに差はなかった。
+- Release AOTでも実alternate screen、Vim、Codex trust promptの各状態でNote draftを入力し、terminal accessibility valueが不変であることを確認した。
+  DraftはDiscardし、Codexのdirectory trustは許可せず`No, quit`で終了した。Alternate screenとVimも元のshellへ復帰した。
+- Release AOTでselected cardを`On Return`へ明示armした直後の同一visitではdelivery 0だった。別split paneへfocusして元paneへ戻るとrailが一つだけ
+  自動展開し、terminal text areaがfirst responderのままcardが一回presentされた。Presentation後はnon-color `On Return` shapeからpassive `Active`
+  shapeへ遷移し、trigger controlもAlwaysへ戻った。Command実行／prompt returnだけでは発火せず、frozen eligible focus semanticsと一致した。
+- 12 pt候補の終了ではworker stop request／ack後にtimeout／force-killの診断行が一回出たが、worker processはreapされ、pane／PTY／worker ownerは0、
+  application quit dispositionとsession cleanupはcleanだった。15／24 ptとRelease AOTではtimeoutなしで同じclean teardownを確認したため、owner leakや
+  store failureとは判定しない。再発またはowner残留があればR0 failureとして扱う。
+- 残る未実施はJapanese IME、Full Keyboard Accessによるmouse 0 flow、spoken VoiceOver、Dark／contrast／differentiate without color／Reduce Motion、
+  Retina実scale確認、Release AOTを含むこれらのparity、temporary directory cleanupである。開始値はLight、Full Keyboard Access off、3 accessibility
+  preferenceは未設定（実効false）である。
+
+### Manual検証で判明したkeyboard traversal不具合
+
+- Full Keyboard AccessをSystem Settingsから有効にし、実Developer JIT editorで本文へfocusした状態からTab／Shift-Tabを送ると、既存の
+  `nextKeyView` loopへ移動せず本文へtabを挿入／outdentした。`DtnNoteEditorView`は本文→color→trigger→Save→Cancelのlinkを既に設定し、native testも
+  link equalityだけを確認していたが、standard multiline `NSTextView`自身が`insertTab:`／`insertBacktab:`を編集commandとして処理するため、実keyboard
+  traversalは成立していなかった。
+- 選択肢は、(1) Tabを本文文字として維持して別shortcutを導入、(2) editor外へpointer／VoiceOver依存で移動、(3) Note用plain text viewだけが
+  `insertTab:`／`insertBacktab:`を明示key-view移動へ変換、の3案を検討した。(1)はfrozen keyboard-only checklistと通常のform期待に反し、(2)はmouse 0
+  条件を満たさない。(3)はNote editor内に限定され、PTY key routingや`dart_appkit`を変更せず、既存のdeterministic key-view loopを実効化するため採用する。
+- 修正ではmarked textを扱う`setMarkedText:`／commit／cancel経路に触れず、IMEがcommand selectorへ渡したTab／Backtabだけをvisibleなexplicit targetへ
+  focus移動する。Native testは実`NSWindow.firstResponder`と本文不変を確認し、実candidateではTab／Shift-Tab、arrow、Space／Return、Escapeをpointer 0で
+  再実施する。修正がfocused／root testまたは実IMEを壊す場合はR0を停止し、閾値や完了条件は緩めない。
+- 本文のTab修正を組み込んだfresh Developer JIT candidateでは、本文を変更せず色controlへfirst responderが移ることを実UIで確認した。一方、その
+  `NSSegmentedControl`上でRight、Tab、Spaceを送っても選択もfocusも変化しなかった。`nextKeyView`のlink自体は存在するが、実controlがkey eventを
+  traversal／segment actionへ変換しておらず、本文だけ直してもmouse 0 flowは成立しない。
+- 対応案は、(1) Full Keyboard AccessのOS既定挙動へ依存して未対応とする、(2) controlごとの別shortcutを追加する、(3) Note専用の
+  `NSSegmentedControl` subclassでTab／Shift-Tab、Left／Right、Space／Returnをexplicit target／single actionへ変換する、の3案を比較した。(1)は実測と
+  frozen checklistに反し、(2)は発見性とVoiceOver orderを分断する。(3)なら既存のvisible key-view loopとtarget/actionをそのまま使い、Note surface内だけで
+  deterministicに完結するため採用する。Arrowによる有効segment変更はactionを一回だけ送出し、Space／Returnは現在segmentのactionを一回だけ送出する。
+  Command／Control／Option付きkeyは奪わずstandard AppKit処理へ渡す。Native testではselection、action通知回数、前後focus、本文不変を固定する。
+- Segmented control修正後の実candidateでは、本文→色、色のRight選択、色→trigger、triggerのRight選択、Shift-Tab往復がすべて成立した。しかしSaveへ
+  到達後、standard `NSButton`はReturn／Spaceでactionを送らず、TabでもCancelへ移動しなかった。これは保存固有ではなく、同じclassを使うNew、Close、
+  Edit、Move、Resolve、Reopen、Delete、Reattachにも及ぶため、buttonだけを例外にすると全flow受け入れ条件を満たせない。
+- Note用button baseにもsegmented controlと同じunmodified Tab／Shift-TabとSpace／Returnのsingle action規約を持たせ、全Note buttonをそのbaseから生成する。
+  Card group自体は既存Space／Return selectionにTab／Shift-Tabだけを追加する。Explicit previous targetは既存`nextKeyView` graphの逆辺としてlayoutごとに設定し、
+  editor、discard confirmation、Current、Detachedの各loopを閉じる。これによりOS preference差へ依存せず、Note surface外のbutton、terminal responder、
+  shortcut routing、`dart_appkit`へ影響を広げない。
+- Button／card修正を含むfresh Developer JIT candidateで、New、Save、card select、Edit、Keep Editing、Move Later／Earlier、Resolve／Reopen、二段階
+  Deleteをpointer 0で実行した。Tab／Shift-Tabでeditorとrailのloopを一周でき、Space／Returnはいずれも一actionだけ発火し、Close実行後は同じpaneの
+  terminal text areaへfirst responderが一回戻った。Command-Return保存も一回で、terminal accessibility valueへのNote本文混入は0だった。
+- Rail control上のEscapeだけは何も起こさず、Command Palette経由のFocus Terminal actionもpaletteがsystem surfaceを所有している間はavailabilityがfalseに
+  なるため、frozen checklistの「EscapeまたはFocus Terminal action」を確実には満たせなかった。別shortcut追加は既存action catalogと発見性を増やすため
+  採らない。既存responder chainへ`cancelOperation:`を一つ追加し、editorではCancel／Keep Editing、expanded railでは既存Close actionへ委譲する案を採用する。
+  Native Note controlだけがunmodified Escapeをresponder chainへ送り、collapsed badge、terminal、修飾付きkey、`dart_appkit`には介入しない。
+- Escape responder修正後、fresh再起動candidateのexpanded railでcardにfocusしたままEscapeを送り、railが一回collapseして同じpaneのterminal text areaへ
+  first responderが一回戻ることを確認した。Editor本文のEscapeは従来どおりmarked-text cancel／draft Cancelを優先し、dirty confirmation中はKeep Editingへ戻る。
+- 同じtemporary storeを再起動すると、以前の二つのterminal contextに属した二枚がCurrentへ誤接続されずDetachedに二枚だけ現れた。Pointer 0でDetachedを選択し、
+  `Attach to This Terminal`をReturnで一回実行するとDetached countが一つ減り、Currentにその一枚だけが現れた。残る一枚はDetachedに留まり、wrong-context attachは0、
+  implicit reattachは0だった。これでDeveloper JITのCreate／edit／color／On Return／Move／resolve／reopen／delete confirmation／Current／Detached／explicit reattach／
+  terminal focusのkeyboard-only flowは全到達し、keyboard trapとduplicate actionは0である。
+
+### Keyboard修正のfocused検証
+
+- `git diff --check`は成功した。Sandbox内の`make terminal-notes-native-test`はNote keyboard assertionをすべて通過し、Metal deviceを作れない既知のrenderer
+  composition 6 assertionだけ失敗した。同じtargetをsandbox外の実Metal pathで再実行し、`terminal Notes native codec tests passed`で終了した。
+- 初回test追加時は`NSRightArrowFunctionKey`の`%C`型不一致を`-Werror`が検出したため`unichar`へ明示castした。次の実行ではkeyboard testで変更したdraft colorを
+  baselineへ戻し忘れ、後続のclean interaction snapshotがdirtyを正しく検出した。Fixtureだけをbaselineへ復元して再実行し、受け入れ条件やproduct判定は
+  緩めていない。
+
+### VoiceOver途中検証で判明したspoken order不整合
+
+- System SettingsでVoiceOverを実際に有効化し、`com.apple.VoiceOver`とvisual agentのrunning service、VoiceOver Utilityのcursor表示、caption panel、
+  keyboard-focus／VoiceOver-cursor同期が有効であることを確認した。Collapsed treeはterminal text areaのsiblingとしてbody-freeなNotes button一つだけを公開し、
+  editorではTabに同期してNote body→選択色→表示タイミング→Save→Cancelのrole／localized labelが順にfocusされた。
+- Editorの`accessibilityChildren`だけは本文→表示タイミング→色→Save→Cancelの順で、explicit keyboard loopの本文→色→表示タイミング→Save→Cancelと
+  色／表示タイミングが逆だった。VoiceOver cursorを直接進める場合とTab同期でspoken orderが変わるため、frozen checklistに不合格である。
+- Visual subview順を推測に使う案は採らず、editorが公開するexplicit accessibility childrenをkey-view graphと同じ本文→色→表示タイミング→Save→Cancelへ
+  並べ替える。Role、label、layout、intent、PTY routingは変更しない。Native testは要素数だけでなくobject identity順を固定し、実VoiceOver有効状態で再確認する。
+- VoiceOver有効中、collapsed treeは本文0のNotes button一つ、expanded treeはNotes→toolbar→section→scroll list→ordered card→visible body／status／Edit→
+  action toolbarだけを公開した。Internal ID、timestamp、detached reasonは0だった。Editorのbody、color、show timing、Save、Cancelと、dirty confirmationの
+  Keep Editing／Discardは個別role／labelを持ち、keyboard-focus／VoiceOver-cursor同期下で順にfocusされた。Collapse後はcard body／disposed editor要素がtreeから0になった。
+- VoiceOver本体とvisual agentの起動はlaunch serviceでも確認し、検証後にSystem Settingsのswitchをoffへ戻してservice PID 0を確認した。Computer Useは
+  frontmost Codexを維持したまま対象appへAX eventを直接送るため、app activation／occlusionを変化させるmanual background caseとcaption overlay captureは
+  この経路では判定できなかった。Background／occluded body AX 0とgeneric announcement一回は既存actual AppKit fixtureが検証しているが、manual matrixでは
+  代用とせず、直接frontmost切替を行える段階までpendingとして扱う。
+
+### Appearanceとdisplay scaleの途中結果
+
+- 開始値Lightでselected yellow cardを表示したままDarkへlive変更し、rail／card／text／controlsがdark tokenへ更新され、card本文面はopaque、statusの`○ Active`、
+  selection border、focus ringが維持された。Lightへ戻すと同じ一枚／同じselection／同じcolorで復帰し、terminal backgroundやwallpaperの透過は0だった。
+- Increase Contrastを単独でonにすると、system controlとNote card／railのoutlineが明確になり、selected cardは2 pt相当のborder、shadowなし、本文／status／Editの
+  読みやすさを維持した。Offへ戻すとReduce Transparencyも連動してoffへ戻った。Differentiate Without Colorを単独でonにしても`○ Active`のshape＋textと
+  selection borderが残り、colorだけに依存する状態はなかった。検証後offへ戻した。
+- Reduce Motionを単独でonにし、selected cardを持つrailのEscape collapseとbadgeからのopenを連続して確認した。中間補間状態はなく、same card identity、
+  selection、color、ownerを保持した。Native presentation snapshotのanimation duration 0 contractと一致し、検証後offへ戻した。
+- CoreGraphicsのonline display queryは一台だけを返し、logical 1680×1050、pixel 3360×2100、scale 2.0だった。実2×画面でglyph、caret、44 pt badge、
+  card edge、hit targetにdouble scalingやblurはなかった。物理1×／alternate-scale displayは接続されていないため`not available`であり、推測でpassにしない。
+
+### Release AOT最終parityとlock後の再開条件
+
+- 修正版を含むfresh Release AOT 15 pt candidateで、editorのAX childrenが本文→色→表示タイミング→Save→Cancelとなることを確認した。
+  Tab／Shift-Tab、色／表示タイミングのRight、Return保存、card→Edit、editor／railのEscapeを実行し、保存card一枚、同じterminal responderへの復帰、
+  terminal text不変を確認した。VoiceOverを実際にonにした状態でも同じ順でfocusされ、collapse後は本文要素0だった。検証後VoiceOverはoffへ戻した。
+- Release AOTでsystem input sourceをJapaneseへ切り替えたが、Computer Useのtarget eventはfrontmostのCodexを維持したまま対象appへ直接送られ、
+  Note本文にはローマ字が直接入った。これはIME preeditではないためpassに数えず、入力を元へ戻してABCへ復元した。JITで確認済みの
+  marked-text／candidate anchor／commit／cancelをRelease AOTでも実foreground key eventで再確認する必要がある。
+- VoiceOver off、Full Keyboard Access off、Light、Increase Contrast off、Differentiate Without Color off、Reduce Motion off、ABCをread backし、
+  VoiceOver Utilityを閉じた。Temporary Release candidateも停止し、Dart Terminal executableの残留は0だった。
+- 最終変更後の`make terminal-notes-native-test`は実AppKit／Metal pathで`terminal Notes native codec tests passed`。Button／segmented controlの
+  single action、前後Tab、本文不変、editor AX object identity順、Escape close intentを含む。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`の初回は、checked R0 budget evidenceが修正前source hashを保持していたため
+  `evidence fixed contract differs`でfail closedした。Fresh aggregateはbudget evidenceを再生成し、combined first-visible p95 19,111 us、
+  Note audited source hashを現sourceへ更新した。これは必要なevidence freshness検出であり、test条件は緩めていない。
+- 同fresh aggregateはarchitecture、Notes、S1／S2、root、sanitizer／fuzz／faultとGate 7 Developer JIT native contentをpassした後、
+  Release AOT native contentのsilent command caseでdirectory refresh commit countは期待どおり一回増えた一方、settled後にprojection generationが
+  16から20へ変化して停止した。この実行時点ではmacOSがlock済みで、application focus／visibility遷移を同fixtureの通常前提として判定できない。
+  Screen lock由来と断定もproduct regressionと断定もせず、unlock後の同focused targetとfresh aggregateが必要である。
+- Release AOT 12 pt candidateはbuild／起動まで完了したが、visual observation直前にComputer UseがmacOS lockを報告したため停止した。
+  12／24 ptとRelease appearance matrix、foreground IME、spoken／background VoiceOver、temporary directory cleanupは未完了であり、R0 stage decisionと
+  ROADMAPのCM-12は未完了のまま維持する。
+
+### Unlock後のRelease AOT visual parity
+
+- Unlock直後に失敗箇所と同じ`make RUNTIME_ARCH=arm64 runtime-native-content-integration`を再実行し、Developer JIT 27,930 ms／Release AOT
+  26,948 msでpassした。両modeともservices manifest、navigator、process inspector、exact PTY、4 sessions、cleanupを完走したため、lock中のaggregate
+  failureは製品修正対象とせず、fresh aggregateをunlocked状態で再実行する。
+- Fresh Release AOT 12 ptと24 ptを別temporary storeで起動した。12 ptのeditor／single-line card、24 ptのmultiline editor／cardは、trigger、color、
+  body、status、Editをclip／overlapせず、line／card heightがfontへ追従した。15 pt既存結果と合わせ、Release AOTの12／15／24 pt matrixをpassとした。
+- Selected 24 pt cardを保持したままLight→Dark、Increase Contrast、Differentiate Without Color、Reduce Motionを順にlive変更した。Darkでもopaque body、
+  readable text、selection border、`○ Active`を維持し、高contrastではcontrol／rail／card outlineが強化された。Non-color cueはshape＋textを維持し、
+  Reduce Motionのcollapse／openは中間状態なしで同一card identityを復帰した。
+- 各設定は次のcaseへ進む前に単独でoffへ戻し、最後にLight、contrast off、reduce transparency off、differentiate off、reduce motion offを確認した。
+  Release candidatesも停止した。残るmanual blockerはRelease AOT foreground Japanese IME、spoken auto-due announcement、実background／occlusionだけである。
+
+### Unlock後のfresh aggregateで判明したconfiguration fixtureの旧件数
+
+- Screen lockを避けるため`caffeinate -di`下でfresh aggregateをgate 1から再実行した。先の停止箇所だったnative contentは
+  Developer JIT／Release AOTともpassしたが、Gate 7のDeveloper JIT configurationで`--show-config`の先頭行が
+  `options=59 entries=62 diagnostics=3`であるのに、fixtureだけが`options=55 entries=58 diagnostics=3`を期待して停止した。
+- Stdoutはroot、theme／fontのeffective valueとprovenance、3 diagnostics、終端`end`をすべて正しく含み、stderrとworkerは0だった。
+  差分4件はCM-01以降に追加済みの`notes`、`notes-on-return`、`notes-next-prompt`、`notes-font-size`であり、rootのeffective-config testも
+  options 59を正本としている。製品出力、公開範囲、診断条件を変える案は採らず、統合fixtureのexact totalを59／62へ更新する。
+- 修正後はconfiguration両runtimeを単独実行し、passした場合だけfresh aggregateをgate 1から再実行する。件数以外のcanonical value、provenance、
+  policy、diagnostic、early-exit、worker 0 assertionは維持する。
+- Exact total修正後の単独Developer JITはshow-configを通過し、その後のSplit Right直後に設定済みkeybindを旧左paneへ送って停止した。同じrunを
+  二回再現し、content-free診断ではtext input自身は`rawKey`、mutationは完了済みだが旧左paneは非focusで、window interaction authorityが正しく
+  terminal callbackを抑止していた。`splitPane`は新しい右paneをfocusする現仕様であり、製品routerを緩める案や非focus paneへのinput許可は不採用とした。
+- Fixtureの目的はControl-Kでfocus-next、続いてCommand-Right overrideでfocus-leftという設定keybind往復を検証することなので、Split生成確認後に
+  test fixtureだけが左paneを明示focusし、通常のhierarchy reconcileを一回行ってから既存vectorを開始する。次のkey event前に左pane activeをbounded waitし、
+  splitの製品既定、新pane focus、input authority、assertion、timeoutは変更しない。
+- 左pane同期後、Developer JIT configuration本体はstatus 0で最後まで完走したが、integration toolがreload machine lineを旧形式で照合して停止した。
+  現行`TerminalConfigReloadResult.machineLine`は`new_session`の後に`next_launch`と`pending_restart`を必ず出力し、観測値はいずれも0だった。
+  Configurationのapplied 2件／rejected 0件とThemeのapplied 2件について、既存changes／live／new-session／diagnostic件数を維持したまま、
+  `next_launch=0 pending_restart=0`をexact regexへ追加する。フィールドを任意化したりprefix matchへ弱めたりしない。
+- Focused formatterは変更0、`dart analyze lib/src/terminal_application.dart tool/runtime_integration_smoke.dart`はissue 0だった。修正後の
+  configuration integrationはDeveloper JIT 1,982 ms、Release AOT 1,091 msでpassし、5 pane、keybind、Settings editor／visual、save／permission／
+  reload、font fallback／diagnostics、effective config、background opacityを両modeで完走した。次はlockを避けたfresh aggregateをgate 1から実行する。
+- `caffeinate -di`下のfresh aggregateはGate 1 budget（combined first-visible 19,663 us）、Gate 2 cross-architecture、Gate 3 Notes、Gate 4 S1、
+  Gate 5 S2をpassし、Gate 6 root suiteのPhase 7 AppKit acceptance freshnessで停止した。Configuration fixture修正によるreviewed source hash変更を
+  generatorへ反映していなかったfail-closedであり、criteriaを変えず正規generatorを依存順に実行する。
+- `phase7-appkit-acceptance`はcriteria 5／source refs 20／unit 16／integration 5／UI assertion 11を維持し、
+  `terminal_application.dart`のhash 2箇所だけを更新した。続くcompatibility coverageはfix family 9／case 9／owned gap 1で既にfreshだった。
+  Ghostty P0/P1 inventoryは`terminal_application.dart`とintegration toolのhash 2件だけ、daily-use matrixはその2 evidenceとintegration toolのhashだけを
+  更新した。Gap count、criterion、gate、判定は変更していない。依存freshness check後、aggregateを再度gate 1から実行する。
+
+### 負荷時Note S2 TUI reset handshakeの決定論化
+
+- Evidence再生成後のfresh aggregateはGate 1〜4を再度passした。Gate 5のS2はDeveloper JITをpassし、Release AOTも4 vectors、64 focus edges、
+  protected state、owner 0のproduct summaryまで完了したが、その直後のprimary terminal mode復元assertionだけが一回失敗した。Session／PTY／worker／native
+  cleanupはcleanで、同じRelease AOT targetの単独再実行は858 msでpassした。
+- TUI shell commandは一つ目のraw `dd`を解放後、mouse／focus／bracketed paste／application cursor／alternate screenをoffにしてRESET markerを出すが、
+  直後にcommandを終了していた。負荷時にはmarker検出後、assertion前にzsh promptがbracketed-paste等を再設定できるため、「TUIが復元しなかった」と
+  「shellが通常prompt policyを再開した」を競合させていた。
+- Marker直後のfixed sleepやassertion削除は不採用とした。TUI reset後もPTYをrawのまま二つ目の1-byte `dd`で止め、RESET markerをactive primary screenで
+  確認して全TUI mode offをexact assertionする。その後だけ二つ目のbyteを送り、`stty sane`とDONE markerを待ってからshutdownする。
+  製品parser、shell prompt policy、mode invariant、timeout、S2 vectorは変更せず、fixtureの観測区間だけを明確に分離する。
+- Formatterは変更0、focused analyzerはissue 0。修正後のS2 integrationはDeveloper JIT 2,242 ms／Release AOT 1,051 msで連続passした。
+  Phase 7 acceptance、Ghostty gap inventory、daily-use matrixを再度依存順に生成し、変更は現`terminal_application.dart`と既変更integration tool、および
+  そのevidence hashだけだった。Criteria、gap、gate、release blocker件数は不変である。
+
+### Fresh aggregateのidle抑制境界で判明した測定競合
+
+- 続く`caffeinate -di`下のfresh aggregateは、Gate 1 budget（combined first-visible 19,473 us）、Gate 2 architecture、Gate 3 Notes、
+  Gate 4 S1、Gate 5 S2、Gate 6 root suite、Gate 7 source audit／smoke／display／hierarchyをpassした。Developer JIT reliabilityの
+  ordinary product performanceだけが`idle_build_delta=1 idle_frame_delta=1`で停止した。Refresh、input、visible、frame work、2秒の
+  non-blinking resource idle／occluded窓、RSS／CPU、owner cleanupは同processで合格しており、性能threshold超過やowner leakではない。
+- 同じ`developer-jit-reliability`を単独再実行すると8 iteration、sleep／wake／display／pressure、canonical retention、cleanupまで8,309 msで
+  passした。初期80 ms idle窓はdefaultのblinking cursorを有効なまま30 msだけ待って開始するため、500 ms cursor deadlineとの位相次第で正当な
+  一回のcursor frameを「不変surfaceの余分なwork」として数える。長時間aggregate後だけに限定される保証はなく、固定sleepを増やしても競合は残る。
+- Idle deltaを許容する案、窓を短縮する案、再試行でpass扱いにする案は、zero-frame invariantを弱めるため不採用とする。既存resource窓と同じ
+  `DECSCUSR 2`でsteady cursorを明示し、そのmarkerがpresentされた後、pending frame／submission pin／scheduled workが0かつframe countが連続観測で
+  不変になるまでboundedに待つ。その後の80 ms窓は従来どおりbuild／accepted frameともexact 0を要求する。製品scheduler、default cursor、hard budget、
+  timeout、Release authorityは変更せず、fixtureの測定開始境界だけを決定論化する。
+- Fixture修正後、focused Developer JIT performance／reliabilityはidle／occluded delta 0、8回のsleep／wake／display／pressure、canonical retention、
+  cleanupをpassした。続くRelease AOT performanceはidle修正箇所とresource／reliability本体をpassした一方、7 input sampleのvisible echoが
+  p95 22,082 us／budget 20,066 usとなり、integration result codecが既存hard gateで停止した。Input admissionは1,166 us、frame workは861 us、
+  idle／occluded frameは0であり、今回のquiescence変更後に実行される処理ではない。Thresholdやsampleを変えず、同じRelease targetを単独反復して
+  再現性、refresh位相、PTY echoからaccepted frameまでの経路を切り分ける。
+
+### 実装優先度に合わせたvisible echo許容幅の変更
+
+- ユーザー判断により、現在段階では数msのvisible echo最適化を後続実装より優先しない。単独Release AOTでも21,583 us／budget 19,878 usを観測した時点で
+  原因追跡を打ち切り、従来の`refresh interval + 4 ms`を2倍した値まで許容する。観測値、7 sample、Release authority、2 ms input admission、
+  70% frame-work、zero idle／occluded frame、resource／cleanup gateは維持する。
+- Input測定前の追加settlingという性能fixture拡張は採用せず取り除いた。Fresh aggregateを実際に停止させたblinking-cursor位相だけは、steady cursor markerと
+  bounded quiescenceを測定前提にしてexact zero-frame assertionを維持する。Runtime result codec、negative fixture、aggregate evidenceの予算計算、Phase 11の
+  現行contractを同じ2倍式へ揃える。個別の不具合修正項目は`ROADMAP.md`へ追加しない。
+- Focused result codec／aggregate generator testはpassし、analyzerはissue 0だった。変更後のRelease AOT product performanceはvisible echo 22,017 us／
+  新budget 41,756 us、input admission 1,528 us、frame work 833 us、idle／occluded frame 0でpassした。同じprocessの8回reliability、resource、
+  cleanupと、4-pane fairnessもpassした。この許容値について追加の性能追跡は行わず、R0の残作業へ進む。
+
+### 設定変更後のfresh 8-gate aggregate
+
+- `caffeinate -di`下でretry wrapperなしにGate 1から再実行し、budget evidenceはcombined first-visible 19,369 us／100,000 us、periodic timer 0、
+  architecture evidenceは4 bundles／21 resources／1,388,080 bytes／8 Note images、arm64／x86_64／Universal equalityでpassした。
+- Notes、S1、S2、393-file format、root analyze、R0 hidden harness、20-run real filesystem store、1,296 fuzz executions、native sanitizer／fault、
+  compatibility、daily-use blocker 0をpassした。Gate 7は両runtimeのsmoke、display、hierarchy、8-iteration reliability、actions、automation、
+  native content、Quick Terminal、Secure Keyboard Entry、diagnostics、configuration、theme、shell、desktop signals、OSC 52、restoration、
+  clipboard、lifecycle、traffic、1,000-iteration resource stressを完走した。
+- 最終checkerは`TERMINAL_NOTE_R0_QUALIFICATION_PASS version=1 gates=8 runtime_modes=2 release_architectures=3 budget_evidence=checked
+  architecture_evidence=checked manual_claim=false promotion_claim=false content_free=true`を一回出力した。Automated R0はfreshであり、残るCM-12条件は
+  Release AOT foreground Japanese IME、spoken auto-due announcement、実background／occlusion、temporary store cleanupとstage decisionだけである。
+
+### Manual checklist完了とR0 stage decision
+
+- [`cm-12-r0-manual-checklist.md`](cm-12-r0-manual-checklist.md)をDeveloper JIT／Release AOTの実AppKit candidateで完了した。
+  Japanese IME、keyboard-only、実VoiceOver、12／15／24 pt、Light／Dark、contrast／non-color／motion、Retina 2×、
+  small pane、alternate-screen／Vim／Codex／mouse TUIはすべてpassした。接続displayがRetina 2×一台だけだったため
+  1×／alternate physical scaleだけを`not available`とし、推測でpassへ変更していない。
+- Release AOTの実foreground IMEはNote caret上のinline live conversion、marked text、確定保存一回、Escape cancellation、
+  terminal accessibility value不変、PTY byte 0を確認した。両runtimeのVoiceOverではcaption panel有効下でOn Returnを
+  実minimize→returnにより一回ずつ発火し、自動rail一回、terminal responder保持、本文を含まないlocalized ready-count
+  announcement pathを確認した。Background／occlusion中のcard bodyは0、復帰後のstale elementは0だった。
+- 両candidateはordered shutdownを完了し、検証用temporary storeとmodule cacheの計15 directoryだけを削除した。
+  全path absent、build/runtime candidate process 0、VoiceOver off、input source ABC、appearance／accessibility preference復元を
+  確認した。既存の通常インストール版processは検証対象外として変更していない。
+- Fresh automated aggregate 8 gateとmanual checklistを照合し、wrong-context attachment、store corruption／overwrite、
+  body/privacy leak、unintended PTY byte、terminal geometry change、IME／accessibility regressionは0だった。Normal releaseは
+  `notes=false`、user-visible Note entry 0、temporary-store harness以外のpromotion 0を維持する。
+- **Stage decision: R0 hidden qualificationはpass。CM-13 R1 internal S1/S2 opt-inへ進行可能とする。** この判断自体は
+  internal／public UIを有効化せず、R1 promotion claimでもない。R1は自身のinternal candidate、実データstore、runbook、
+  rollback／recovery、両runtime manual evidenceを満たすまで未完了とする。

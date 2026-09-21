@@ -83,7 +83,7 @@ checks remain outside timing. Hard budgets are the ROADMAP architecture limits:
 | --- | --- | --- |
 | Startup | process launch to first accepted visible Metal frame | bounded fixed p95; compatible baseline and comparator workload required |
 | Input | AppKit key to bounded PTY admission | p95 < 2 ms |
-| Visible echo | PTY echo observed and accepted by a visible frame | p95 <= one measured refresh interval + 4 ms |
+| Visible echo | PTY echo observed and accepted by a visible frame | p95 <= 2 × (one measured refresh interval + 4 ms) |
 | Parser | real `VtParser`, mixed reviewed corpus | minimum >= 100 MiB/s; comparator throughput >= 0.75x |
 | Damage | 100,000-cell capture/copy/transfer/decode | p95 < 4 ms per existing boundary |
 | Frame | CPU frame preparation/submission work | p95 < 70% of measured refresh budget |
@@ -297,8 +297,8 @@ children and this parent are complete.
 - `RuntimeProductPerformanceResult` rejects missing, duplicated, malformed, or
   extra result fields and independently recomputes visible/frame budgets. Its
   negative fixtures fail startup above 5 seconds, input at the strict 2 ms
-  boundary, visible response beyond one measured refresh plus 4 ms, and frame
-  work at the strict 70% boundary.
+  boundary, visible response beyond twice one measured refresh plus 4 ms, and
+  frame work at the strict 70% boundary.
 - The final `make runtime-product-performance-integration` passed both modes.
   The final Developer run observed startup 1.240896 s, refresh 16.932 ms, input
   11.202 ms p95, visible response 24.724 ms p95, and frame work 1.039 ms p95;

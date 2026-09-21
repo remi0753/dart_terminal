@@ -3031,8 +3031,8 @@ keybind = command+d=pane.focus-next
           effectiveObservation.stderrText.isEmpty &&
           effectiveObservation.workerProcesses.isEmpty &&
           effectiveLines.first ==
-              'dart-terminal-effective-config version=1 options=55 '
-                  'entries=58 diagnostics=3' &&
+              'dart-terminal-effective-config version=1 options=59 '
+                  'entries=62 diagnostics=3' &&
           effectiveLines[1] == 'root path=${jsonEncode(configurationPath)}' &&
           effectiveTheme.contains('value="system"') &&
           effectiveTheme.contains('policy=new-session') &&
@@ -3106,19 +3106,22 @@ keybind = command+d=pane.focus-next
     _expect(
       RegExp(
                 r'^TERMINAL_CONFIG_RELOAD disposition=rejected generation=0 '
-                r'changes=0 live=0 new_session=0 diagnostics=1$',
+                r'changes=0 live=0 new_session=0 next_launch=0 '
+                r'pending_restart=0 diagnostics=1$',
                 multiLine: true,
               ).allMatches(observation.stdoutText).length ==
               0 &&
           RegExp(
                 r'^TERMINAL_CONFIG_RELOAD disposition=applied generation=1 '
-                r'changes=20 live=4 new_session=16 diagnostics=0$',
+                r'changes=20 live=4 new_session=16 next_launch=0 '
+                r'pending_restart=0 diagnostics=0$',
                 multiLine: true,
               ).allMatches(observation.stdoutText).length ==
               1 &&
           RegExp(
                 r'^TERMINAL_CONFIG_RELOAD disposition=applied generation=2 '
-                r'changes=1 live=1 new_session=0 diagnostics=0$',
+                r'changes=1 live=1 new_session=0 next_launch=0 '
+                r'pending_restart=0 diagnostics=0$',
                 multiLine: true,
               ).allMatches(observation.stdoutText).length ==
               1,
@@ -3266,7 +3269,8 @@ cursor-blink = false
     _expect(
       RegExp(
                 r'^TERMINAL_CONFIG_RELOAD disposition=applied generation=[12] '
-                r'changes=1 live=0 new_session=1 diagnostics=0$',
+                r'changes=1 live=0 new_session=1 next_launch=0 '
+                r'pending_restart=0 diagnostics=0$',
                 multiLine: true,
               ).allMatches(observation.stdoutText).length ==
               2 &&

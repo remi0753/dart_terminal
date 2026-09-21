@@ -11,6 +11,18 @@
 #include <thread>
 #include <vector>
 
+@interface DtnTestActionCounter : NSObject
+@property(nonatomic) NSUInteger count;
+- (void)countAction:(id)sender;
+@end
+
+@implementation DtnTestActionCounter
+- (void)countAction:(id)sender {
+  (void)sender;
+  self.count += 1u;
+}
+@end
+
 namespace {
 
 const da_native_extension_services_v1 kServices = {
@@ -151,6 +163,20 @@ std::vector<uint8_t> packet(uint64_t projection_generation,
 bool expect(bool condition, const char* message) {
   if (!condition) std::fprintf(stderr, "FAIL: %s\n", message);
   return condition;
+}
+
+NSEvent* key_event(NSWindow* window, unsigned short key_code,
+                   NSEventModifierFlags modifiers, NSString* characters) {
+  return [NSEvent keyEventWithType:NSEventTypeKeyDown
+                          location:NSZeroPoint
+                     modifierFlags:modifiers
+                         timestamp:0
+                      windowNumber:window.windowNumber
+                           context:nil
+                        characters:characters
+       charactersIgnoringModifiers:characters
+                         isARepeat:NO
+                           keyCode:key_code];
 }
 
 bool bitmap_contains(NSView* view, uint32_t rgba) {
@@ -1038,6 +1064,8 @@ int main(int argc, const char* argv[]) {
 
   NSView* editor_view =
       find_view_named(editor_note_view, @"DtnNoteEditorView");
+  NSScrollView* text_scroll_view =
+      editor_view == nil ? nil : [editor_view valueForKey:@"textScrollView"];
   NSTextView* text_view =
       editor_view == nil ? nil : [editor_view valueForKey:@"textView"];
   NSSegmentedControl* draft_color =
@@ -1062,6 +1090,10 @@ int main(int argc, const char* argv[]) {
       editor_note_view == nil
           ? nil
           : [editor_note_view valueForKey:@"cardColorControl"];
+  NSSegmentedControl* editor_sections =
+      editor_note_view == nil
+          ? nil
+          : [editor_note_view valueForKey:@"sectionControl"];
   ok &= expect(editor_view != nil && !editor_view.hidden && text_view != nil &&
                    [text_view.string isEqualToString:@"baseline"] &&
                    save_button != nil && cancel_button != nil &&
@@ -1086,12 +1118,73 @@ int main(int argc, const char* argv[]) {
   ok &= expect(editor_rail_children.count == 2u &&
                    editor_rail_children[1] == editor_view &&
                    editor_children.count == 5u &&
+                   editor_children[0] == text_scroll_view &&
+                   editor_children[1] == draft_color &&
+                   editor_children[2] == draft_show &&
+                   editor_children[3] == save_button &&
+                   editor_children[4] == cancel_button &&
                    text_view.nextKeyView == draft_color &&
                    draft_color.nextKeyView == draft_show &&
                    draft_show.nextKeyView == save_button &&
                    save_button.nextKeyView == cancel_button &&
                    cancel_button.nextKeyView != nil,
                "editor VoiceOver tree and keyboard order are deterministic");
+  NSString* keyboard_body = [text_view.string copy];
+  [editor_window makeFirstResponder:text_view];
+  [text_view doCommandBySelector:@selector(insertTab:)];
+  const BOOL tab_focuses_color = editor_window.firstResponder == draft_color;
+  [editor_window makeFirstResponder:text_view];
+  [text_view doCommandBySelector:@selector(insertBacktab:)];
+  ok &= expect(tab_focuses_color &&
+                   editor_window.firstResponder == editor_sections &&
+                   [text_view.string isEqualToString:keyboard_body],
+               "editor Tab and Shift-Tab traverse without mutating body");
+  [editor_window makeFirstResponder:draft_color];
+  const uint64_t notifications_before_arrow = g_surface_notification_count;
+  [draft_color keyDown:key_event(editor_window, 124u, 0,
+                                 [NSString stringWithFormat:@"%C",
+                                    static_cast<unichar>(
+                                        NSRightArrowFunctionKey)])];
+  const BOOL right_selects_once =
+      draft_color.selectedSegment == 1 &&
+      g_surface_notification_count == notifications_before_arrow + 1u;
+  [draft_color keyDown:key_event(editor_window, 49u, 0, @" ")];
+  const BOOL space_acts_once =
+      g_surface_notification_count == notifications_before_arrow + 2u;
+  [draft_color keyDown:key_event(editor_window, 48u, 0, @"\t")];
+  const BOOL tab_focuses_show = editor_window.firstResponder == draft_show;
+  [draft_show keyDown:key_event(editor_window, 48u,
+                                NSEventModifierFlagShift, @"\t")];
+  const BOOL backtab_focuses_color =
+      editor_window.firstResponder == draft_color;
+  [draft_color keyDown:key_event(editor_window, 48u,
+                                 NSEventModifierFlagShift, @"\t")];
+  draft_color.selectedSegment = 0;
+  ok &= expect(right_selects_once && space_acts_once && tab_focuses_show &&
+                   backtab_focuses_color &&
+                   editor_window.firstResponder == text_view &&
+                   [text_view.string isEqualToString:keyboard_body],
+               "segmented controls provide single-action arrow and key traversal");
+  id saved_button_target = save_button.target;
+  const SEL saved_button_action = save_button.action;
+  DtnTestActionCounter* button_counter = [[DtnTestActionCounter alloc] init];
+  save_button.target = button_counter;
+  save_button.action = @selector(countAction:);
+  [editor_window makeFirstResponder:save_button];
+  [save_button keyDown:key_event(editor_window, 49u, 0, @" ")];
+  const BOOL space_clicks_once = button_counter.count == 1u;
+  [save_button keyDown:key_event(editor_window, 36u, 0, @"\r")];
+  const BOOL return_clicks_once = button_counter.count == 2u;
+  [save_button keyDown:key_event(editor_window, 48u, 0, @"\t")];
+  const BOOL tab_focuses_cancel =
+      editor_window.firstResponder == cancel_button;
+  [cancel_button keyDown:key_event(editor_window, 48u,
+                                   NSEventModifierFlagShift, @"\t")];
+  save_button.target = saved_button_target;
+  save_button.action = saved_button_action;
+  ok &= expect(space_clicks_once && return_clicks_once && tab_focuses_cancel &&
+                   editor_window.firstResponder == save_button,
+               "buttons provide single-action activation and key traversal");
   ok &= expect(dtn_surface_focus(editor_surface, 99u) ==
                        DTN_STATUS_INVALID_ARGUMENT &&
                    dtn_surface_focus(editor_surface, DTN_FOCUS_EDITOR) ==
@@ -1680,7 +1773,8 @@ int main(int argc, const char* argv[]) {
   settle_navigation_intent(edit_cancel, navigation_before_close, 7u);
 
   close_button = find_button_with_title(navigation_view, @"Close");
-  [close_button performClick:nil];
+  [editor_window makeFirstResponder:close_button];
+  [close_button keyDown:key_event(editor_window, 53u, 0, @"\033")];
   DtnSurfaceIntentV1 close_intent =
       take_navigation_intent(DTN_INTENT_CLOSE, 7u, 0u);
   std::vector<uint8_t> navigation_closed = packet(8u, 4u, {}, 0x01u);

@@ -6899,8 +6899,10 @@ final class TerminalApplication {
           "__DT_NOTE_S2_TUI_%s__\\r\\n' 'READY'; "
           "dd bs=1 count=1 of=/dev/null 2>/dev/null; "
           "printf '\\033[?1000l\\033[?1006l\\033[?1004l\\033[?2004l"
-          "\\033[?1l\\033[?1049l'; stty sane; "
-          "printf '\\r\\n__DT_NOTE_S2_TUI_%s__\\r\\n' 'RESET'",
+          "\\033[?1l\\033[?1049l'; "
+          "printf '\\r\\n__DT_NOTE_S2_TUI_%s__\\r\\n' 'RESET'; "
+          "dd bs=1 count=1 of=/dev/null 2>/dev/null; stty sane; "
+          "printf '\\r\\n__DT_NOTE_S2_TUI_%s__\\r\\n' 'DONE'",
         );
         await initialPane.submit();
         await _waitForAsciiMarker(initialSession, '__DT_NOTE_S2_TUI_READY__');
@@ -6969,8 +6971,15 @@ final class TerminalApplication {
               !tuiScreens.bracketedPasteMode &&
               !tuiScreens.focusReportingMode &&
               !tuiScreens.mouseModes.reportingEnabled,
-          'Note S2 host did not restore the primary terminal modes',
+          'Note S2 host did not restore the primary terminal modes: '
+          'alternate=${tuiScreens.usingAlternate} '
+          'cursor=${tuiScreens.keyboardModes.applicationCursorKeys} '
+          'paste=${tuiScreens.bracketedPasteMode} '
+          'focus=${tuiScreens.focusReportingMode} '
+          'mouse=${tuiScreens.mouseModes.tracking.name}',
         );
+        initialPane.sendInput(Uint8List.fromList(const <int>[0x71]));
+        await _waitForAsciiMarker(initialSession, '__DT_NOTE_S2_TUI_DONE__');
         if (!closed.isCompleted) closed.complete();
       } else if (runNoteS1Acceptance) {
         final TerminalSession initialSession = sessions[initialPane.id]!;
@@ -7266,6 +7275,7 @@ final class TerminalApplication {
           keyRouteCounts: keyRouteCounts,
           writeEnqueuedCounts: nativeContentWriteEnqueuedCounts,
           endOfFileActionCount: () => configurationEndOfFileActionCount,
+          reconcile: reconcileInteractiveHierarchy,
           closed: closed,
           prompt: acceptancePrompt.trimRight(),
         );
@@ -7539,9 +7549,27 @@ final class TerminalApplication {
       95,
     );
     final int visibleEchoBudgetMicroseconds =
-        refreshIntervalMicroseconds + visibleEchoSlackMicroseconds;
+        (refreshIntervalMicroseconds + visibleEchoSlackMicroseconds) * 2;
 
-    await Future<void>.delayed(const Duration(milliseconds: 30));
+    const String idleReadyMarker = '__DT_PERFORMANCE_IDLE_READY__';
+    pane.insertText(
+      "printf '\\e[2 q\\r\\n__DT_PERFORMANCE_%s_READY__\\r\\n' IDLE",
+    );
+    await pane.submit();
+    await _waitForAsciiMarkerPresented(
+      owner,
+      idleReadyMarker,
+      timeout: const Duration(seconds: 5),
+    );
+    _expectLifecycle(
+      !session.terminalScreenSet.activeScreen.cursorBlinking,
+      'performance idle window requires a non-animated cursor',
+    );
+    await _waitForQuiescentProductSurface(
+      owner,
+      timeout: const Duration(seconds: 5),
+      purpose: 'performance idle window',
+    );
     final TerminalLiveMetalSurfaceSnapshot idleBefore = owner.surface
         .snapshot();
     await Future<void>.delayed(const Duration(milliseconds: 80));
@@ -7609,7 +7637,11 @@ final class TerminalApplication {
       !session.terminalScreenSet.activeScreen.cursorBlinking,
       'performance resource window requires a non-animated cursor',
     );
-    await Future<void>.delayed(const Duration(milliseconds: 30));
+    await _waitForQuiescentProductSurface(
+      owner,
+      timeout: const Duration(seconds: 5),
+      purpose: 'performance resource window',
+    );
 
     final TerminalLiveMetalSurfaceSnapshot resourceIdleFrameBefore = owner
         .surface
@@ -14191,6 +14223,7 @@ final class TerminalApplication {
     required Map<PaneId, int> keyRouteCounts,
     required Map<PaneId, int> writeEnqueuedCounts,
     required int Function() endOfFileActionCount,
+    required void Function() reconcile,
     required Completer<void> closed,
     required String prompt,
   }) async {
@@ -14248,6 +14281,7 @@ final class TerminalApplication {
       required String charactersIgnoringModifiers,
     }) {
       final PaneId paneId = owner.pane.id;
+      final TerminalPaneLocation? paneLocation = state.locationForPane(paneId);
       final int routeBaseline = keyRouteCounts[paneId] ?? 0;
       final TerminalTextInputRouteResult textResult = owner.textRouter.route(
         TerminalTextInputKeyEvent(
@@ -14266,7 +14300,12 @@ final class TerminalApplication {
         textResult.disposition == TerminalTextInputRouteDisposition.rawKey &&
             keyRouteCounts[paneId] == routeBaseline + 1 &&
             lastKeyRoutes[paneId] != null,
-        'configured key did not cross the raw text-input/key router once',
+        'configured key did not cross the raw text-input/key router once; '
+        'text_disposition=${textResult.disposition.name} '
+        'route_count_before=$routeBaseline '
+        'route_count_after=${keyRouteCounts[paneId] ?? 0} '
+        'mutation_in_progress=${state.mutationInProgress} '
+        'focused_pane=${paneLocation == null ? 'missing' : state.windowForId(paneLocation.windowId)?.selectedTab.focusedPaneId == paneId}',
       );
       return lastKeyRoutes[paneId]!;
     }
@@ -15244,6 +15283,14 @@ keybind = command+right=pane.focus-left
 
     final PaneId nextPaneId = initialTab.paneIds.singleWhere(
       (PaneId paneId) => paneId != initialPaneId,
+    );
+    state.focusPane(initialTab.id, initialPaneId);
+    reconcile();
+    await waitFor(
+      () =>
+          initialTab.focusedPaneId == initialPaneId &&
+          initialOwner.surface.snapshot().isPaneActive,
+      'configuration keybinding fixture did not restore the left pane',
     );
     final int applicationDispatchBaseline = actionDispatches.length;
     final int applicationNativeBaseline = nativeActionInvocations.length;
@@ -23166,6 +23213,53 @@ keybind = command+right=pane.focus-left
       await Future<void>.delayed(const Duration(milliseconds: 1));
     }
     throw TimeoutException('terminal did not present marker $marker');
+  }
+
+  static Future<TerminalLiveMetalSurfaceSnapshot>
+  _waitForQuiescentProductSurface(
+    _TerminalHierarchyProductPane owner, {
+    required Duration timeout,
+    required String purpose,
+  }) async {
+    const int requiredStableObservations = 3;
+    final Stopwatch deadline = Stopwatch()..start();
+    TerminalLiveMetalSurfaceSnapshot previous = owner.surface.snapshot();
+    var stableObservations = 0;
+    while (deadline.elapsed < timeout) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      final TerminalLiveMetalSurfaceSnapshot current = owner.surface.snapshot();
+      final bool stable =
+          !current.isDisposed &&
+          current.pendingFrameCount == 0 &&
+          current.liveAtlasPinCount == 0 &&
+          !current.hasScheduledWork &&
+          current.lastAppliedDamageGeneration ==
+              previous.lastAppliedDamageGeneration &&
+          current.lastAcceptedModelRevision ==
+              previous.lastAcceptedModelRevision &&
+          current.frameBuildCount == previous.frameBuildCount &&
+          current.acceptedFrameCount == previous.acceptedFrameCount;
+      if (stable) {
+        stableObservations++;
+        if (stableObservations == requiredStableObservations) return current;
+      } else {
+        stableObservations = 0;
+      }
+      _expectLifecycle(
+        owner.session.isLive,
+        'terminal session exited before $purpose became quiescent',
+      );
+      previous = current;
+    }
+    final TerminalLiveMetalSurfaceSnapshot current = owner.surface.snapshot();
+    throw TimeoutException(
+      '$purpose did not become quiescent: '
+      'pending=${current.pendingFrameCount} '
+      'pins=${current.liveAtlasPinCount} '
+      'scheduled=${current.hasScheduledWork} '
+      'builds=${current.frameBuildCount} '
+      'accepted=${current.acceptedFrameCount}',
+    );
   }
 
   static Future<TerminalPaneProcessSnapshot> _waitForPaneProcessDisposition(
