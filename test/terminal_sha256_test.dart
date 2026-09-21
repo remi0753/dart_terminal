@@ -7,6 +7,7 @@ void main() => runTerminalSha256Tests();
 
 void runTerminalSha256Tests() {
   _testPublishedVectorsAndPaddingBoundaries();
+  _testUtf8StringDigest();
   _testIndexedInputIsNotMaterialized();
 }
 
@@ -34,6 +35,26 @@ void _testPublishedVectorsAndPaddingBoundaries() {
         'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
     'SHA-256 differs from the published abc vector',
   );
+}
+
+void _testUtf8StringDigest() {
+  final List<String> sources = <String>[
+    '',
+    'plain ASCII',
+    'café',
+    '日本語の付箋',
+    '📌😀',
+    '${'a' * 55}é',
+    String.fromCharCodes(<int>[0x61, 0xd800, 0x62]),
+    String.fromCharCodes(<int>[0x61, 0xdc00, 0x62]),
+    String.fromCharCodes(<int>[0xd800, 0xdc00, 0xd800]),
+  ];
+  for (final String source in sources) {
+    _expect(
+      terminalSha256Utf8(source) == terminalSha256(utf8.encode(source)),
+      'direct UTF-8 SHA-256 differs from the standard encoder',
+    );
+  }
 }
 
 void _testIndexedInputIsNotMaterialized() {

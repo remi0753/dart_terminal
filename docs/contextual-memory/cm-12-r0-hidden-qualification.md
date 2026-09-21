@@ -279,3 +279,41 @@ SHA-256 working memoryの個別完了条件を満たした。Isolated Dart fixtu
   `GENERIC_REPOSITORY_AUDIT_PASS paths=148 text_files=147`、Dart Terminal固有code追加0。既存未commit変更3件は非接触。
 
 Duplicate decode除去の個別完了条件を満たした。Isolated Dart fixture全体は残る8,077,312-byte peak違反のため未完了とする。
+
+### UTF-8 checksum allocation bounded化の着手条件
+
+- 目的: Canonical payload `String`をchecksumのためだけに同サイズの`Uint8List`へ変換する一括allocationを除き、digest bytesと
+  store formatを変えずhard-cap peakを96 MiB以下にする。
+- 範囲: Root-local SHA-256 primitiveのincremental block state、Dart UTF-16からstandard UTF-8への直接feed、store payload／
+  deletion journal／decode checksum call site、Unicode／surrogate／padding regression、AOT hard-cap再測定。
+- 対象外: Canonical JSON field order、escaping、envelope version、SHA-256 algorithm、body normalization、isolate protocol、threshold、
+  `dart_appkit`および他packageへのproduct code追加。
+- 完了条件: `terminalSha256Utf8(source) == terminalSha256(utf8.encode(source))`がASCII、multi-byte、valid surrogate pair、unpaired
+  surrogate replacementで成立し、既存known vector／codec bytes／fuzzが不変、input比例byte copy 0、hard-cap全memory gate passとなる。
+- 検証: SHA/codec/store focused test、format/analyze、fixed M1 AOT hard-cap、root `make test`、隣接`dart_appkit` generic audit。
+  96 MiB違反が残る場合は次retainerを現在位置へ追加し、閾値やfixture sizeを変更しない。
+
+### UTF-8 checksum allocation bounded化の完了結果
+
+- SHA-256を64-byte block accumulatorへ整理し、`terminalSha256Utf8`はDart UTF-16 code unitからstandard UTF-8 byteを直接feedする。
+  Valid surrogate pairは4 byte、unpaired surrogateはstandard encoderと同じU+FFFDとして処理し、input-sized byte listを作らない。
+- Store payload、deletion journal、decode checksumはdirect UTF-8 digestを使用する。Envelopeもpayload objectを二度canonicalizeせず、
+  checksum対象のcanonical payload sourceを再利用し、small prefix／payload／suffixのUTF-8 lengthを先に検証してexact `Uint8List`へ
+  直接書く。16 MiB超過はallocation前にfailし、field order、one trailing LF、checksum、version 1 bytesは不変である。
+- 最初にchecksum byte listだけを除いたrunはpeak 109,494,272 bytesで測定変動内に留まり、standard `utf8.encode`結果への
+  redundant `Uint8List.fromList`だけを除いたrunも105,873,408 bytesで未達だった。原因はpayloadを含む約9.7 MiB envelope
+  `String`の再構築も同時所有していたためであり、上記direct envelope writeまで実施した。失敗した2試行でthresholdやfixtureは変えていない。
+- Final fixed M1 Release AOT hard-capはsteady増分44,892,160 bytes、peak増分89,997,312 bytes、canonical 9,698,603 bytes、
+  owners 0で合格した。64／96 MiB、16 MiBの全閾値は凍結値のままである。
+
+検証結果:
+
+- SHA known vector、55／56／57／63／64／65-byte padding、1 MiB indexed input、ASCII／multi-byte／surrogate equivalence: pass。
+- Note codec canonical exact bytes、Unicode round-trip、strict/fuzz/capacity/privacy tests: pass。
+- Focused `dart analyze`: `No issues found!`。AOT hard-cap childは上記exact PASS lineを出力した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: pass。387 Dart files、root analyze、R0 hidden harness、20-run real store
+  acceptance（commit p95 45,280 us、primitive p95 15,798 us）を含む。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test` in `../dart_appkit`: pass。
+  `GENERIC_REPOSITORY_AUDIT_PASS paths=148 text_files=147`、Dart Terminal固有code追加0。既存未commit変更3件は非接触。
+
+UTF-8 allocation bounded化の個別完了条件を満たした。次にnative-assets CLI bundleの全4 phaseをfresh aggregateで確定する。

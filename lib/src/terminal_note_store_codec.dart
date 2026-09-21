@@ -141,11 +141,11 @@ final class TerminalNoteStoreCodec {
   Uint8List encode(TerminalNoteStoreDocument document) {
     final _JsonObject payload = _encodeStorePayload(document);
     final String payloadSource = _canonicalJson(payload);
-    final String checksum = terminalSha256(utf8.encode(payloadSource));
+    final String checksum = terminalSha256Utf8(payloadSource);
     return _encodeEnvelope(
       format: storeFormat,
       checksum: checksum,
-      payload: payload,
+      payloadSource: payloadSource,
     );
   }
 
@@ -173,10 +173,11 @@ final class TerminalNoteStoreCodec {
           ]),
       ]),
     ]);
+    final String payloadSource = _canonicalJson(payload);
     return _encodeEnvelope(
       format: deletionJournalFormat,
-      checksum: terminalSha256(utf8.encode(_canonicalJson(payload))),
-      payload: payload,
+      checksum: terminalSha256Utf8(payloadSource),
+      payloadSource: payloadSource,
     );
   }
 
@@ -220,19 +221,23 @@ final class TerminalNoteStoreCodec {
   Uint8List _encodeEnvelope({
     required String format,
     required String checksum,
-    required _JsonObject payload,
+    required String payloadSource,
   }) {
-    final _JsonObject envelope = _object(<MapEntry<String, Object?>>[
-      MapEntry<String, Object?>('format', format),
-      const MapEntry<String, Object?>('version', currentVersion),
-      MapEntry<String, Object?>('payloadSha256', checksum),
-      MapEntry<String, Object?>('payload', payload),
-    ]);
-    final Uint8List result = Uint8List.fromList(
-      utf8.encode('${_canonicalJson(envelope)}\n'),
-    );
-    if (result.length > TerminalNoteStoreCodecLimits.maximumFileBytes) {
+    final String prefix =
+        '{"format":${jsonEncode(format)},"version":$currentVersion,'
+        '"payloadSha256":${jsonEncode(checksum)},"payload":';
+    const String suffix = '}\n';
+    final int encodedLength =
+        _utf8Length(prefix) + _utf8Length(payloadSource) + _utf8Length(suffix);
+    if (encodedLength > TerminalNoteStoreCodecLimits.maximumFileBytes) {
       _fail(TerminalNoteCodecFailure.fileTooLarge);
+    }
+    final Uint8List result = Uint8List(encodedLength);
+    var offset = _writeUtf8(prefix, result, 0);
+    offset = _writeUtf8(payloadSource, result, offset);
+    offset = _writeUtf8(suffix, result, offset);
+    if (offset != encodedLength) {
+      _fail(TerminalNoteCodecFailure.schemaViolation);
     }
     return result;
   }
@@ -283,7 +288,7 @@ final class TerminalNoteStoreCodec {
       _fail(TerminalNoteCodecFailure.schemaViolation);
     }
     final _JsonObject payload = _jsonObject(root.value('payload'));
-    final String actual = terminalSha256(utf8.encode(_canonicalJson(payload)));
+    final String actual = terminalSha256Utf8(_canonicalJson(payload));
     if (actual != checksum) {
       _fail(TerminalNoteCodecFailure.checksumMismatch);
     }
@@ -926,6 +931,82 @@ String _string(Object? value) {
 BigInt _integer(Object? value) {
   if (value is! BigInt) _fail(TerminalNoteCodecFailure.schemaViolation);
   return value;
+}
+
+int _utf8Length(String value) {
+  var result = 0;
+  for (var index = 0; index < value.length; index++) {
+    final int first = value.codeUnitAt(index);
+    if (first < 0x80) {
+      result++;
+    } else if (first < 0x800) {
+      result += 2;
+    } else if (first >= 0xd800 && first <= 0xdbff) {
+      if (index + 1 < value.length) {
+        final int second = value.codeUnitAt(index + 1);
+        if (second >= 0xdc00 && second <= 0xdfff) {
+          result += 4;
+          index++;
+          continue;
+        }
+      }
+      result += 3;
+    } else {
+      result += 3;
+    }
+  }
+  return result;
+}
+
+int _writeUtf8(String value, Uint8List output, int offset) {
+  var next = offset;
+  for (var index = 0; index < value.length; index++) {
+    final int first = value.codeUnitAt(index);
+    if (first < 0x80) {
+      output[next++] = first;
+    } else if (first < 0x800) {
+      next = _writeUtf8CodePoint(first, output, next);
+    } else if (first >= 0xd800 && first <= 0xdbff) {
+      if (index + 1 < value.length) {
+        final int second = value.codeUnitAt(index + 1);
+        if (second >= 0xdc00 && second <= 0xdfff) {
+          next = _writeUtf8CodePoint(
+            0x10000 + ((first - 0xd800) << 10) + second - 0xdc00,
+            output,
+            next,
+          );
+          index++;
+          continue;
+        }
+      }
+      next = _writeUtf8CodePoint(0xfffd, output, next);
+    } else if (first >= 0xdc00 && first <= 0xdfff) {
+      next = _writeUtf8CodePoint(0xfffd, output, next);
+    } else {
+      next = _writeUtf8CodePoint(first, output, next);
+    }
+  }
+  return next;
+}
+
+@pragma('vm:prefer-inline')
+int _writeUtf8CodePoint(int value, Uint8List output, int offset) {
+  if (value < 0x800) {
+    output[offset] = 0xc0 | (value >> 6);
+    output[offset + 1] = 0x80 | (value & 0x3f);
+    return offset + 2;
+  }
+  if (value < 0x10000) {
+    output[offset] = 0xe0 | (value >> 12);
+    output[offset + 1] = 0x80 | ((value >> 6) & 0x3f);
+    output[offset + 2] = 0x80 | (value & 0x3f);
+    return offset + 3;
+  }
+  output[offset] = 0xf0 | (value >> 18);
+  output[offset + 1] = 0x80 | ((value >> 12) & 0x3f);
+  output[offset + 2] = 0x80 | ((value >> 6) & 0x3f);
+  output[offset + 3] = 0x80 | (value & 0x3f);
+  return offset + 4;
 }
 
 List<Object?> _array(Object? value) {

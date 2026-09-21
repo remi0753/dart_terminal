@@ -1,11 +1,52 @@
 /// Returns the lowercase SHA-256 digest of [source].
 ///
 /// This small Dart-only implementation keeps runtime resource validation free
-/// of native/process dependencies. Inputs are already bounded by each caller.
-/// Padding is synthesized by index so working memory does not scale with the
-/// input size.
+/// of native/process dependencies. Inputs are already bounded by each caller,
+/// and the digest keeps only one 64-byte block plus its word schedule.
 String terminalSha256(List<int> source) {
-  const List<int> constants = <int>[
+  final _TerminalSha256 digest = _TerminalSha256();
+  for (var index = 0; index < source.length; index++) {
+    digest.addByte(source[index]);
+  }
+  return digest.close();
+}
+
+/// Returns the SHA-256 digest of the standard UTF-8 encoding of [source].
+///
+/// UTF-16 code units are converted directly into the bounded digest state so
+/// callers do not need an input-sized intermediate byte list. Unpaired
+/// surrogates use the same U+FFFD replacement as Dart's standard UTF-8 codec.
+String terminalSha256Utf8(String source) {
+  final _TerminalSha256 digest = _TerminalSha256();
+  for (var index = 0; index < source.length; index++) {
+    final int first = source.codeUnitAt(index);
+    if (first < 0x80) {
+      digest.addByte(first);
+    } else if (first < 0x800) {
+      digest.addCodePoint(first);
+    } else if (first >= 0xd800 && first <= 0xdbff) {
+      if (index + 1 < source.length) {
+        final int second = source.codeUnitAt(index + 1);
+        if (second >= 0xdc00 && second <= 0xdfff) {
+          digest.addCodePoint(
+            0x10000 + ((first - 0xd800) << 10) + second - 0xdc00,
+          );
+          index++;
+          continue;
+        }
+      }
+      digest.addCodePoint(0xfffd);
+    } else if (first >= 0xdc00 && first <= 0xdfff) {
+      digest.addCodePoint(0xfffd);
+    } else {
+      digest.addCodePoint(first);
+    }
+  }
+  return digest.close();
+}
+
+final class _TerminalSha256 {
+  static const List<int> _constants = <int>[
     0x428a2f98,
     0x71374491,
     0xb5c0fbcf,
@@ -71,9 +112,8 @@ String terminalSha256(List<int> source) {
     0xbef9a3f7,
     0xc67178f2,
   ];
-  final int bitLength = source.length * 8;
-  final int paddedLength = ((source.length + 9 + 63) ~/ 64) * 64;
-  final List<int> hash = <int>[
+
+  final List<int> _hash = <int>[
     0x6a09e667,
     0xbb67ae85,
     0x3c6ef372,
@@ -83,40 +123,101 @@ String terminalSha256(List<int> source) {
     0x1f83d9ab,
     0x5be0cd19,
   ];
-  final List<int> words = List<int>.filled(64, 0);
-  for (int offset = 0; offset < paddedLength; offset += 64) {
-    for (int index = 0; index < 16; index++) {
-      final int byteOffset = offset + index * 4;
-      words[index] =
-          (_paddedByte(source, byteOffset, paddedLength, bitLength) << 24) |
-          (_paddedByte(source, byteOffset + 1, paddedLength, bitLength) << 16) |
-          (_paddedByte(source, byteOffset + 2, paddedLength, bitLength) << 8) |
-          _paddedByte(source, byteOffset + 3, paddedLength, bitLength);
+  final List<int> _block = List<int>.filled(64, 0);
+  final List<int> _words = List<int>.filled(64, 0);
+  var _blockLength = 0;
+  var _byteLength = 0;
+  var _closed = false;
+
+  @pragma('vm:prefer-inline')
+  void addByte(int value) {
+    if (_closed) throw StateError('SHA-256 digest is closed');
+    _block[_blockLength++] = value;
+    _byteLength++;
+    if (_blockLength == 64) {
+      _compress();
+      _blockLength = 0;
     }
-    for (int index = 16; index < 64; index++) {
-      final int left = words[index - 15];
-      final int right = words[index - 2];
+  }
+
+  @pragma('vm:prefer-inline')
+  void addCodePoint(int value) {
+    if (value < 0x80) {
+      addByte(value);
+    } else if (value < 0x800) {
+      addByte(0xc0 | (value >> 6));
+      addByte(0x80 | (value & 0x3f));
+    } else if (value < 0x10000) {
+      addByte(0xe0 | (value >> 12));
+      addByte(0x80 | ((value >> 6) & 0x3f));
+      addByte(0x80 | (value & 0x3f));
+    } else {
+      addByte(0xf0 | (value >> 18));
+      addByte(0x80 | ((value >> 12) & 0x3f));
+      addByte(0x80 | ((value >> 6) & 0x3f));
+      addByte(0x80 | (value & 0x3f));
+    }
+  }
+
+  String close() {
+    if (_closed) throw StateError('SHA-256 digest is closed');
+    final int bitLength = _byteLength * 8;
+    _block[_blockLength++] = 0x80;
+    if (_blockLength > 56) {
+      while (_blockLength < 64) {
+        _block[_blockLength++] = 0;
+      }
+      _compress();
+      _blockLength = 0;
+    }
+    while (_blockLength < 56) {
+      _block[_blockLength++] = 0;
+    }
+    for (var shift = 56; shift >= 0; shift -= 8) {
+      _block[_blockLength++] = (bitLength >> shift) & 0xff;
+    }
+    _compress();
+    _blockLength = 0;
+    _closed = true;
+    return _hash
+        .map((int value) => value.toRadixString(16).padLeft(8, '0'))
+        .join();
+  }
+
+  void _compress() {
+    for (var index = 0; index < 16; index++) {
+      final int offset = index * 4;
+      _words[index] =
+          (_block[offset] << 24) |
+          (_block[offset + 1] << 16) |
+          (_block[offset + 2] << 8) |
+          _block[offset + 3];
+    }
+    for (var index = 16; index < 64; index++) {
+      final int left = _words[index - 15];
+      final int right = _words[index - 2];
       final int sigma0 =
           _rotateRight(left, 7) ^ _rotateRight(left, 18) ^ (left >> 3);
       final int sigma1 =
           _rotateRight(right, 17) ^ _rotateRight(right, 19) ^ (right >> 10);
-      words[index] =
-          (words[index - 16] + sigma0 + words[index - 7] + sigma1) & 0xffffffff;
+      _words[index] =
+          (_words[index - 16] + sigma0 + _words[index - 7] + sigma1) &
+          0xffffffff;
     }
-    int a = hash[0];
-    int b = hash[1];
-    int c = hash[2];
-    int d = hash[3];
-    int e = hash[4];
-    int f = hash[5];
-    int g = hash[6];
-    int h = hash[7];
-    for (int index = 0; index < 64; index++) {
+    int a = _hash[0];
+    int b = _hash[1];
+    int c = _hash[2];
+    int d = _hash[3];
+    int e = _hash[4];
+    int f = _hash[5];
+    int g = _hash[6];
+    int h = _hash[7];
+    for (var index = 0; index < 64; index++) {
       final int sum1 =
           _rotateRight(e, 6) ^ _rotateRight(e, 11) ^ _rotateRight(e, 25);
       final int choice = (e & f) ^ ((~e) & g);
       final int temporary1 =
-          (h + sum1 + choice + constants[index] + words[index]) & 0xffffffff;
+          (h + sum1 + choice + _constants[index] + _words[index]) & 0xffffffff;
       final int sum0 =
           _rotateRight(a, 2) ^ _rotateRight(a, 13) ^ _rotateRight(a, 22);
       final int majority = (a & b) ^ (a & c) ^ (b & c);
@@ -130,27 +231,15 @@ String terminalSha256(List<int> source) {
       b = a;
       a = (temporary1 + temporary2) & 0xffffffff;
     }
-    hash[0] = (hash[0] + a) & 0xffffffff;
-    hash[1] = (hash[1] + b) & 0xffffffff;
-    hash[2] = (hash[2] + c) & 0xffffffff;
-    hash[3] = (hash[3] + d) & 0xffffffff;
-    hash[4] = (hash[4] + e) & 0xffffffff;
-    hash[5] = (hash[5] + f) & 0xffffffff;
-    hash[6] = (hash[6] + g) & 0xffffffff;
-    hash[7] = (hash[7] + h) & 0xffffffff;
+    _hash[0] = (_hash[0] + a) & 0xffffffff;
+    _hash[1] = (_hash[1] + b) & 0xffffffff;
+    _hash[2] = (_hash[2] + c) & 0xffffffff;
+    _hash[3] = (_hash[3] + d) & 0xffffffff;
+    _hash[4] = (_hash[4] + e) & 0xffffffff;
+    _hash[5] = (_hash[5] + f) & 0xffffffff;
+    _hash[6] = (_hash[6] + g) & 0xffffffff;
+    _hash[7] = (_hash[7] + h) & 0xffffffff;
   }
-  return hash
-      .map((int value) => value.toRadixString(16).padLeft(8, '0'))
-      .join();
-}
-
-@pragma('vm:prefer-inline')
-int _paddedByte(List<int> source, int index, int paddedLength, int bitLength) {
-  if (index < source.length) return source[index];
-  if (index == source.length) return 0x80;
-  final int lengthOffset = paddedLength - index;
-  if (lengthOffset > 8) return 0;
-  return (bitLength >> ((lengthOffset - 1) * 8)) & 0xff;
 }
 
 int _rotateRight(int value, int amount) =>
