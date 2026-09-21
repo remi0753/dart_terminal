@@ -134,10 +134,10 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
   を参照して実施する）
   - [x] explicit arm/re-arm native UIとatomic product mutationを接続する
   - [x] eligible focus lifecycleとsingle non-blocking railを接続する
-  - [ ] visible acknowledgement、shutdown-away、crash境界を接続する
+  - [x] visible acknowledgement、shutdown-away、crash境界を接続する
     - [x] actual visible layout wake-upとsingle FIFO acknowledgementを接続する
     - [x] ordered shutdown-awayとrestart deliveryを接続する
-    - [ ] commit/ack crash境界とfalse-consume vectorを固定する
+    - [x] commit/ack crash境界とfalse-consume vectorを固定する
   - [ ] S2両runtime product acceptanceと全監査を完了する
 - [ ] CM-12 R0 hidden qualificationを完了する
 - [ ] CM-13 R1 internal S1/S2 opt-inを完了する

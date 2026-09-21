@@ -10,6 +10,7 @@ void runTerminalNoteStoreWorkerTests() {
   _testLocationAndLockBoundary();
   _testLoadCommitAndRecovery();
   _testOrdinaryCommitFaultMatrix();
+  _testOnReturnDeliveryCrashMatrix();
   _testDeletionCrashMatrix();
   _testPortableExport();
   _testPrivacyAndGenericPackageBoundary();
@@ -247,6 +248,152 @@ void _testOrdinaryCommitFaultMatrix() {
     );
     verifier.stop();
   }
+}
+
+void _testOnReturnDeliveryCrashMatrix() {
+  final TerminalNoteStoreDocument armedAway = _baseDocument(withTrigger: true);
+  final NoteId noteId = _noteId(1);
+  final TerminalNoteContextId contextId = _contextId(1);
+  final TerminalNoteStoreDocument due = TerminalNoteStoreDocument(
+    snapshot: _accept(
+      armedAway.snapshot.observeEligibleFocus(
+        contextId: contextId,
+        isEligible: true,
+        expectedStoreRevision: armedAway.snapshot.storeRevision,
+      ),
+    ),
+  );
+  final NoteTriggerRecord dueTrigger = due.snapshot.triggerFor(noteId)!;
+  final TerminalNoteStoreDocument acknowledged = TerminalNoteStoreDocument(
+    snapshot: _accept(
+      due.snapshot.acknowledgePresentation(
+        noteId: noteId,
+        triggerGeneration: dueTrigger.generation,
+        expectedStoreRevision: due.snapshot.storeRevision,
+      ),
+    ),
+  );
+  _expect(
+    armedAway.snapshot.triggerFor(noteId)!.phase ==
+            NoteTriggerPhase.onReturnArmedAway &&
+        armedAway.snapshot.deliveryFor(noteId) == null &&
+        dueTrigger.phase == NoteTriggerPhase.due &&
+        due.snapshot.deliveryFor(noteId) != null &&
+        acknowledged.snapshot.noteFor(noteId) != null &&
+        acknowledged.snapshot.triggerFor(noteId) == null &&
+        acknowledged.snapshot.deliveryFor(noteId) == null,
+    'On Return crash fixtures represent armed-away, due, and acknowledged '
+    'durable boundaries',
+  );
+
+  final List<String> dueOperations = _successfulCommitOperations(
+    armedAway,
+    due,
+  );
+  var dueRecoveredFromArmedAway = 0;
+  var dueRecoveredDirectly = 0;
+  for (var index = 0; index < dueOperations.length; index++) {
+    final _FakeFileSystem fileSystem = _fileSystemWithCurrent(armedAway);
+    final TerminalNoteStoreTransactionEngine engine = _open(fileSystem);
+    _expect(engine.load().isSuccess, 'due crash fixture loads');
+    fileSystem.resetTrace(failAt: index);
+    final TerminalNoteStoreResult result = engine.commitCandidate(due);
+    _expect(!result.isSuccess, 'each due filesystem fault rejects the commit');
+    engine.stop();
+    fileSystem.disableFailure();
+
+    final TerminalNoteStoreTransactionEngine verifier = _open(fileSystem);
+    final TerminalNoteStoreResult loaded = verifier.load();
+    _expect(
+      loaded.disposition == TerminalNoteStoreDisposition.loaded ||
+          loaded.disposition == TerminalNoteStoreDisposition.recoveryPreview,
+      'due commit crash leaves one readable known-good boundary',
+    );
+    final TerminalNoteStoreDocument durable = loaded.document!;
+    if (_sameDocument(durable, armedAway)) {
+      dueRecoveredFromArmedAway++;
+      final TerminalNoteSnapshot delivered = _accept(
+        durable.snapshot.observeEligibleFocus(
+          contextId: contextId,
+          isEligible: true,
+          expectedStoreRevision: durable.snapshot.storeRevision,
+        ),
+      );
+      _expect(
+        delivered.triggerFor(noteId)!.phase == NoteTriggerPhase.due &&
+            delivered.deliveryFor(noteId) != null,
+        'a crash before the due commit re-delivers from armed-away on restart',
+      );
+    } else {
+      dueRecoveredDirectly++;
+      _expect(
+        _sameDocument(durable, due) &&
+            durable.snapshot.triggerFor(noteId)!.phase ==
+                NoteTriggerPhase.due &&
+            durable.snapshot.deliveryFor(noteId) != null,
+        'a crash after the due commit restores the complete due delivery',
+      );
+    }
+    verifier.stop();
+  }
+  _expect(
+    dueRecoveredFromArmedAway > 0 &&
+        dueRecoveredDirectly > 0 &&
+        dueRecoveredFromArmedAway + dueRecoveredDirectly ==
+            dueOperations.length,
+    'every due fault is classified as complete pre-commit or post-commit state',
+  );
+
+  final List<String> acknowledgementOperations = _successfulCommitOperations(
+    due,
+    acknowledged,
+  );
+  var acknowledgementRecoveredDue = 0;
+  var acknowledgementRecoveredPassive = 0;
+  for (var index = 0; index < acknowledgementOperations.length; index++) {
+    final _FakeFileSystem fileSystem = _fileSystemWithCurrent(due);
+    final TerminalNoteStoreTransactionEngine engine = _open(fileSystem);
+    _expect(engine.load().isSuccess, 'ack crash fixture loads');
+    fileSystem.resetTrace(failAt: index);
+    final TerminalNoteStoreResult result = engine.commitCandidate(acknowledged);
+    _expect(!result.isSuccess, 'each ack filesystem fault rejects the commit');
+    engine.stop();
+    fileSystem.disableFailure();
+
+    final TerminalNoteStoreTransactionEngine verifier = _open(fileSystem);
+    final TerminalNoteStoreResult loaded = verifier.load();
+    _expect(
+      loaded.disposition == TerminalNoteStoreDisposition.loaded ||
+          loaded.disposition == TerminalNoteStoreDisposition.recoveryPreview,
+      'ack commit crash leaves one readable known-good boundary',
+    );
+    final TerminalNoteStoreDocument durable = loaded.document!;
+    if (_sameDocument(durable, due)) {
+      acknowledgementRecoveredDue++;
+      _expect(
+        durable.snapshot.triggerFor(noteId)!.phase == NoteTriggerPhase.due &&
+            durable.snapshot.deliveryFor(noteId) != null,
+        'a crash before ack commit retains due for at-least-once presentation',
+      );
+    } else {
+      acknowledgementRecoveredPassive++;
+      _expect(
+        _sameDocument(durable, acknowledged) &&
+            durable.snapshot.noteFor(noteId) != null &&
+            durable.snapshot.triggerFor(noteId) == null &&
+            durable.snapshot.deliveryFor(noteId) == null,
+        'a crash after ack commit restores the complete consumed state',
+      );
+    }
+    verifier.stop();
+  }
+  _expect(
+    acknowledgementRecoveredDue > 0 &&
+        acknowledgementRecoveredPassive > 0 &&
+        acknowledgementRecoveredDue + acknowledgementRecoveredPassive ==
+            acknowledgementOperations.length,
+    'every ack fault is classified as complete due or consumed state',
+  );
 }
 
 void _testDeletionCrashMatrix() {
@@ -488,6 +635,23 @@ TerminalNoteStoreTransactionEngine _open(_FakeFileSystem fileSystem) =>
       location: TerminalNoteStoreLocation.fromAbsolutePath(_storePath),
       fileSystem: fileSystem,
     );
+
+List<String> _successfulCommitOperations(
+  TerminalNoteStoreDocument current,
+  TerminalNoteStoreDocument candidate,
+) {
+  final _FakeFileSystem fileSystem = _fileSystemWithCurrent(current);
+  final TerminalNoteStoreTransactionEngine engine = _open(fileSystem);
+  _expect(engine.load().isSuccess, 'commit trace fixture loads');
+  fileSystem.resetTrace();
+  _expect(
+    engine.commitCandidate(candidate).isSuccess,
+    'commit trace fixture succeeds',
+  );
+  final List<String> operations = List<String>.of(fileSystem.operations);
+  engine.stop();
+  return operations;
+}
 
 _FakeFileSystem _fileSystemWithCurrent(TerminalNoteStoreDocument document) =>
     _FakeFileSystem()..put(

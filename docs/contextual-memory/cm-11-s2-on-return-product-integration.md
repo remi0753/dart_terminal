@@ -453,3 +453,69 @@ shutdown-awayは後続サブタスクの順序どおり未実装である。
   編集・stageしていない。
 
 本子項目の未検証事項と阻害要因はない。次の先頭未完了は「commit/ack crash境界とfalse-consume vectorを固定する」である。
+
+## 2026-09-21: commit/ack crash境界とfalse-consume vector着手
+
+- ROADMAPを再確認し、先頭未完了がCM-11第3サブタスク内の
+  「commit/ack crash境界とfalse-consume vectorを固定する」であることを確認した。
+- 目的は、away→due commitとvisible acknowledgement commitの各物理filesystem stepでprocessが失われても、restart後に
+  未提示deliveryを失わず、commit済みackを重複表示せず、partial/hybrid stateを公開しないことを固定することである。
+- Due commit前のdurable stateは`onReturnArmedAway`、commit後は`due + DeliverySequence`であり、どちらからrestartしても
+  eligible contextにはdueが存在しなければならない。Ack commit前はdueを再表示し、commit後はtrigger/deliveryをともに
+  消したpassive Noteとして再表示しない。Crash境界はexactly-onceではなくat-least-once presentationである。
+- Store transaction engineの全write/file-fsync/rename/directory-fsync faultへOn Return semantic assertionを重ねる。
+  Authorityではack candidateが未永続のfailureと、candidateは永続したがresponseを失ったfailureの両方を作り、authorityが
+  commit応答前にdeliveryをconsume/publishしないことと、restartがdurable storeだけを正本にすることを確認する。
+- Product/nativeのbackground、occluded、small-pane、stale generation、invalid geometry、hidden rail、duplicate wake、intent優先の
+  false-consume vectorは直前の子項目で既に実projection経路を通過している。本子項目ではその結果を維持したまま、store fault時の
+  false consume 0を追加する。新しいretry、exactly-once marker、presentation historyはfrozen schemaに反するため追加しない。
+- 対象はstore fault test、authority ack/reopen test、関連evidenceとtask memoである。S2両runtime、alternate-screen/TUI、
+  Developer JIT/Release AOTのnamed aggregateは次のROADMAP項目に残す。`dart_appkit`は変更しない。
+
+## 2026-09-21: commit/ack crash境界とfalse-consume vector完了
+
+### 固定したcrash semantics
+
+- On Return専用のstore transaction matrixを追加した。`armedAway -> due`と`due -> acknowledged/passive`のそれぞれについて、
+  successful commitが行う全write、file fsync、rename、directory fsync等の各operationで一回ずつfaultを注入し、stop/reopenした。
+- Due candidateのfault後に読めるdocumentは完全な`armedAway`または完全な`due + delivery`だけである。前者はrestart後の
+  eligible observationでdueへ戻り、後者はそのまま再提示できる。Passive化やdeliveryだけ欠けるhybrid stateは0だった。
+- Ack candidateのfault後に読めるdocumentは完全な`due + delivery`または完全なpassive Noteだけである。前者は
+  at-least-onceとして再提示し、後者はtrigger/deliveryとも存在せず再提示しない。Note本体はどちらでも保持する。
+- Authority testへack commit前failureとack commit後response-lossを追加した。Commit待機中とduplicate ackではpublished/storeの
+  dueを消費しない。Failure前にcandidateがdurableにならなかった場合はreopenでdueを再提示し、candidateがdurableだがresponseを
+  失った場合はold authorityがcandidateをpublishせずunavailableとなる一方、reopenはdurable passive stateを読み、再提示しない。
+- これらは既存production実装のcommit-before-publish、strict matching response、current/backup atomic recovery contractで成立した。
+  新しいpersistent marker、presentation history、implicit retry、schema/source変更は不要であり、test/evidenceだけを追加した。
+- 直前のactual visible acknowledgement testにあるbackground、occluded、small-pane、stale projection、zero/outside geometry、
+  hidden rail、duplicate old wake、pending intent優先の全vectorも再実行し、store revision/due countが変わらないことを維持した。
+
+### 検討結果と失敗した試行
+
+- Ack intentを受理した時点でmemory上だけconsumeして後からstoreへ追随させる案は、commit前crashでdeliveryを失うため不採用。
+  Existing authorityどおりcandidate commit成功後だけdocument/projectionをpublishする。
+- Exactly-once presentation receiptを永続化する案はschemaとprivacy範囲を拡大し、frozen at-least-once contractに反するため不採用。
+  Crashがack commit前なら同じcardを一度再提示し得ることを明示的な受け入れ結果とする。
+- 最初のsandbox内store worker focused testはMetal shader module cacheへの書込みを拒否され、test body開始前に停止した。
+  通常macOS cache accessで同じcommandを再実行するとpassしたため、実装またはfault matrixの失敗ではなく既知のsandbox制約である。
+
+### 検証
+
+- `dart run test/terminal_note_store_worker_test.dart`: pass。Due/ackの全filesystem operation faultをpre/postの完全なdurable stateへ
+  分類し、partial publish、lost due、consumed hybrid 0を確認した。既存ordinary/deletion crash matrixもpass。
+- `dart run test/terminal_note_authority_test.dart`: pass。Pending/duplicate ackのconsume 0、pre-commit worker crashのdue保持・
+  restart再提示、post-commit response-lossのunpublished old authorityとrestart非再提示、全generation teardownを確認した。
+- `dart run test/terminal_note_product_subsystem_test.dart`: pass。Actual native snapshot/presentation照合のfalse-consume vector、
+  FIFO one-ack-per-commit、shutdown-away/restart deliveryに回帰なし。
+- `dart run test/terminal_note_store_isolate_test.dart`: pass。Timeout、worker crash、protocol violation、新generation restart、handle回収に回帰なし。
+- `dart analyze`: issue 0。変更Dart testを`dart format`済み。`git diff --check`: pass。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: pass。383 Dart filesのformat変更0、root/package analyze issue 0、
+  native capability、store fault/acceptance、Phase 7、compatibility、application、privacy/security、distributionの全gateを完走し、
+  `dart_terminal tests passed`を確認した。Note store acceptanceはcommit p95 153,093 us、primitive p95 19,875 us。
+- 隣接`dart_appkit`で`CI=true DART_SUPPRESS_ANALYTICS=true make test`: pass。
+  `GENERIC_REPOSITORY_AUDIT_PASS paths=148 text_files=147`と全native/Dart/runtime/example testが通過した。実行前後とも既存の
+  `docs/BUILDING_DART_ENGINE.md`、`scripts/bootstrap_dart_engine.sh`、`scripts/build_dart_engine.sh`だけが変更状態で、本作業は
+  編集・stageしていない。
+
+本子項目と親項目「visible acknowledgement、shutdown-away、crash境界」に未検証事項・阻害要因はない。次の先頭未完了は
+「S2両runtime product acceptanceと全監査を完了する」である。

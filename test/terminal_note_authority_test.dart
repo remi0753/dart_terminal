@@ -12,6 +12,7 @@ Future<void> runTerminalNoteAuthorityTests() async {
   await _testPromptOverflowAndSessionReplacement();
   await _testProjectionAcknowledgementAndClose();
   await _testFifoProjectionAcknowledgement();
+  await _testAcknowledgementCrashBoundary();
   await _testExpandedProjectionHardBounds();
   await _testSurfaceSemanticMutationContract();
   await _testOnReturnSurfaceMutationContract();
@@ -959,6 +960,297 @@ Future<void> _testFifoProjectionAcknowledgement() async {
     'a separate projection and commit consumes the second FIFO due',
   );
   await authority.stop();
+}
+
+Future<void> _testAcknowledgementCrashBoundary() async {
+  final int authorityBaseline = TerminalNoteAuthority.debugLiveAuthorityCount;
+
+  final _FakeAuthorityStore beforeCommitStore = _FakeAuthorityStore();
+  final _DueAcknowledgementFixture beforeCommit =
+      await _startDueAcknowledgementFixture(
+        store: beforeCommitStore,
+        authorityGeneration: 70,
+        noteValue: 70,
+      );
+  final BigInt beforeCommitRevision =
+      beforeCommit.authority.document.snapshot.storeRevision;
+  final Completer<void> beforeCommitGate = beforeCommitStore.blockNextCommit();
+  beforeCommitStore.failNextCommit = TerminalNoteStoreFailure.workerCrashed;
+  final Future<TerminalNoteAuthorityMutationResult> beforeCommitAck =
+      beforeCommit.authority.acknowledgePresentation(
+        sequence: beforeCommit.authority.nextSequence(),
+        paneId: const PaneId(1),
+        surfaceGeneration: beforeCommit.projection.surfaceGeneration,
+        projectionGeneration: beforeCommit.projection.projectionGeneration,
+        cardToken: beforeCommit.projection.cards.first.token,
+        visiblyLaidOut: true,
+      );
+  await Future<void>.delayed(Duration.zero);
+  final TerminalNoteAuthorityMutationResult duplicateWhilePending =
+      await beforeCommit.authority.acknowledgePresentation(
+        sequence: beforeCommit.authority.nextSequence(),
+        paneId: const PaneId(1),
+        surfaceGeneration: beforeCommit.projection.surfaceGeneration,
+        projectionGeneration: beforeCommit.projection.projectionGeneration,
+        cardToken: beforeCommit.projection.cards.first.token,
+        visiblyLaidOut: true,
+      );
+  _expect(
+    duplicateWhilePending.disposition ==
+            TerminalNoteAuthorityMutationDisposition.duplicate &&
+        beforeCommit.authority.document.snapshot.storeRevision ==
+            beforeCommitRevision &&
+        beforeCommit.authority.document.snapshot.deliveryFor(
+              beforeCommit.noteId,
+            ) !=
+            null &&
+        beforeCommitStore.current.snapshot.deliveryFor(beforeCommit.noteId) !=
+            null,
+    'pending and duplicate acknowledgement do not consume before store commit',
+  );
+  beforeCommitGate.complete();
+  final TerminalNoteAuthorityMutationResult beforeCommitFailure =
+      await beforeCommitAck;
+  _expect(
+    beforeCommitFailure.disposition ==
+            TerminalNoteAuthorityMutationDisposition.failed &&
+        beforeCommitFailure.storeFailure ==
+            TerminalNoteStoreFailure.workerCrashed &&
+        beforeCommit.authority.capability ==
+            TerminalNoteAuthorityCapability.unavailable &&
+        beforeCommit.authority.document.snapshot.storeRevision ==
+            beforeCommitRevision &&
+        beforeCommit.authority.document.snapshot.deliveryFor(
+              beforeCommit.noteId,
+            ) !=
+            null &&
+        beforeCommitStore.current.snapshot.deliveryFor(beforeCommit.noteId) !=
+            null &&
+        beforeCommit.surface.applied.last.storeRevision == beforeCommitRevision,
+    'ack failure before durable commit preserves the published and stored due',
+  );
+  await beforeCommit.authority.stop();
+
+  final _FakeAuthorityStore beforeCommitReopenStore = _FakeAuthorityStore()
+    ..current = beforeCommitStore.current;
+  final TerminalNoteAuthority beforeCommitReopened = await _startAuthority(
+    beforeCommitReopenStore,
+    authorityGeneration: 71,
+  );
+  final TerminalNoteLifecycleResult beforeCommitEligible = beforeCommitReopened
+      .observeEligibleFocus(
+        sequence: beforeCommitReopened.nextSequence(),
+        paneId: const PaneId(1),
+        isEligible: true,
+      );
+  await beforeCommitReopened.whenIdle();
+  final _FakeNoteSurface beforeCommitReopenedSurface = _FakeNoteSurface();
+  final TerminalNoteSurfaceProjection beforeCommitReopenedAttached =
+      beforeCommitReopened
+          .attachSurface(
+            sequence: beforeCommitReopened.nextSequence(),
+            paneId: const PaneId(1),
+            port: beforeCommitReopenedSurface,
+          )
+          .projection!;
+  final TerminalNoteSurfaceProjection beforeCommitReopenedProjection =
+      beforeCommitReopened
+          .updateSurface(
+            sequence: beforeCommitReopened.nextSequence(),
+            paneId: const PaneId(1),
+            surfaceGeneration: beforeCommitReopenedAttached.surfaceGeneration,
+            visibility: TerminalNoteSurfaceVisibility.expanded,
+            foreground: true,
+            occluded: false,
+          )
+          .projection!;
+  _expect(
+    beforeCommitEligible.isAccepted &&
+        beforeCommitReopened.document.snapshot.deliveryFor(
+              beforeCommit.noteId,
+            ) !=
+            null &&
+        beforeCommitReopenedProjection.dueCount == 1 &&
+        beforeCommitReopenedProjection.cards.first.due,
+    'restart after pre-commit ack crash re-presents the durable due',
+  );
+  await beforeCommitReopened.stop();
+
+  final _FakeAuthorityStore afterCommitStore = _FakeAuthorityStore();
+  final _DueAcknowledgementFixture afterCommit =
+      await _startDueAcknowledgementFixture(
+        store: afterCommitStore,
+        authorityGeneration: 72,
+        noteValue: 72,
+      );
+  final BigInt afterCommitRevision =
+      afterCommit.authority.document.snapshot.storeRevision;
+  final Completer<void> afterCommitGate = afterCommitStore.blockNextCommit();
+  afterCommitStore
+    ..failNextCommit = TerminalNoteStoreFailure.workerCrashed
+    ..persistNextCommitBeforeFailure = true;
+  final Future<TerminalNoteAuthorityMutationResult> afterCommitAck = afterCommit
+      .authority
+      .acknowledgePresentation(
+        sequence: afterCommit.authority.nextSequence(),
+        paneId: const PaneId(1),
+        surfaceGeneration: afterCommit.projection.surfaceGeneration,
+        projectionGeneration: afterCommit.projection.projectionGeneration,
+        cardToken: afterCommit.projection.cards.first.token,
+        visiblyLaidOut: true,
+      );
+  await Future<void>.delayed(Duration.zero);
+  _expect(
+    afterCommit.authority.document.snapshot.deliveryFor(afterCommit.noteId) !=
+            null &&
+        afterCommitStore.current.snapshot.deliveryFor(afterCommit.noteId) !=
+            null,
+    'response-loss fixture retains due until the blocked commit runs',
+  );
+  afterCommitGate.complete();
+  final TerminalNoteAuthorityMutationResult afterCommitFailure =
+      await afterCommitAck;
+  _expect(
+    afterCommitFailure.disposition ==
+            TerminalNoteAuthorityMutationDisposition.failed &&
+        afterCommit.authority.document.snapshot.storeRevision ==
+            afterCommitRevision &&
+        afterCommit.authority.document.snapshot.deliveryFor(
+              afterCommit.noteId,
+            ) !=
+            null &&
+        afterCommitStore.current.snapshot.storeRevision ==
+            afterCommitRevision + BigInt.one &&
+        afterCommitStore.current.snapshot.noteFor(afterCommit.noteId) != null &&
+        afterCommitStore.current.snapshot.triggerFor(afterCommit.noteId) ==
+            null &&
+        afterCommitStore.current.snapshot.deliveryFor(afterCommit.noteId) ==
+            null,
+    'lost response never publishes an unacknowledged candidate, while the '
+    'durable post-commit state remains fully consumed',
+  );
+  await afterCommit.authority.stop();
+
+  final _FakeAuthorityStore afterCommitReopenStore = _FakeAuthorityStore()
+    ..current = afterCommitStore.current;
+  final TerminalNoteAuthority afterCommitReopened = await _startAuthority(
+    afterCommitReopenStore,
+    authorityGeneration: 73,
+  );
+  final TerminalNoteLifecycleResult afterCommitEligible = afterCommitReopened
+      .observeEligibleFocus(
+        sequence: afterCommitReopened.nextSequence(),
+        paneId: const PaneId(1),
+        isEligible: true,
+      );
+  await afterCommitReopened.whenIdle();
+  final _FakeNoteSurface afterCommitReopenedSurface = _FakeNoteSurface();
+  final TerminalNoteSurfaceProjection afterCommitReopenedAttached =
+      afterCommitReopened
+          .attachSurface(
+            sequence: afterCommitReopened.nextSequence(),
+            paneId: const PaneId(1),
+            port: afterCommitReopenedSurface,
+          )
+          .projection!;
+  final TerminalNoteSurfaceProjection afterCommitReopenedProjection =
+      afterCommitReopened
+          .updateSurface(
+            sequence: afterCommitReopened.nextSequence(),
+            paneId: const PaneId(1),
+            surfaceGeneration: afterCommitReopenedAttached.surfaceGeneration,
+            visibility: TerminalNoteSurfaceVisibility.expanded,
+            foreground: true,
+            occluded: false,
+          )
+          .projection!;
+  _expect(
+    afterCommitEligible.isAccepted &&
+        afterCommitReopened.document.snapshot.noteFor(afterCommit.noteId) !=
+            null &&
+        afterCommitReopened.document.snapshot.triggerFor(afterCommit.noteId) ==
+            null &&
+        afterCommitReopened.document.snapshot.deliveryFor(afterCommit.noteId) ==
+            null &&
+        afterCommitReopenedProjection.dueCount == 0 &&
+        afterCommitReopenedProjection.cards.single.due == false,
+    'restart after post-commit ack crash does not re-present a consumed Note',
+  );
+  await afterCommitReopened.stop();
+  _expect(
+    TerminalNoteAuthority.debugLiveAuthorityCount == authorityBaseline,
+    'ack crash fixtures release every authority generation',
+  );
+}
+
+Future<_DueAcknowledgementFixture> _startDueAcknowledgementFixture({
+  required _FakeAuthorityStore store,
+  required int authorityGeneration,
+  required int noteValue,
+}) async {
+  final TerminalNoteAuthority authority = await _startAuthority(
+    store,
+    authorityGeneration: authorityGeneration,
+  );
+  final TerminalNoteContextId contextId = authority.contextForPane(
+    const PaneId(1),
+  )!;
+  final NoteId noteId = _noteId(noteValue);
+  await _mutate(
+    authority,
+    source: noteValue,
+    event: 1,
+    transition: _createNote(
+      contextId: contextId,
+      noteId: noteId,
+      body: 'ack crash fixture',
+      timestamp: 700 + noteValue,
+    ),
+  );
+  await _armOnReturn(
+    authority,
+    noteId: noteId,
+    source: noteValue,
+    event: 2,
+    isEligible: false,
+  );
+  authority.observeEligibleFocus(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    isEligible: true,
+  );
+  await authority.whenIdle();
+  final _FakeNoteSurface surface = _FakeNoteSurface();
+  final TerminalNoteSurfaceProjection attached = authority
+      .attachSurface(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        port: surface,
+      )
+      .projection!;
+  final TerminalNoteSurfaceProjection projection = authority
+      .updateSurface(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        surfaceGeneration: attached.surfaceGeneration,
+        visibility: TerminalNoteSurfaceVisibility.expanded,
+        foreground: true,
+        occluded: false,
+      )
+      .projection!;
+  _expect(
+    projection.dueCount == 1 &&
+        projection.cards.first.due &&
+        authority.document.snapshot.deliveryFor(noteId) != null &&
+        store.current.snapshot.deliveryFor(noteId) != null,
+    'ack crash fixture starts from one published and durable visible due',
+  );
+  return _DueAcknowledgementFixture(
+    authority: authority,
+    surface: surface,
+    noteId: noteId,
+    projection: projection,
+  );
 }
 
 Future<void> _testExpandedProjectionHardBounds() async {
@@ -2997,6 +3289,7 @@ final class _FakeAuthorityStore implements TerminalNoteAuthorityStorePort {
       <List<TerminalNoteDeletionTombstone>>[];
   TerminalNoteStoreFailure? failNextCommit;
   TerminalNoteStoreFailure? failNextExport;
+  bool persistNextCommitBeforeFailure = false;
   var commitCount = 0;
   var exportCount = 0;
   var stopCount = 0;
@@ -3041,8 +3334,19 @@ final class _FakeAuthorityStore implements TerminalNoteAuthorityStorePort {
     try {
       if (_gates.isNotEmpty) await _gates.removeAt(0).future;
       final TerminalNoteStoreFailure? failure = failNextCommit;
+      final bool persistBeforeFailure = persistNextCommitBeforeFailure;
       failNextCommit = null;
+      persistNextCommitBeforeFailure = false;
       if (failure != null) {
+        if (persistBeforeFailure &&
+            !stopped &&
+            candidate.snapshot.storeRevision > current.snapshot.storeRevision) {
+          current = candidate;
+          committed.add(candidate);
+          committedDeletions.add(
+            List<TerminalNoteDeletionTombstone>.unmodifiable(deletions),
+          );
+        }
         return TerminalNoteStoreResult(
           disposition: TerminalNoteStoreDisposition.unavailable,
           failure: failure,
@@ -3112,6 +3416,20 @@ final class _FakeAuthorityStore implements TerminalNoteAuthorityStorePort {
       metrics: TerminalNoteStoreMetrics.zero,
     );
   }
+}
+
+final class _DueAcknowledgementFixture {
+  const _DueAcknowledgementFixture({
+    required this.authority,
+    required this.surface,
+    required this.noteId,
+    required this.projection,
+  });
+
+  final TerminalNoteAuthority authority;
+  final _FakeNoteSurface surface;
+  final NoteId noteId;
+  final TerminalNoteSurfaceProjection projection;
 }
 
 final class _FakeNoteSurface implements TerminalNoteSurfacePort {
