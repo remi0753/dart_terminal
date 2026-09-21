@@ -2371,6 +2371,13 @@ Future<void> _testApplicationShutdownAndReopen() async {
       timestamp: 200,
     ),
   );
+  await _armOnReturn(
+    authority,
+    noteId: _noteId(59),
+    source: 59,
+    event: 2,
+    isEligible: true,
+  );
   final _FakeNoteSurface surface = _FakeNoteSurface();
   authority.attachSurface(
     sequence: authority.nextSequence(),
@@ -2390,7 +2397,7 @@ Future<void> _testApplicationShutdownAndReopen() async {
   final Future<TerminalNoteAuthorityMutationResult> drainingMutation = _mutate(
     authority,
     source: 59,
-    event: 2,
+    event: 3,
     transition: _createNote(
       contextId: contextId,
       noteId: _noteId(60),
@@ -2412,7 +2419,7 @@ Future<void> _testApplicationShutdownAndReopen() async {
   final TerminalNoteAuthorityMutationResult frozen = await authority
       .submitMutation(
         sequence: authority.nextSequence(),
-        token: _token(authority, source: 59, event: 3),
+        token: _token(authority, source: 59, event: 4),
         bodyUtf8Bytes: 0,
         transition: _noChangeContext(contextId),
       );
@@ -2431,6 +2438,9 @@ Future<void> _testApplicationShutdownAndReopen() async {
         authority.liveSessionCount == 0 &&
         authority.liveSurfaceCount == 0 &&
         store.events.indexOf('restoration') > store.events.indexOf('commit') &&
+        store.current.snapshot.triggerFor(_noteId(59))!.phase ==
+            NoteTriggerPhase.onReturnArmedAway &&
+        store.current.snapshot.deliveryFor(_noteId(59)) == null &&
         store.events.last == 'stop' &&
         TerminalNoteAuthority.debugLiveAuthorityCount == authorityBaseline,
     'application shutdown freezes ingress, drains admitted work, persists '
@@ -2453,10 +2463,15 @@ Future<void> _testApplicationShutdownAndReopen() async {
     reopened.capability == TerminalNoteAuthorityCapability.ready &&
         reopened.document.snapshot.noteFor(_noteId(59)) != null &&
         reopened.document.snapshot.noteFor(_noteId(60)) != null &&
-        reopened.contextForPane(const PaneId(1)) == contextId,
+        reopened.contextForPane(const PaneId(1)) == contextId &&
+        reopened.document.snapshot.triggerFor(_noteId(59))!.phase ==
+            NoteTriggerPhase.onReturnArmedAway &&
+        reopened.document.snapshot.deliveryFor(_noteId(59)) == null,
     'a new authority generation reopens the exact bound context and both '
-    'pre-freeze mutations',
+    'pre-freeze mutations without delivering before eligible observation',
   );
+  final BigInt beforeRestartEligibility =
+      reopened.document.snapshot.storeRevision;
   final _FakeNoteSurface reopenedSurface = _FakeNoteSurface();
   final TerminalNoteSurfaceResult reopenedProjection = reopened.attachSurface(
     sequence: reopened.nextSequence(),
@@ -2469,6 +2484,23 @@ Future<void> _testApplicationShutdownAndReopen() async {
         reopenedProjection.projection!.surfaceGeneration == 31,
     'reopen derives a fresh surface generation from the new authority '
     'generation',
+  );
+  final TerminalNoteLifecycleResult restartEligible = reopened
+      .observeEligibleFocus(
+        sequence: reopened.nextSequence(),
+        paneId: const PaneId(1),
+        isEligible: true,
+      );
+  await reopened.whenIdle();
+  _expect(
+    restartEligible.isAccepted &&
+        reopened.document.snapshot.storeRevision ==
+            beforeRestartEligibility + BigInt.one &&
+        reopened.document.snapshot.triggerFor(_noteId(59))!.phase ==
+            NoteTriggerPhase.due &&
+        reopened.document.snapshot.deliveryFor(_noteId(59)) != null,
+    'the first eligible observation after restart durably delivers the '
+    'shutdown-away On Return note exactly once',
   );
   final TerminalNoteAuthorityShutdownResult reopenedShutdown = await reopened
       .shutdownApplication(

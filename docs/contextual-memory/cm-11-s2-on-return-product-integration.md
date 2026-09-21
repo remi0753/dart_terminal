@@ -384,3 +384,72 @@ shutdown-awayは後続サブタスクの順序どおり未実装である。
 
 本子項目の未検証事項と阻害要因はない。Shutdown-awayとrestart delivery、commit/ack crash vectorは次のROADMAP子項目として
 未実装のまま保持する。
+
+## 2026-09-21: ordered shutdown-awayとrestart delivery着手
+
+- ROADMAPを再確認し、先頭未完了がCM-11第3サブタスク内の
+  「ordered shutdown-awayとrestart deliveryを接続する」であることを確認した。
+- 目的は、正常終了のordered persistence candidate内でOn Returnの`onReturnArmedHere`だけを
+  `onReturnArmedAway`へ変え、同じcandidateをexact restorationより後に一回だけdurable commitし、restart後の最初の
+  eligible observationでdueへ進めることである。Already-away、due delivery、passive Noteは変更しない。
+- Standard paneはcaptureに含まれたretained contextだけを対象にし、captureから外れたcontextは既存どおりDetachedへ移して
+  trigger/deliveryを解除する。Quick Terminalはlayout restoration対象外だが、専用context IDをapp restartで再利用する
+  frozen contractのため、bindingに保持されたsingletonをretained contextとして同じaway transitionへ含める。
+- Shutdown処理へ別store commitを追加する案はrestorationとNote bindingの間に新しいpartial stateを作るため不採用とした。
+  Candidate builder内でpure focus transitionを合成し、logical store revisionがcontextごとに進んでもphysical Note commitは
+  restoration成功後の一回だけとする。
+- 対象はshutdown candidate、authority shutdown/reopen、real workerを使うproduct restart acceptanceである。Ack前後やworker
+  crash injectionは次のROADMAP子項目、Developer JIT/Release AOTのS2全matrixはその後のacceptance項目に残す。
+- 完了条件は、source snapshotを変更せずcandidateだけがawayになること、restoration failure時はNote commit 0、restart直後は
+  delivery 0、最初のeligible observationで一回だけdue、standard/Quick Terminalのidentity保持、full gateと隣接
+  `dart_appkit` generic auditのpassである。
+
+## 2026-09-21: ordered shutdown-awayとrestart delivery完了
+
+### 実装と固定した境界
+
+- `TerminalNoteShutdownCandidateBuilder`は、captureされたstandard contextをrestorableへ移し、capture外standard contextを
+  Detachedへ移した後、retained standard contextと保存済みQuick Terminal singletonへ`eligible=false`を合成する。
+  `onReturnArmedHere`だけが`onReturnArmedAway`になり、already-away、due trigger/delivery、passive Noteは同じcandidate内で保持される。
+- Candidate作成はsource documentを変更しない。Context stateと複数contextのtriggerでlogical store revisionが複数進んでも、
+  authorityは既存のordered coordinatorによりexact restorationを先にcommitし、その成功後だけNote documentを一回
+  `commitCandidate`する。Restoration失敗ではNote commitを呼ばない。
+- Authority reopen testはshutdown前にeligibleなOn Return Noteをarmし、drain済みmutationと同じordered candidateへawayを含めた。
+  Restart直後はawayかつdelivery 0を確認し、最初のeligible observationだけがstore revisionを一つ進めてdueを作ることを固定した。
+- Real worker product acceptanceはstandard paneとQuick Terminalの両方でOn Return Noteをarmed-hereにし、終了後にexact standard
+  contextとQuick singletonを再利用した。Background/hidden相当のinitial observationではaway・delivery 0を保持し、それぞれの
+  最初のeligible observationで独立にdueとなり、terminal focusを要求せずautomatic railへ投影される。
+- `dart_appkit`へ変更は加えていない。終了時focus semantics、Note document、Quick Terminal identityはすべて
+  `dart_terminal`のpure model／authority／product testに閉じ、汎用libraryの既存注入境界だけを利用した。
+
+### 検討結果と実行中の判明事項
+
+- Quick Terminalをstandard restoration captureだけに限定して対象外にする案は、layout restoration外でも専用context IDを
+  app restartで再利用し、hide/showをaway→returnとするfrozen contractに反するため不採用とした。Bindingで検証済みの
+  singletonだけをretained contextとして明示的に含めた。
+- Shutdown開始前またはrestoration commit後にaway専用commitを追加する案は、終了drainとの競合またはrestoration／Note間の
+  partial stateを増やすため不採用とした。Pure candidate合成により既存の二段ordered persistenceを変更しなかった。
+- 最初のsandbox内focused testとacceptance generatorはMetal shader module cacheへの書込みを拒否され停止した。同一commandを
+  通常macOS cache accessで再実行するとpassしたため、source failureではなく既知のsandbox制約と確認した。
+- 最初のfull gateは変更したrestoration testのhashによりPhase 7 AppKit evidenceをstaleとして正しく拒否した。
+  `make phase7-appkit-acceptance`、続いて依存するGhostty inventoryとdaily-use matrixを正規generatorで更新した。
+  差分はrestoration test hashと、それを参照するdaily-use artifact hashだけで、分類、件数、release blockerは変わらない。
+
+### 検証
+
+- `dart run test/terminal_restoration_test.dart`: pass。Source snapshot不変、retained standard/Quickのhere→away、already-away、
+  due sequence/generation、passive保持、capture外Detached、restoration失敗時Note commit 0を確認した。
+- `dart run test/terminal_note_authority_test.dart`: pass。Shutdown drain、restoration-first commit、away document、exact reopen、
+  restart前delivery 0、最初のeligible observationによる一回のdue、owner teardownを確認した。
+- `dart run test/terminal_note_product_subsystem_test.dart`: pass。実worker/storeでstandard exact contextとQuick singletonの
+  shutdown-away、ineligible restart、first eligible delivery、automatic presentation、second ordered shutdownを確認した。
+- `dart analyze`: issue 0。`dart format`は変更した4 Dart fileで変更0となるまで適用した。`git diff --check`: pass。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: pass。383 Dart filesのformat変更0、root/package analyze issue 0、
+  Notes host/capability/store、Phase 7、compatibility、application、shell、privacy/security、distributionを含む全gateを完走し、
+  `dart_terminal tests passed`を確認した。Note store acceptanceはcommit p95 149,584 us、primitive p95 19,976 us。
+- 隣接`dart_appkit`で`CI=true DART_SUPPRESS_ANALYTICS=true make test`: pass。
+  `GENERIC_REPOSITORY_AUDIT_PASS paths=148 text_files=147`と全native/Dart/runtime/example testが通過した。実行前後とも既存の
+  `docs/BUILDING_DART_ENGINE.md`、`scripts/bootstrap_dart_engine.sh`、`scripts/build_dart_engine.sh`だけが変更状態で、本作業は
+  編集・stageしていない。
+
+本子項目の未検証事項と阻害要因はない。次の先頭未完了は「commit/ack crash境界とfalse-consume vectorを固定する」である。

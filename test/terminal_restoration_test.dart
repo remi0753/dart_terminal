@@ -463,12 +463,81 @@ Future<void> _testOrderedContextPersistence() async {
   final TerminalNoteContextId second = _contextId(201);
   final TerminalNoteContextId extra = _contextId(202);
   final TerminalNoteContextId quick = _contextId(203);
-  final TerminalNoteStoreDocument stored = _activeNoteDocument(
+  final TerminalNoteStoreDocument baseStored = _activeNoteDocument(
     contextIds: <TerminalNoteContextId>[first, second, extra],
     quickTerminalContextId: quick,
     bindingSha256: oldRestoration.restorationSha256,
     bindingContextIds: <TerminalNoteContextId>[first, second],
   );
+  TerminalNoteSnapshot shutdownSnapshot = baseStored.snapshot;
+  shutdownSnapshot = _acceptedNoteSnapshot(
+    shutdownSnapshot.createNote(
+      id: _noteId(110),
+      contextId: first,
+      body: 'passive shutdown fixture',
+      color: NoteColorKey.blue,
+      utcMicros: 110,
+      expectedStoreRevision: shutdownSnapshot.storeRevision,
+    ),
+  );
+  shutdownSnapshot = _acceptedNoteSnapshot(
+    shutdownSnapshot.createNote(
+      id: _noteId(111),
+      contextId: first,
+      body: 'due shutdown fixture',
+      color: NoteColorKey.green,
+      utcMicros: 111,
+      expectedStoreRevision: shutdownSnapshot.storeRevision,
+    ),
+  );
+  shutdownSnapshot = _acceptedNoteSnapshot(
+    shutdownSnapshot.createNote(
+      id: _noteId(112),
+      contextId: quick,
+      body: 'quick shutdown fixture',
+      color: NoteColorKey.pink,
+      utcMicros: 112,
+      expectedStoreRevision: shutdownSnapshot.storeRevision,
+    ),
+  );
+  for (final (NoteId noteId, bool isEligible) in <(NoteId, bool)>[
+    (_noteId(100), true),
+    (_noteId(101), false),
+    (_noteId(111), false),
+  ]) {
+    final NoteRecord note = shutdownSnapshot.noteFor(noteId)!;
+    shutdownSnapshot = _acceptedNoteSnapshot(
+      shutdownSnapshot.armOnReturn(
+        noteId: noteId,
+        isEligible: isEligible,
+        expectedStoreRevision: shutdownSnapshot.storeRevision,
+        expectedNoteRevision: note.revision,
+      ),
+    );
+  }
+  shutdownSnapshot = _acceptedNoteSnapshot(
+    shutdownSnapshot.observeEligibleFocus(
+      contextId: first,
+      isEligible: true,
+      expectedStoreRevision: shutdownSnapshot.storeRevision,
+    ),
+  );
+  final NoteRecord quickNote = shutdownSnapshot.noteFor(_noteId(112))!;
+  shutdownSnapshot = _acceptedNoteSnapshot(
+    shutdownSnapshot.armOnReturn(
+      noteId: quickNote.id,
+      isEligible: true,
+      expectedStoreRevision: shutdownSnapshot.storeRevision,
+      expectedNoteRevision: quickNote.revision,
+    ),
+  );
+  final TerminalNoteStoreDocument stored = TerminalNoteStoreDocument(
+    snapshot: shutdownSnapshot,
+    restorationBinding: baseStored.restorationBinding,
+  );
+  final NoteDeliveryRecord dueBeforeShutdown = stored.snapshot.deliveryFor(
+    _noteId(111),
+  )!;
   final TerminalNoteRestorationCaptureArtifact capture =
       TerminalNoteRestorationCaptureArtifact.fromArtifact(
         restoration: newRestoration,
@@ -503,6 +572,25 @@ Future<void> _testOrderedContextPersistence() async {
             TerminalNoteContextState.detached &&
         candidate.document.snapshot.contextFor(quick)!.state ==
             TerminalNoteContextState.active &&
+        candidate.document.snapshot.triggerFor(_noteId(100))!.phase ==
+            NoteTriggerPhase.onReturnArmedAway &&
+        candidate.document.snapshot.triggerFor(_noteId(101))!.phase ==
+            NoteTriggerPhase.onReturnArmedAway &&
+        candidate.document.snapshot.triggerFor(_noteId(111))!.phase ==
+            NoteTriggerPhase.due &&
+        candidate.document.snapshot.deliveryFor(_noteId(111))!.sequence ==
+            dueBeforeShutdown.sequence &&
+        candidate.document.snapshot
+                .deliveryFor(_noteId(111))!
+                .triggerGeneration ==
+            dueBeforeShutdown.triggerGeneration &&
+        candidate.document.snapshot.triggerFor(_noteId(110)) == null &&
+        candidate.document.snapshot.triggerFor(_noteId(112))!.phase ==
+            NoteTriggerPhase.onReturnArmedAway &&
+        stored.snapshot.triggerFor(_noteId(100))!.phase ==
+            NoteTriggerPhase.onReturnArmedHere &&
+        stored.snapshot.triggerFor(_noteId(112))!.phase ==
+            NoteTriggerPhase.onReturnArmedHere &&
         candidate.document.snapshot
                 .noteFor(_noteId(102))!
                 .attachment
@@ -510,8 +598,9 @@ Future<void> _testOrderedContextPersistence() async {
             TerminalNoteDetachReason.contextUnavailable &&
         !candidate.toString().contains(first.canonicalValue) &&
         !candidate.toString().contains(newRestoration.restorationSha256),
-    'shutdown candidate binds exact bytes, marks live contexts restorable, '
-    'detaches stale contexts, and preserves the Quick singleton',
+    'shutdown candidate binds exact bytes, marks retained On Return contexts '
+    'away without mutating the source, preserves due/passive state and the '
+    'Quick singleton, and detaches stale contexts',
   );
 
   _expectThrows<TerminalNoteShutdownPreparationException>(

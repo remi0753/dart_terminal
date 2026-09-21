@@ -383,6 +383,20 @@ final class TerminalNoteShutdownCandidateBuilder {
         );
       }
     }
+    final List<TerminalNoteContextId> retainedContextIds =
+        <TerminalNoteContextId>[
+          ...contextIds,
+          if (storedQuickContextId != null) storedQuickContextId,
+        ];
+    for (final TerminalNoteContextId contextId in retainedContextIds) {
+      working = _acceptedShutdownSnapshot(
+        working.observeEligibleFocus(
+          contextId: contextId,
+          isEligible: false,
+          expectedStoreRevision: working.storeRevision,
+        ),
+      );
+    }
     final TerminalNoteRestorationBinding nextBinding =
         TerminalNoteRestorationBinding(
           restorationSha256: capture.restoration.restorationSha256,

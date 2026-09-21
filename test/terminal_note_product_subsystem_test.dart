@@ -39,7 +39,7 @@ Future<void> _testOrderedShutdownAndExactContextRestart() async {
   const TerminalNoteFeatureConfiguration configuration =
       TerminalNoteFeatureConfiguration(
         notes: true,
-        notesOnReturn: false,
+        notesOnReturn: true,
         notesNextPrompt: false,
         fontSize: 15,
       );
@@ -49,6 +49,15 @@ Future<void> _testOrderedShutdownAndExactContextRestart() async {
     final _FakeProductNativeChannel firstChannel = _FakeProductNativeChannel(
       nextAttachment: TerminalNotesAttachDisposition.attached,
     );
+    final _FakeProductNativeChannel firstQuickChannel =
+        _FakeProductNativeChannel(
+          nextAttachment: TerminalNotesAttachDisposition.attached,
+        );
+    final Queue<_FakeProductNativeChannel> firstChannels =
+        Queue<_FakeProductNativeChannel>.from(<_FakeProductNativeChannel>[
+          firstChannel,
+          firstQuickChannel,
+        ]);
     final TerminalNoteSubsystemStartResult firstStart =
         await TerminalNoteProductSubsystem.start(
           configuration: configuration,
@@ -56,15 +65,19 @@ Future<void> _testOrderedShutdownAndExactContextRestart() async {
           authorityGeneration: 201,
           restoration: null,
           initialPaneIdsInTraversalOrder: const <PaneId>[PaneId(1)],
-          ensureQuickTerminalContext: false,
+          ensureQuickTerminalContext: true,
           updatedAtUtcMicros: 5000,
           copyEffect: (_) => true,
           exportDestinationChooser: (_) => null,
           initializeNativeCapability: () {},
-          surfaceFactory: () => firstChannel,
+          surfaceFactory: firstChannels.removeFirst,
           clock: () => 5001,
         );
     first = firstStart.runtime! as TerminalNoteProductSubsystem;
+    await first.bindPane(
+      paneId: const PaneId(90),
+      kind: TerminalNoteContextKind.quickTerminal,
+    );
     await first.attachSurface(
       paneId: const PaneId(1),
       configuration: _surfaceConfiguration(
@@ -88,12 +101,56 @@ Future<void> _testOrderedShutdownAndExactContextRestart() async {
       _nativeIntent(
         projection,
         eventGeneration: 2,
-        kind: TerminalNotesIntentKind.save,
+        kind: TerminalNotesIntentKind.saveOnReturn,
         color: TerminalNotesColor.blue,
         body: 'exact-context-note',
       ),
     );
     await first.pumpSurfaceIntent(const PaneId(1));
+    projection = firstChannel.projections.last;
+    _expect(
+      projection.cards.single.triggerPhase ==
+              TerminalNotesTriggerPhase.onReturnArmedHere &&
+          projection.dueCount == 0,
+      'the exact-context Note is armed here without delivery before shutdown',
+    );
+    await first.attachSurface(
+      paneId: const PaneId(90),
+      configuration: _surfaceConfiguration(
+        handle: 90,
+        visibility: TerminalNoteSurfaceVisibility.expanded,
+        foreground: true,
+        occluded: false,
+      ),
+    );
+    TerminalNotesProjection quickProjection =
+        firstQuickChannel.projections.last;
+    firstQuickChannel.intents.add(
+      _nativeIntent(
+        quickProjection,
+        eventGeneration: 1,
+        kind: TerminalNotesIntentKind.beginCreate,
+      ),
+    );
+    await first.pumpSurfaceIntent(const PaneId(90));
+    quickProjection = firstQuickChannel.projections.last;
+    firstQuickChannel.intents.add(
+      _nativeIntent(
+        quickProjection,
+        eventGeneration: 2,
+        kind: TerminalNotesIntentKind.saveOnReturn,
+        color: TerminalNotesColor.purple,
+        body: 'quick-exact-context-note',
+      ),
+    );
+    await first.pumpSurfaceIntent(const PaneId(90));
+    quickProjection = firstQuickChannel.projections.last;
+    _expect(
+      quickProjection.cards.single.triggerPhase ==
+              TerminalNotesTriggerPhase.onReturnArmedHere &&
+          quickProjection.dueCount == 0,
+      'the Quick Terminal singleton Note is armed here before shutdown',
+    );
 
     Future<bool> commitRestoration(
       TerminalNoteRestorationArtifact artifact,
@@ -130,13 +187,23 @@ Future<void> _testOrderedShutdownAndExactContextRestart() async {
           first.isStopped &&
           first.livePaneCount == 0 &&
           first.liveSurfaceCount == 0 &&
-          firstChannel.disposeCount == 1,
+          firstChannel.disposeCount == 1 &&
+          firstQuickChannel.disposeCount == 1,
       'product shutdown commits exact restoration before retiring all owners',
     );
 
     final _FakeProductNativeChannel reopenedChannel = _FakeProductNativeChannel(
       nextAttachment: TerminalNotesAttachDisposition.attached,
     );
+    final _FakeProductNativeChannel reopenedQuickChannel =
+        _FakeProductNativeChannel(
+          nextAttachment: TerminalNotesAttachDisposition.attached,
+        );
+    final Queue<_FakeProductNativeChannel> reopenedChannels =
+        Queue<_FakeProductNativeChannel>.from(<_FakeProductNativeChannel>[
+          reopenedChannel,
+          reopenedQuickChannel,
+        ]);
     final TerminalNoteSubsystemStartResult reopenedStart =
         await TerminalNoteProductSubsystem.start(
           configuration: configuration,
@@ -146,16 +213,58 @@ Future<void> _testOrderedShutdownAndExactContextRestart() async {
             loaded.exactEncoded!,
           ),
           initialPaneIdsInTraversalOrder: const <PaneId>[PaneId(11)],
-          ensureQuickTerminalContext: false,
+          ensureQuickTerminalContext: true,
           updatedAtUtcMicros: 5004,
           copyEffect: (_) => true,
           exportDestinationChooser: (_) => null,
           initializeNativeCapability: () {},
-          surfaceFactory: () => reopenedChannel,
+          surfaceFactory: reopenedChannels.removeFirst,
           clock: () => 5005,
         );
     reopened = reopenedStart.runtime! as TerminalNoteProductSubsystem;
+    await reopened.bindPane(
+      paneId: const PaneId(91),
+      kind: TerminalNoteContextKind.quickTerminal,
+    );
     await reopened.attachSurface(
+      paneId: const PaneId(11),
+      configuration: _surfaceConfiguration(
+        handle: 32,
+        visibility: TerminalNoteSurfaceVisibility.expanded,
+        foreground: false,
+        occluded: false,
+      ),
+    );
+    TerminalNotesProjection reopenedProjection =
+        reopenedChannel.projections.last;
+    _expect(
+      reopenedProjection.cards.single.body == 'exact-context-note' &&
+          reopenedProjection.cards.single.triggerPhase ==
+              TerminalNotesTriggerPhase.onReturnArmedAway &&
+          reopenedProjection.dueCount == 0,
+      'restart reattaches the shutdown-away Note only to the exact restored '
+      'context without delivering while ineligible',
+    );
+    await reopened.attachSurface(
+      paneId: const PaneId(91),
+      configuration: _surfaceConfiguration(
+        handle: 91,
+        visibility: TerminalNoteSurfaceVisibility.expanded,
+        foreground: false,
+        occluded: false,
+      ),
+    );
+    TerminalNotesProjection reopenedQuickProjection =
+        reopenedQuickChannel.projections.last;
+    _expect(
+      reopenedQuickProjection.cards.single.body == 'quick-exact-context-note' &&
+          reopenedQuickProjection.cards.single.triggerPhase ==
+              TerminalNotesTriggerPhase.onReturnArmedAway &&
+          reopenedQuickProjection.dueCount == 0,
+      'restart retains the Quick Terminal singleton shutdown-away Note '
+      'without delivering while hidden',
+    );
+    await reopened.updateSurface(
       paneId: const PaneId(11),
       configuration: _surfaceConfiguration(
         handle: 32,
@@ -164,10 +273,43 @@ Future<void> _testOrderedShutdownAndExactContextRestart() async {
         occluded: false,
       ),
     );
+    reopenedProjection = await _waitForNativeProjection(
+      reopenedChannel,
+      (TerminalNotesProjection candidate) =>
+          candidate.dueCount == 1 &&
+          candidate.cards.single.triggerPhase == TerminalNotesTriggerPhase.due,
+    );
     _expect(
-      reopenedChannel.projections.last.cards.single.body ==
-          'exact-context-note',
-      'restart reattaches the durable Note only to the exact restored context',
+      reopenedProjection.cards.single.body == 'exact-context-note' &&
+          reopenedProjection.cards.single.due &&
+          reopened
+              .interactionSnapshotForPane(const PaneId(11))!
+              .automaticPresentation,
+      'the first eligible product observation after restart durably delivers '
+      'and presents the retained On Return Note',
+    );
+    await reopened.updateSurface(
+      paneId: const PaneId(91),
+      configuration: _surfaceConfiguration(
+        handle: 91,
+        visibility: TerminalNoteSurfaceVisibility.expanded,
+        foreground: true,
+        occluded: false,
+      ),
+    );
+    reopenedQuickProjection = await _waitForNativeProjection(
+      reopenedQuickChannel,
+      (TerminalNotesProjection candidate) =>
+          candidate.dueCount == 1 &&
+          candidate.cards.single.triggerPhase == TerminalNotesTriggerPhase.due,
+    );
+    _expect(
+      reopenedQuickProjection.cards.single.due &&
+          reopened
+              .interactionSnapshotForPane(const PaneId(91))!
+              .automaticPresentation,
+      'the first visible Quick Terminal observation after restart delivers '
+      'the retained singleton Note',
     );
     final TerminalNoteAuthorityShutdownResult reopenedResult = await reopened
         .shutdownApplication(
@@ -181,6 +323,7 @@ Future<void> _testOrderedShutdownAndExactContextRestart() async {
     _expect(
       reopenedResult.isSuccess &&
           reopenedChannel.disposeCount == 1 &&
+          reopenedQuickChannel.disposeCount == 1 &&
           TerminalNoteProductSubsystem.debugLiveProductSubsystemCount ==
               productBaseline &&
           TerminalNoteAuthority.debugLiveAuthorityCount == authorityBaseline &&

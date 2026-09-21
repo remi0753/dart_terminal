@@ -136,7 +136,7 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
   - [x] eligible focus lifecycleとsingle non-blocking railを接続する
   - [ ] visible acknowledgement、shutdown-away、crash境界を接続する
     - [x] actual visible layout wake-upとsingle FIFO acknowledgementを接続する
-    - [ ] ordered shutdown-awayとrestart deliveryを接続する
+    - [x] ordered shutdown-awayとrestart deliveryを接続する
     - [ ] commit/ack crash境界とfalse-consume vectorを固定する
   - [ ] S2両runtime product acceptanceと全監査を完了する
 - [ ] CM-12 R0 hidden qualificationを完了する
