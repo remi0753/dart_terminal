@@ -1280,3 +1280,115 @@ application lifecycle、Quick Terminal、cleanupを一切弱めない。Policy t
   `dart_terminal tests passed`。PTY large pipelineはtotal 33／retained 32／p95 268 us、Note store acceptanceは20 runs／commit p95
   54,378 us／primitive p95 20,578 usだった。`git diff --check`もpassした。
 - `dart_appkit`にはcode、API、test、dart_terminal固有概念を追加していない。隣接repositoryの既存user変更3件は変更もstageもしていない。
+
+### Fresh named aggregate 8回目の阻害
+
+Secure Keyboard Entry readiness修正commit後、`CI=true DART_SUPPRESS_ANALYTICS=true make RUNTIME_ARCH=arm64 contextual-memory-r0-qualification`を
+retry wrapperなしでgate 1から再実行した。Gate 1〜6はpassし、gate 7はsource audit、standard smoke、terminal display、native hierarchy、bounded
+reliabilityまで両runtimeでpassした。その次のDeveloper JIT user-actions integrationが、current prompt到着後の
+`initial terminal pane did not become the sole active surface`でstatus 70となり停止した。初期Secure Keyboard Entry observationは
+`application_active=false`であり、Release AOT user-actions、残りのgate 7 vectors、gate 8、final checkerは未実行、final R0 summaryは出ていない。
+このaggregateは失敗後に再試行していない。
+
+このrunで確定した結果:
+
+- Budget evidenceはinputs 4／sources 6、combined first-visible p95 18,688 us／100,000 us、periodic timer 0、display link 0、request timeout
+  timer 1、content-freeでpassした。
+- Cross-architecture evidenceは4 bundles、21 resources、1,388,080 bytes、8 Note images、arm64／x86_64／Universal、sentinel 0、absolute
+  path 0、content-freeでpassした。
+- Notes acceptanceはwindow interaction Developer JIT 2,127 ms／Release AOT 1,042 msを含めpass。S1は1,312／498 ms、S2は
+  1,373／531 msでpassし、いずれも`dart_appkit=generic`だった。
+- Sanitizer／fuzz／faultはnative suites 5、artifacts 11、fuzz executions 1,296、fault boundaries 4、runtime modes 2でpass。Rootは393 files、
+  format 0、analyze issue 0、`dart_terminal tests passed`。PTY large pipelineはtotal 33／retained 32／p95 248 us、Note storeはcommit p95
+  51,263 us／primitive p95 19,433 usだった。
+- Gate 7はstandard smoke 1,969／1,453 ms、display 11,500／10,124 ms、hierarchy 61,044／66,421 ms、bounded reliability
+  7,083／6,299 msで両runtime passした。Developer JIT user-actionsはinitial 1/1/1 native hierarchy、PTY、menu、current promptまではreadyとなったが、
+  10秒以内にapplication activeかつfocused native windowから導かれるsingle active pane projectionを得られなかった。
+
+これは5回目のaggregateで観測したforeground readiness failureと同じ位置である。前回はuser-actionsをexact target bundleのLaunch Services起動へ
+変更しfocused両runtime acceptanceがpassしたが、長いserial gateではLaunch Servicesの起動自体が対象windowをkey／activeにする保証がない。直前に修正した
+Secure Keyboard Entryと、既存window-interaction／native-content fixturesは、この自動検証環境の同じ境界に対し、current prompt後に対象applicationがinactiveなら
+application-active eventを、exact native windowがunfocusedならそのhandleのfocus eventを条件付きで補完してから製品vectorを開始する。User-actionsには
+exact-bundle launchだけがあり、この条件付きreadiness補完がない。
+
+検討する選択肢:
+
+- Aggregateまたはuser-actionsだけのretry、timeout延長、固定sleepは、foreground ownershipを発生させずserial順序依存を残すため採用しない。
+- `application.isActive`をpane activity条件から外す、sole-active assertionを削除する、またはproduct起動時に常時focusを強制する案は、background appで
+  active cursorを描画しない製品契約を壊すため採用しない。
+- Generic `dart_appkit` runnerやwindow APIへdart_terminal acceptance固有のfocus処理を入れる案は、汎用library境界を壊すため採用しない。
+- Product-owned user-actions fixtureで、current prompt到着後にinitial logical windowへ対応するexact native windowを解決し、実状態が不足する場合だけ既存の
+  application-active／focus test eventを補完する案を第一候補とする。これは初期readinessだけを他のforeground-dependent fixturesと揃え、その後のUpdate
+  system surface、responder復帰、全window／tab／pane focus、close／reopen／quit vectorと製品semanticsを変更しない。
+
+ユーザー指示に従い、この個別修正はROADMAPへ追加しない。未完了の成果項目は引き続き「fresh 8-gate aggregateとfinal evidence checker完走」である。
+
+### User-actions initial foreground readinessの決定論的確認
+
+Source policy testへ、user-actions fixtureがcurrent prompt到着後／最初の製品vector開始前に、application active状態とinitial logical tabに対応するexact native
+windowのfocus状態を条件付きで補完する契約を追加した。現行実装に対して実行すると
+`user-action readiness conditionally targets its exact initial native window after the current prompt`で期待どおりfailし、exact-bundle launch指定だけでは
+fixture内のreadiness契約が成立しないことを決定論的に固定できた。初回のsandbox内実行はMetal build hookがworkspace外Clang module cacheへ書けず停止したため
+製品／test failureには数えず、必要なcache権限で再実行して上記assertion failureを確認した。
+
+実装はuser-actions fixtureのinitial 1/1/1 graphを確認後、初期logical window／tabに対応するnative windowを一度だけ解決し、current prompt到着後に
+`application.isActive == false`なら既存application-active test event、`initialNative.isFocused == false`ならそのexact handleへの既存focus test eventを注入する。
+その後はapplication active、native visible／focused、single active paneを同時に要求してから既存action vectorへ進む。製品のfocus semantics、timeout、
+Launch Services経路、後続のsystem-surface focus restoration、`dart_appkit`は変更しない。
+
+### Initial readiness単独修正のfocused failureとfixture方針の補完
+
+Initial readiness実装後、source policy、formatter、focused analyzer、diff checkはpassした。続く
+`make RUNTIME_ARCH=arm64 runtime-user-actions-integration`のDeveloper JITはinitial sole-active paneを通過したが、Update presenterを開いた後の
+`update window left a terminal cursor visually active`でstatus 70となり、Release AOTは未実行だった。
+
+この結果はinitial readiness補完自体が届いた一方、実OS上のapplicationは非activeのままで、Dart fixtureへだけactive／terminal-window focus eventを
+与えたため、Update windowの`show`で通常なら届くterminal-window focus-loss eventが発生しなかったことを示す。同じ条件では後続Command Paletteと
+複数terminal window間のfocus移動もOS eventに依存するため、initial eventだけの補完ではfixture全体を決定論的にできない。
+
+検討した選択肢:
+
+- Update中のactive-pane assertionだけを削除する案は、system windowがkeyの間はactive terminal surface 0という既存Phase 7契約を弱めるため不採用。
+- Productのpane-active導出をlogical system-surface ownerへ変更する案は、Context Dock／Note rail/editorを含む既存の「active pane」と「terminal input
+  owner」の意味をこのqualification修正だけで再定義することになり、範囲が過大なので不採用。
+- Generic `dart_appkit`へactivation APIや製品fixture固有の自動focusを追加する案は、runnerが既にgeneric activate-on-launchを持ち、headless acceptance
+  preconditionのためだけに汎用library境界を広げるため不採用。
+- User-actions fixture内にexact terminal native windowを対象にする小さなtest-only focus helperを置く。Application activeは不足時だけ補完し、system
+  presenter表示時は直前terminal windowのfocus loss、dismiss後はlogical active terminal windowのfocus gain、terminal window切替時は旧focused windowの
+  loss→target exact windowのgainを条件付きで送る。これは既存window-interaction／native-content／Secure Keyboard Entry fixturesと同じraw event seamを使い、
+  real AppKit eventが既に到着している場合は何もしない。製品code path、action、responder、assertion、timeout、`dart_appkit`は変更しない。
+
+上記helper実装後のfocused Developer JITはinitial、Update open/dismiss、split、Command Palette open/action/dismiss、new tabまで通過し、new window作成後の
+`new window did not leave exactly one active terminal pane`で停止した。5 paneは全て生成／start済みで、cleanupもcleanだった。Target windowが既にfocusedと
+観測される場合、条件付きhelperは新しいfocus eventを送らず、非同期hierarchy作成後の最終surface projectionも発生させない隙間が残っていた。
+
+Helperはfocus eventを必要時だけ送る方針を維持し、その末尾でsettled product hierarchyを一度reconcileする。Blur helperもeventの有無にかかわらず同様に
+reconcileする。これにより既に正しいnative stateを無理に反転せず、logical／native stateからactive surfaceを必ず再導出する。Product runtimeの通常経路、
+timeout、assertionは変更しない。
+
+その単発reconcile後もnew window acceptanceは同じ位置で停止したため、content-free failure detailsを追加して状態を確認した。失敗時は
+`application_active=true`、active logical window 2／tab 3、native visible true、active pane 0だが、target native windowだけが`focused=false`へ戻っていた。
+これは新規window作成時の遅延AppKit focus-loss eventがhelperのfocus gain後にdrainされたことを示し、logical identity、surface count、visibility、application
+activeの問題ではない。
+
+最終方針は、既存10秒bounded waitのpredicate内で毎回exact targetの不足状態を確認し、必要なfocus loss／gainだけを再補完して一度reconcileする形とした。
+Queued native eventが尽きてapplication／target focus／single active paneが同時に成立した時点でのみ次のvectorへ進む。Update／Command Palette中のblur、dismiss後、
+new window、全pane巡回、close fallback、windowless reopenに同じ契約を適用した。Timeout延長、fixed sleep、action retry、assertion削除、製品focus導出変更はない。
+
+### User-actions foreground readiness修正の完了結果
+
+- Final fixtureはexact-bundle Launch Services起動を維持し、current prompt後のinitial window、system surface open/dismiss、terminal window切替ごとに、既存の
+  raw AppKit test seamでexact windowの状態だけをboundedにsettleさせる。実native eventですでに正しい場合はeventを送らず、通常製品pathには影響しない。
+- Source policyはuser-actions fixture自身のexact-bundle launch、current prompt後のconditional application activation、exact native window focus／blur helperを
+  固定する。Focused formatterは2 files／0 changes、analyzerはissue 0、policy testと`git diff --check`はpassした。
+- Final `make RUNTIME_ARCH=arm64 runtime-user-actions-integration`はDeveloper JIT 2,676 ms、Release AOT 1,612 msでpassした。Initial 1/1/1、Update、
+  Command Palette、split、tab、window、全pane raw key／IME isolation、pane/window close、windowless reopen、quit、6 session／text client／native handle cleanupを
+  両modeで完走した。
+- 正規generatorでPhase 7 AppKit acceptance、Ghostty P0/P1 gap inventory、release-candidate daily-use matrixを更新した。意味上のcriteria／gap／gate countは
+  不変で、product source hashと依存hashだけが変わった。Sandbox内初回はMetal Clang module cache書込み制約で停止し、必要なcache権限で同じcommandを
+  再実行して完了した。
+- 最終root `make test`は全package／native／generated／privacy／distribution／root suiteをpassした。Rootは393 files／format 0 changes、analyze
+  issue 0、`dart_terminal tests passed`。PTY large pipelineはtotal 33／retained 32／p95 270 us、Note store acceptanceは20 runs／commit p95
+  53,187 us／primitive p95 19,925 usだった。
+- `dart_appkit`にはcode、API、test、dart_terminal固有概念を追加していない。隣接repositoryの既存user変更3件は変更もstageもしていない。失敗したfresh
+  aggregateが生成したbudget evidenceは本修正commitから除外し、次のfresh aggregateでgate 1から再生成・判定する。

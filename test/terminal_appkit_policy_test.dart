@@ -69,6 +69,51 @@ void runTerminalAppKitPolicyTests() {
   final String terminalApplicationSource = File(
     'lib/src/terminal_application.dart',
   ).readAsStringSync();
+  final int userActionProductStart = terminalApplicationSource.indexOf(
+    'static Future<void> _exerciseUserActionProduct(',
+  );
+  final int userActionProductEnd = terminalApplicationSource.indexOf(
+    'static Future<void> _exerciseSecureKeyboardEntryProduct(',
+    userActionProductStart,
+  );
+  final String userActionProductSource =
+      userActionProductStart >= 0 &&
+          userActionProductEnd > userActionProductStart
+      ? terminalApplicationSource.substring(
+          userActionProductStart,
+          userActionProductEnd,
+        )
+      : '';
+  final int userActionPromptReady = userActionProductSource.indexOf(
+    'await _waitForAsciiMarker(sessions.values.single, prompt);',
+  );
+  final int userActionVectorStart = userActionProductSource.indexOf(
+    'final int actionInputBaseline',
+    userActionPromptReady,
+  );
+  final String userActionReadiness =
+      userActionPromptReady >= 0 &&
+          userActionVectorStart > userActionPromptReady
+      ? userActionProductSource.substring(
+          userActionPromptReady,
+          userActionVectorStart,
+        )
+      : '';
+  _expect(
+    userActionProductSource.contains(
+          'void focusTerminalWindowForTesting(Window target)',
+        ) &&
+        userActionProductSource.contains('if (!application.isActive)') &&
+        userActionProductSource.contains('if (!target.isFocused)') &&
+        userActionProductSource.contains(
+          'void blurTerminalWindowForTesting(Window target)',
+        ) &&
+        userActionReadiness.contains(
+          'focusTerminalWindowForTesting(initialNative);',
+        ),
+    'user-action readiness conditionally targets its exact initial native '
+    'window after the current prompt',
+  );
   final int secureKeyboardProductStart = terminalApplicationSource.indexOf(
     'static Future<void> _exerciseSecureKeyboardEntryProduct(',
   );

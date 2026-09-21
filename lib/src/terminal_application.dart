@@ -15667,6 +15667,61 @@ keybind = command+right=pane.focus-left
       return active.length == 1 && active.single == paneId;
     }
 
+    void focusTerminalWindowForTesting(Window target) {
+      if (!application.isActive) {
+        appkit_testing.injectRawAppKitEventForTesting(application, <Object?>[
+          application.eventProtocolVersion,
+          30,
+          0,
+          0,
+          eventTimestamp++,
+          0,
+          true,
+        ]);
+      }
+      final Set<Window> visited = <Window>{};
+      for (final TerminalWindowState logicalWindow in state.windows) {
+        for (final TerminalTabState tab in logicalWindow.tabs) {
+          final Window? candidate = hierarchy.windowForTab(tab.id);
+          if (candidate == null ||
+              candidate.isDisposed ||
+              candidate.isClosed ||
+              !visited.add(candidate) ||
+              identical(candidate, target) ||
+              !candidate.isFocused) {
+            continue;
+          }
+          _injectFocusEventForTesting(
+            application,
+            candidate,
+            isFocused: false,
+            monotonicNanoseconds: eventTimestamp++,
+          );
+        }
+      }
+      if (!target.isFocused) {
+        _injectFocusEventForTesting(
+          application,
+          target,
+          isFocused: true,
+          monotonicNanoseconds: eventTimestamp++,
+        );
+      }
+      reconcile();
+    }
+
+    void blurTerminalWindowForTesting(Window target) {
+      if (target.isFocused) {
+        _injectFocusEventForTesting(
+          application,
+          target,
+          isFocused: false,
+          monotonicNanoseconds: eventTimestamp++,
+        );
+      }
+      reconcile();
+    }
+
     int writeEnqueuedCount() => writeEnqueuedCounts.values.fold(
       0,
       (int total, int count) => total + count,
@@ -15676,12 +15731,16 @@ keybind = command+right=pane.focus-left
       bool Function() predicate,
       String message, {
       Duration timeout = const Duration(seconds: 10),
+      String Function()? failureDetails,
     }) async {
       final Stopwatch deadline = Stopwatch()..start();
       while (!predicate() && deadline.elapsed < timeout) {
         await Future<void>.delayed(const Duration(milliseconds: 5));
       }
-      _expectLifecycle(predicate(), message);
+      _expectLifecycle(
+        predicate(),
+        failureDetails == null ? message : '$message; ${failureDetails()}',
+      );
     }
 
     Future<void> performMenuAction(
@@ -15754,11 +15813,18 @@ keybind = command+right=pane.focus-left
           hierarchy.paneResourceCount == 1,
       'user action product did not start from the ordinary 1/1/1 hierarchy',
     );
+    final TerminalWindowState initialWindow = state.windows.single;
+    final TerminalTabState initialTab = initialWindow.selectedTab;
+    final PaneId initialPaneId = initialTab.focusedPaneId;
+    final Window initialNative = hierarchy.windowForTab(initialTab.id)!;
     await _waitForAsciiMarker(sessions.values.single, prompt);
-    await waitFor(
-      () => hasOnlyActivePane(state.activeWindow!.selectedTab.focusedPaneId),
-      'initial terminal pane did not become the sole active surface',
-    );
+    await waitFor(() {
+      focusTerminalWindowForTesting(initialNative);
+      return application.isActive &&
+          initialNative.isVisible &&
+          initialNative.isFocused &&
+          hasOnlyActivePane(initialPaneId);
+    }, 'initial terminal pane did not become the sole active surface');
     final int actionInputBaseline = terminalInputDeliveryCount();
 
     await performMenuAction(
@@ -15769,10 +15835,10 @@ keybind = command+right=pane.focus-left
           updatePresenter.isOpen &&
           updateController.status == TerminalUpdateStatus.available,
     );
-    await waitFor(
-      () => activePaneIds().isEmpty,
-      'update window left a terminal cursor visually active',
-    );
+    await waitFor(() {
+      blurTerminalWindowForTesting(initialNative);
+      return activePaneIds().isEmpty;
+    }, 'update window left a terminal cursor visually active');
     _expectLifecycle(
       updateService.checkCount == 1 &&
           updatePresenter.renderedText?.contains(
@@ -15793,10 +15859,10 @@ keybind = command+right=pane.focus-left
       'update action did not prepare the authenticated candidate once',
     );
     await updatePresenter.dismiss();
-    await waitFor(
-      () => hasOnlyActivePane(state.activeWindow!.selectedTab.focusedPaneId),
-      'terminal focus restoration did not reactivate exactly one pane',
-    );
+    await waitFor(() {
+      focusTerminalWindowForTesting(initialNative);
+      return hasOnlyActivePane(state.activeWindow!.selectedTab.focusedPaneId);
+    }, 'terminal focus restoration did not reactivate exactly one pane');
     _expectLifecycle(
       !updatePresenter.isOpen &&
           updatePresenter.terminalResponderRestoreCount == 1 &&
@@ -15993,14 +16059,20 @@ keybind = command+right=pane.focus-left
     await waitFor(
       () =>
           palette.isOpen &&
-          activePaneIds().isEmpty &&
           !(palette.renderedText ?? '').contains(
             'Split Pane Down  — Unavailable',
           ) &&
           nativeActionInvocations.length == paletteInvocationBaseline + 1 &&
           actionDispatches.length == paletteDispatchBaseline + 1,
-      'implemented split action remained unavailable in command palette',
+      'implemented split action did not appear in the command palette',
     );
+    final Window paletteTerminalNative = hierarchy.windowForTab(
+      state.activeWindow!.selectedTabId,
+    )!;
+    await waitFor(() {
+      blurTerminalWindowForTesting(paletteTerminalNative);
+      return activePaneIds().isEmpty;
+    }, 'implemented split action remained unavailable in command palette');
     final Window paletteWindow = palette.activeWindow!;
     _injectKeyEventForTesting(
       application,
@@ -16032,10 +16104,16 @@ keybind = command+right=pane.focus-left
           !palette.isOpen &&
           state.paneCount == 3 &&
           hierarchy.paneResourceCount == 3 &&
-          hierarchy.splitViewCount == 2 &&
-          hasOnlyActivePane(state.activeWindow!.selectedTab.focusedPaneId),
-      'command palette Split Pane Down did not project a third pane',
+          hierarchy.splitViewCount == 2,
+      'command palette Split Pane Down did not create a third pane',
     );
+    final Window paletteReturnNative = hierarchy.windowForTab(
+      state.activeWindow!.selectedTabId,
+    )!;
+    await waitFor(() {
+      focusTerminalWindowForTesting(paletteReturnNative);
+      return hasOnlyActivePane(state.activeWindow!.selectedTab.focusedPaneId);
+    }, 'command palette Split Pane Down did not project a third pane');
     _expectLifecycle(
       palette.lastDispatchResult?.id == TerminalActionId.splitPaneDown &&
           palette.lastDispatchResult?.disposition ==
@@ -16064,9 +16142,28 @@ keybind = command+right=pane.focus-left
           hierarchy.nativeWindowCount == 3 &&
           hierarchy.paneResourceCount == 5,
     );
+    final Window newWindowNative = hierarchy.windowForTab(
+      state.activeWindow!.selectedTabId,
+    )!;
     await waitFor(
-      () => hasOnlyActivePane(state.activeWindow!.selectedTab.focusedPaneId),
+      () {
+        focusTerminalWindowForTesting(newWindowNative);
+        return hasOnlyActivePane(state.activeWindow!.selectedTab.focusedPaneId);
+      },
       'new window did not leave exactly one active terminal pane',
+      failureDetails: () {
+        final TerminalWindowState? activeWindow = state.activeWindow;
+        final TerminalTabState? activeTab = activeWindow?.selectedTab;
+        final Window? activeNative = activeTab == null
+            ? null
+            : hierarchy.windowForTab(activeTab.id);
+        return 'application_active=${application.isActive} '
+            'active_panes=${activePaneIds().map((PaneId id) => id.value).toList()} '
+            'active_window=${activeWindow?.id.value ?? 0} '
+            'active_tab=${activeTab?.id.value ?? 0} '
+            'native_visible=${activeNative?.isVisible ?? false} '
+            'native_focused=${activeNative?.isFocused ?? false}';
+      },
     );
     _expectLifecycle(
       terminalInputDeliveryCount() == hierarchyActionInputBaseline,
@@ -16083,14 +16180,15 @@ keybind = command+right=pane.focus-left
         ..focusPane(location.tabId, paneId);
       reconcile();
       final _TerminalHierarchyProductPane owner = owners[paneId]!;
-      hierarchy.windowForTab(location.tabId)!
+      final Window focusedNative = hierarchy.windowForTab(location.tabId)!;
+      focusedNative
         ..show()
         ..selectTab()
         ..makeFirstResponder(owner.view);
-      await waitFor(
-        () => hasOnlyActivePane(paneId),
-        'focus projection did not isolate active pane $paneId',
-      );
+      await waitFor(() {
+        focusTerminalWindowForTesting(focusedNative);
+        return hasOnlyActivePane(paneId);
+      }, 'focus projection did not isolate active pane $paneId');
       final TerminalTextInputRouteResult keyResult = owner.textRouter.route(
         TerminalTextInputKeyEvent(
           clientId: owner.client.clientId,
@@ -16149,6 +16247,11 @@ keybind = command+right=pane.focus-left
       ..selectTab(firstWindow.id, firstTab.id)
       ..focusPane(firstTab.id, closedPaneId);
     reconcile();
+    final Window firstTabNative = hierarchy.windowForTab(firstTab.id)!;
+    await waitFor(() {
+      focusTerminalWindowForTesting(firstTabNative);
+      return hasOnlyActivePane(closedPaneId);
+    }, 'pane-close target did not become the sole active surface');
     await performMenuAction(
       TerminalActionId.closeWindow,
       keyEquivalent: 'w',
@@ -16213,6 +16316,10 @@ keybind = command+right=pane.focus-left
     retainedNativeWindow
       ..show()
       ..selectTab();
+    await waitFor(() {
+      focusTerminalWindowForTesting(retainedNativeWindow);
+      return retainedNativeWindow.isFocused;
+    }, 'retained window did not become the native close fallback target');
     final Window windowButtonTarget = hierarchy.windowForTab(
       firstWindow.selectedTabId,
     )!;
@@ -16330,6 +16437,14 @@ keybind = command+right=pane.focus-left
           hierarchy.nativeWindowCount == 1,
     );
     await _waitForAsciiMarker(sessions.values.single, prompt);
+    final TerminalWindowState reopenedWindow = state.windows.single;
+    final Window reopenedNative = hierarchy.windowForTab(
+      reopenedWindow.selectedTabId,
+    )!;
+    await waitFor(() {
+      focusTerminalWindowForTesting(reopenedNative);
+      return hasOnlyActivePane(reopenedWindow.selectedTab.focusedPaneId);
+    }, 'reopened window did not restore exactly one active terminal pane');
     stdout.writeln(
       'TERMINAL_WINDOW_CLOSE_FOCUS_TEST tabbed=true single=true '
       'deferred_focus=true empty_alive=true reopen=true',
