@@ -1761,9 +1761,19 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 }
 
 - (void)reconcileReadyAnnouncement {
-  const BOOL visible_ready = !self.rail.hidden &&
-      self.projection.due_count > 0u &&
-      (self.projection.projection_flags & (1u << 1)) != 0u;
+  DtnCardModel* first_model = self.models.firstObject;
+  DtnNoteCardView* first_card = self.cardViews.firstObject;
+  const NSRect first_visible = first_card == nil ? NSZeroRect
+                                                  : first_card.visibleRect;
+  const BOOL visible_ready = self.superview != nil && !self.rail.hidden &&
+      !self.scrollView.hidden && self.editor.hidden &&
+      self.projection.presentation_eligible != 0u &&
+      self.projection.section == DTN_SECTION_CURRENT &&
+      self.projection.editor_mode == DTN_EDITOR_INACTIVE &&
+      self.projection.due_count > 0u && first_model != nil &&
+      first_card != nil && first_model.due && !first_card.hidden &&
+      first_card.bounds.size.width > 0 && first_card.bounds.size.height > 0 &&
+      first_visible.size.width > 0 && first_visible.size.height > 0;
   if (!visible_ready) {
     self.visibleAcknowledgementEligibleGeneration = 0u;
     return;
@@ -1774,6 +1784,7 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     return;
   }
   self.lastAnnouncedGeneration = self.projection.projection_generation;
+  dtn_notify_surface(self.nativeSurface);
   ++self.accessibilityAnnouncementCount;
   NSString* announcement = self.projection.locale == 1u
       ? [NSString stringWithFormat:@"%u件のノートが準備できました",

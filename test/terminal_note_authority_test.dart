@@ -11,6 +11,7 @@ Future<void> runTerminalNoteAuthorityTests() async {
   await _testBoundedTopologyAndFocusIngress();
   await _testPromptOverflowAndSessionReplacement();
   await _testProjectionAcknowledgementAndClose();
+  await _testFifoProjectionAcknowledgement();
   await _testExpandedProjectionHardBounds();
   await _testSurfaceSemanticMutationContract();
   await _testOnReturnSurfaceMutationContract();
@@ -837,6 +838,125 @@ Future<void> _testProjectionAcknowledgementAndClose() async {
         authority.liveSurfaceCount == 0,
     'O-03 pane close invalidates the surface before durable detach and rejects '
     'a late native acknowledgement',
+  );
+  await authority.stop();
+}
+
+Future<void> _testFifoProjectionAcknowledgement() async {
+  final _FakeAuthorityStore store = _FakeAuthorityStore();
+  final TerminalNoteAuthority authority = await _startAuthority(store);
+  final TerminalNoteContextId contextId = authority.contextForPane(
+    const PaneId(1),
+  )!;
+  final _FakeNoteSurface surface = _FakeNoteSurface();
+  var projection = authority
+      .attachSurface(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        port: surface,
+      )
+      .projection!;
+  authority.observeEligibleFocus(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    isEligible: false,
+  );
+  projection = authority
+      .updateSurface(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        surfaceGeneration: projection.surfaceGeneration,
+        visibility: TerminalNoteSurfaceVisibility.collapsed,
+        foreground: false,
+        occluded: true,
+      )
+      .projection!;
+  await authority.whenIdle();
+
+  for (final (int id, String body, int event) in <(int, String, int)>[
+    (201, 'first FIFO due', 1),
+    (202, 'second FIFO due', 3),
+  ]) {
+    await _mutate(
+      authority,
+      source: 200,
+      event: event,
+      transition: _createNote(
+        contextId: contextId,
+        noteId: _noteId(id),
+        body: body,
+        timestamp: 500 + id,
+      ),
+    );
+    await _armOnReturn(
+      authority,
+      noteId: _noteId(id),
+      source: 200,
+      event: event + 1,
+      isEligible: false,
+    );
+  }
+  authority.observeEligibleFocus(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    isEligible: true,
+  );
+  authority.updateSurface(
+    sequence: authority.nextSequence(),
+    paneId: const PaneId(1),
+    surfaceGeneration: projection.surfaceGeneration,
+    visibility: TerminalNoteSurfaceVisibility.collapsed,
+    foreground: true,
+    occluded: false,
+  );
+  await authority.whenIdle();
+  projection = surface.applied.last;
+  _expect(
+    projection.dueCount == 2 &&
+        projection.cards.first.body == 'first FIFO due' &&
+        projection.cards.first.due &&
+        projection.selectedToken == projection.cards.first.token,
+    'simultaneous due projection starts with the durable FIFO head',
+  );
+
+  final int commitsBeforeAcknowledgement = store.commitCount;
+  final TerminalNoteAuthorityMutationResult first = await authority
+      .acknowledgePresentation(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        surfaceGeneration: projection.surfaceGeneration,
+        projectionGeneration: projection.projectionGeneration,
+        cardToken: projection.cards.first.token,
+        visiblyLaidOut: true,
+      );
+  projection = surface.applied.last;
+  _expect(
+    first.disposition == TerminalNoteAuthorityMutationDisposition.committed &&
+        store.commitCount == commitsBeforeAcknowledgement + 1 &&
+        projection.dueCount == 1 &&
+        projection.cards.first.body == 'second FIFO due' &&
+        projection.cards.first.due &&
+        projection.selectedToken == projection.cards.first.token,
+    'one acknowledgement commit republishes only the next FIFO due as first',
+  );
+
+  final TerminalNoteAuthorityMutationResult second = await authority
+      .acknowledgePresentation(
+        sequence: authority.nextSequence(),
+        paneId: const PaneId(1),
+        surfaceGeneration: projection.surfaceGeneration,
+        projectionGeneration: projection.projectionGeneration,
+        cardToken: projection.cards.first.token,
+        visiblyLaidOut: true,
+      );
+  projection = surface.applied.last;
+  _expect(
+    second.disposition == TerminalNoteAuthorityMutationDisposition.committed &&
+        store.commitCount == commitsBeforeAcknowledgement + 2 &&
+        projection.dueCount == 0 &&
+        authority.document.snapshot.deliveryFor(_noteId(201)) == null &&
+        authority.document.snapshot.deliveryFor(_noteId(202)) == null,
+    'a separate projection and commit consumes the second FIFO due',
   );
   await authority.stop();
 }

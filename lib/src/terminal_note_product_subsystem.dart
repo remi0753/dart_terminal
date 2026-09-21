@@ -962,10 +962,7 @@ final class TerminalNoteProductSubsystem
       );
     }
     if (intent == null) {
-      return TerminalNoteProductTopologyResult(
-        TerminalNoteProductTopologyDisposition.noChange,
-        surfaceGeneration: surface.surfaceGeneration,
-      );
+      return _acknowledgeVisibleDue(paneId: paneId, surface: surface);
     }
 
     final bool onReturnIntent =
@@ -1197,6 +1194,160 @@ final class TerminalNoteProductSubsystem
     );
   }
 
+  Future<TerminalNoteProductTopologyResult> _acknowledgeVisibleDue({
+    required PaneId paneId,
+    required _TerminalNoteProductSurface surface,
+  }) async {
+    final TerminalNoteSurfaceProjection? authorityProjection =
+        surface.adapter.lastAuthorityProjection;
+    final TerminalNotesProjection? nativeProjection =
+        surface.adapter.lastNativeProjection;
+    if (!_configuration.onReturnEnabled ||
+        authorityProjection == null ||
+        nativeProjection == null) {
+      return _noSurfaceChange(surface);
+    }
+
+    final TerminalNotesNativeSnapshot nativeSnapshot;
+    final TerminalNotesNativePresentation nativePresentation;
+    try {
+      nativeSnapshot = surface.adapter.snapshot;
+      nativePresentation = surface.adapter.presentation;
+    } on Object {
+      await _retireFaultedSurface(paneId);
+      return const TerminalNoteProductTopologyResult(
+        TerminalNoteProductTopologyDisposition.nativeUnavailable,
+      );
+    }
+
+    final bool exactProjection =
+        authorityProjection.paneId == paneId &&
+        authorityProjection.surfaceGeneration == surface.surfaceGeneration &&
+        authorityProjection.visibility ==
+            TerminalNoteSurfaceVisibility.expanded &&
+        authorityProjection.presentationEligible &&
+        authorityProjection.section == TerminalNoteCollectionSection.current &&
+        authorityProjection.editorMode == TerminalNoteEditorMode.inactive &&
+        authorityProjection.dueCount > 0 &&
+        authorityProjection.cards.isNotEmpty &&
+        authorityProjection.cards.first.due &&
+        nativeProjection.paneId == paneId.value &&
+        nativeProjection.surfaceGeneration == surface.surfaceGeneration &&
+        nativeProjection.projectionGeneration ==
+            authorityProjection.projectionGeneration &&
+        nativeProjection.storeRevision == authorityProjection.storeRevision &&
+        nativeProjection.visibility == TerminalNotesVisibility.expanded &&
+        nativeProjection.presentationEligible &&
+        nativeProjection.onReturnEnabled &&
+        nativeProjection.section == TerminalNotesCollectionSection.current &&
+        nativeProjection.editorMode == TerminalNotesEditorMode.inactive &&
+        nativeProjection.dueCount == authorityProjection.dueCount &&
+        nativeProjection.cards.isNotEmpty &&
+        nativeProjection.cards.first.due &&
+        nativeProjection.cards.first.token ==
+            authorityProjection.cards.first.token.value;
+    final bool exactNativeSnapshot =
+        nativeSnapshot.initialized &&
+        nativeSnapshot.paneId == paneId.value &&
+        nativeSnapshot.surfaceGeneration == surface.surfaceGeneration &&
+        nativeSnapshot.projectionGeneration ==
+            authorityProjection.projectionGeneration &&
+        nativeSnapshot.storeRevision == authorityProjection.storeRevision &&
+        nativeSnapshot.visibility == TerminalNotesVisibility.expanded &&
+        nativeSnapshot.presentationEligible &&
+        nativeSnapshot.onReturnEnabled &&
+        nativeSnapshot.featureState == TerminalNotesFeatureState.available &&
+        nativeSnapshot.surfaceState == TerminalNotesSurfaceState.ready &&
+        nativeSnapshot.section == TerminalNotesCollectionSection.current &&
+        nativeSnapshot.editorMode == TerminalNotesEditorMode.inactive &&
+        nativeSnapshot.draftGeneration == 0 &&
+        nativeSnapshot.dueCount == authorityProjection.dueCount &&
+        nativeSnapshot.projectedCardCount == nativeProjection.cards.length &&
+        nativeSnapshot.materializedCardCount > 0 &&
+        nativeSnapshot.materializedCardCount <=
+            nativeSnapshot.projectedCardCount &&
+        !nativeSnapshot.outstandingIntent;
+    final bool exactVisibleLayout =
+        nativePresentation.projectionGeneration ==
+            authorityProjection.projectionGeneration &&
+        nativePresentation.visibleAcknowledgementEligibleGeneration ==
+            authorityProjection.projectionGeneration &&
+        nativePresentation.railVisible &&
+        !nativePresentation.smallPane &&
+        nativePresentation.materializedCardCount > 0 &&
+        nativePresentation.materializedCardCount ==
+            nativeSnapshot.materializedCardCount &&
+        _isPositiveFiniteRect(nativePresentation.rail) &&
+        _isPositiveFiniteRect(nativePresentation.firstCard) &&
+        nativePresentation.paneWidth.isFinite &&
+        nativePresentation.paneHeight.isFinite &&
+        nativePresentation.paneWidth > 0 &&
+        nativePresentation.paneHeight > 0 &&
+        _intersectsPane(
+          nativePresentation.rail,
+          nativePresentation.paneWidth,
+          nativePresentation.paneHeight,
+        ) &&
+        _intersectsPane(
+          nativePresentation.firstCard,
+          nativePresentation.paneWidth,
+          nativePresentation.paneHeight,
+        ) &&
+        _intersects(nativePresentation.firstCard, nativePresentation.rail);
+    if (!exactProjection || !exactNativeSnapshot || !exactVisibleLayout) {
+      return _noSurfaceChange(surface);
+    }
+
+    final TerminalNoteAuthorityMutationResult acknowledged;
+    try {
+      acknowledged = await _authority.acknowledgePresentation(
+        sequence: _authority.nextSequence(),
+        paneId: paneId,
+        surfaceGeneration: surface.surfaceGeneration,
+        projectionGeneration: authorityProjection.projectionGeneration,
+        cardToken: authorityProjection.cards.first.token,
+        visiblyLaidOut: true,
+      );
+    } on Object {
+      return _unavailable();
+    }
+    return TerminalNoteProductTopologyResult(
+      _fromAuthorityMutation(acknowledged).disposition,
+      surfaceGeneration: surface.surfaceGeneration,
+    );
+  }
+
+  static TerminalNoteProductTopologyResult _noSurfaceChange(
+    _TerminalNoteProductSurface surface,
+  ) => TerminalNoteProductTopologyResult(
+    TerminalNoteProductTopologyDisposition.noChange,
+    surfaceGeneration: surface.surfaceGeneration,
+  );
+
+  static bool _isPositiveFiniteRect(TerminalNotesRect rect) =>
+      rect.x.isFinite &&
+      rect.y.isFinite &&
+      rect.width.isFinite &&
+      rect.height.isFinite &&
+      rect.width > 0 &&
+      rect.height > 0;
+
+  static bool _intersectsPane(
+    TerminalNotesRect rect,
+    double paneWidth,
+    double paneHeight,
+  ) =>
+      rect.x < paneWidth &&
+      rect.y < paneHeight &&
+      rect.x + rect.width > 0 &&
+      rect.y + rect.height > 0;
+
+  static bool _intersects(TerminalNotesRect left, TerminalNotesRect right) =>
+      left.x < right.x + right.width &&
+      left.x + left.width > right.x &&
+      left.y < right.y + right.height &&
+      left.y + left.height > right.y;
+
   Future<TerminalNoteProductTopologyResult> _completeNativeIntent({
     required PaneId paneId,
     required _TerminalNoteProductSurface surface,
@@ -1228,10 +1379,34 @@ final class TerminalNoteProductSubsystem
         TerminalNoteProductTopologyDisposition.nativeUnavailable,
       );
     }
+    _scheduleVisibleAcknowledgementRecheck(paneId, surface);
     return TerminalNoteProductTopologyResult(
       topologyDisposition,
       surfaceGeneration: surface.surfaceGeneration,
     );
+  }
+
+  void _scheduleVisibleAcknowledgementRecheck(
+    PaneId paneId,
+    _TerminalNoteProductSurface surface,
+  ) {
+    final TerminalNoteSurfaceProjection? projection =
+        surface.adapter.lastAuthorityProjection;
+    if (!_configuration.onReturnEnabled ||
+        !surface.hostAttached ||
+        projection == null ||
+        projection.dueCount == 0) {
+      return;
+    }
+    final TerminalNoteProductSurfaceEventHandler? handler =
+        _surfaceEventHandler;
+    if (handler == null) return;
+    try {
+      handler(paneId);
+    } on Object {
+      // The product result is already returned to native ownership. A failed
+      // optional recheck cannot invalidate that completed intent.
+    }
   }
 
   Future<void> _retireFaultedSurface(PaneId paneId) async {

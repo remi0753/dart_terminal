@@ -11,6 +11,7 @@ Future<void> main() => runTerminalNoteProductSubsystemTests();
 Future<void> runTerminalNoteProductSubsystemTests() async {
   await _testProductionAuthorityAndTopologyLifecycle();
   await _testOnReturnProductIntentBridge();
+  await _testVisibleOnReturnAcknowledgement();
   await _testOrderedShutdownAndExactContextRestart();
   await _testStartupFailureStaysContentFree();
 }
@@ -1559,6 +1560,320 @@ Future<void> _testOnReturnProductIntentBridge() async {
   }
 }
 
+Future<void> _testVisibleOnReturnAcknowledgement() async {
+  final Directory temporary = await Directory.systemTemp.createTemp(
+    'dart-terminal-note-visible-ack-',
+  );
+  final Directory root = Directory(await temporary.resolveSymbolicLinks());
+  TerminalNoteProductSubsystem? subsystem;
+  try {
+    final _FakeProductNativeChannel channel = _FakeProductNativeChannel(
+      nextAttachment: TerminalNotesAttachDisposition.attached,
+    );
+    final List<String> copiedBodies = <String>[];
+    final TerminalNoteSubsystemStartResult started =
+        await TerminalNoteProductSubsystem.start(
+          configuration: const TerminalNoteFeatureConfiguration(
+            notes: true,
+            notesOnReturn: true,
+            notesNextPrompt: false,
+            fontSize: 15,
+          ),
+          environment: <String, String>{'XDG_STATE_HOME': root.path},
+          authorityGeneration: 303,
+          restoration: null,
+          initialPaneIdsInTraversalOrder: const <PaneId>[PaneId(1)],
+          ensureQuickTerminalContext: false,
+          updatedAtUtcMicros: 6200,
+          copyEffect: (String body) {
+            copiedBodies.add(body);
+            return true;
+          },
+          exportDestinationChooser: (_) => null,
+          initializeNativeCapability: () {},
+          surfaceFactory: () => channel,
+          clock: () => 6201,
+        );
+    subsystem = started.runtime! as TerminalNoteProductSubsystem;
+    var scheduledAcknowledgementRechecks = 0;
+    subsystem.setSurfaceEventHandler((PaneId paneId) {
+      if (paneId == const PaneId(1)) scheduledAcknowledgementRechecks++;
+    });
+    await subsystem.attachSurface(
+      paneId: const PaneId(1),
+      configuration: _surfaceConfiguration(
+        handle: 63,
+        visibility: TerminalNoteSurfaceVisibility.expanded,
+        foreground: true,
+        occluded: false,
+      ),
+    );
+
+    Future<void> createOnReturn(String body, int firstEvent) async {
+      var projection = channel.projections.last;
+      channel.intents.add(
+        _nativeIntent(
+          projection,
+          eventGeneration: firstEvent,
+          kind: TerminalNotesIntentKind.beginCreate,
+        ),
+      );
+      await subsystem!.pumpSurfaceIntent(const PaneId(1));
+      projection = channel.projections.last;
+      channel.intents.add(
+        _nativeIntent(
+          projection,
+          eventGeneration: firstEvent + 1,
+          kind: TerminalNotesIntentKind.saveOnReturn,
+          color: TerminalNotesColor.yellow,
+          body: body,
+        ),
+      );
+      await subsystem!.pumpSurfaceIntent(const PaneId(1));
+    }
+
+    await createOnReturn('first visible FIFO', 1);
+    await createOnReturn('second visible FIFO', 3);
+    await subsystem.updateSurface(
+      paneId: const PaneId(1),
+      configuration: _surfaceConfiguration(
+        handle: 63,
+        visibility: TerminalNoteSurfaceVisibility.collapsed,
+        foreground: false,
+        occluded: true,
+      ),
+    );
+    await _waitForNativeProjection(
+      channel,
+      (TerminalNotesProjection candidate) =>
+          candidate.cards.length == 2 &&
+          candidate.cards.every(
+            (TerminalNotesCard card) =>
+                card.triggerPhase ==
+                TerminalNotesTriggerPhase.onReturnArmedAway,
+          ),
+    );
+    await subsystem.updateSurface(
+      paneId: const PaneId(1),
+      configuration: _surfaceConfiguration(
+        handle: 63,
+        visibility: TerminalNoteSurfaceVisibility.collapsed,
+        foreground: true,
+        occluded: false,
+      ),
+    );
+    var projection = await _waitForNativeProjection(
+      channel,
+      (TerminalNotesProjection candidate) =>
+          candidate.presentationEligible &&
+          candidate.visibility == TerminalNotesVisibility.expanded &&
+          candidate.dueCount == 2 &&
+          candidate.cards.length == 2 &&
+          candidate.cards.first.due,
+    );
+    final List<String> fifoBodies = projection.cards
+        .map((TerminalNotesCard card) => card.body)
+        .toList(growable: false);
+    _expect(
+      fifoBodies.toSet().containsAll(<String>{
+            'first visible FIFO',
+            'second visible FIFO',
+          }) &&
+          fifoBodies.length == 2,
+      'simultaneous product due exposes both notes in durable FIFO order',
+    );
+
+    final BigInt dueRevision = projection.storeRevision;
+    await subsystem.updateSurface(
+      paneId: const PaneId(1),
+      configuration: _surfaceConfiguration(
+        handle: 63,
+        visibility: TerminalNoteSurfaceVisibility.expanded,
+        foreground: false,
+        occluded: false,
+      ),
+    );
+    final TerminalNoteProductTopologyResult background = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    projection = channel.projections.last;
+    _expect(
+      background.disposition ==
+              TerminalNoteProductTopologyDisposition.noChange &&
+          !projection.presentationEligible &&
+          projection.storeRevision == dueRevision &&
+          projection.dueCount == 2,
+      'background layout cannot consume a due delivery',
+    );
+
+    await subsystem.updateSurface(
+      paneId: const PaneId(1),
+      configuration: _surfaceConfiguration(
+        handle: 63,
+        visibility: TerminalNoteSurfaceVisibility.collapsed,
+        foreground: true,
+        occluded: false,
+      ),
+    );
+    projection = await _waitForNativeProjection(
+      channel,
+      (TerminalNotesProjection candidate) =>
+          candidate.presentationEligible &&
+          candidate.dueCount == 2 &&
+          candidate.cards.first.due,
+    );
+
+    await subsystem.updateSurface(
+      paneId: const PaneId(1),
+      configuration: _surfaceConfiguration(
+        handle: 63,
+        visibility: TerminalNoteSurfaceVisibility.expanded,
+        foreground: true,
+        occluded: true,
+      ),
+    );
+    final TerminalNoteProductTopologyResult occluded = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    _expect(
+      occluded.disposition == TerminalNoteProductTopologyDisposition.noChange &&
+          channel.projections.last.storeRevision == dueRevision &&
+          channel.projections.last.dueCount == 2,
+      'occluded layout cannot consume a due delivery',
+    );
+    await subsystem.updateSurface(
+      paneId: const PaneId(1),
+      configuration: _surfaceConfiguration(
+        handle: 63,
+        visibility: TerminalNoteSurfaceVisibility.collapsed,
+        foreground: true,
+        occluded: false,
+      ),
+    );
+    projection = await _waitForNativeProjection(
+      channel,
+      (TerminalNotesProjection candidate) =>
+          candidate.presentationEligible &&
+          candidate.dueCount == 2 &&
+          candidate.cards.first.due,
+    );
+
+    channel.smallPane = true;
+    final TerminalNoteProductTopologyResult small = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    channel.smallPane = false;
+    channel.presentationProjectionGeneration =
+        projection.projectionGeneration - 1;
+    final TerminalNoteProductTopologyResult stale = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    channel.presentationProjectionGeneration = null;
+    channel.firstCard = const TerminalNotesRect(
+      x: 480,
+      y: 74,
+      width: 0,
+      height: 88,
+    );
+    final TerminalNoteProductTopologyResult zeroGeometry = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    channel.firstCard = const TerminalNotesRect(
+      x: -1000,
+      y: -1000,
+      width: 284,
+      height: 88,
+    );
+    final TerminalNoteProductTopologyResult outsideGeometry = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    channel.firstCard = null;
+    channel.railVisible = false;
+    final TerminalNoteProductTopologyResult hiddenRail = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    channel.railVisible = true;
+    projection = channel.projections.last;
+    _expect(
+      small.disposition == TerminalNoteProductTopologyDisposition.noChange &&
+          stale.disposition ==
+              TerminalNoteProductTopologyDisposition.noChange &&
+          zeroGeometry.disposition ==
+              TerminalNoteProductTopologyDisposition.noChange &&
+          outsideGeometry.disposition ==
+              TerminalNoteProductTopologyDisposition.noChange &&
+          hiddenRail.disposition ==
+              TerminalNoteProductTopologyDisposition.noChange &&
+          projection.storeRevision == dueRevision &&
+          projection.dueCount == 2,
+      'small, stale, invalid-geometry, and hidden-rail wakes consume nothing',
+    );
+
+    final int resultsBeforeCopy = channel.results.length;
+    channel.intents.add(
+      _nativeIntent(
+        projection,
+        eventGeneration: 5,
+        kind: TerminalNotesIntentKind.copy,
+        cardToken: projection.cards.first.token,
+        body: projection.cards.first.body,
+      ),
+    );
+    final TerminalNoteProductTopologyResult copied = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    projection = channel.projections.last;
+    _expect(
+      copied.isAccepted &&
+          copiedBodies.single == fifoBodies.first &&
+          channel.results.length == resultsBeforeCopy + 1 &&
+          scheduledAcknowledgementRechecks == 1 &&
+          projection.storeRevision == dueRevision &&
+          projection.dueCount == 2,
+      'pending user intent wins over an otherwise eligible visible ack',
+    );
+
+    final int firstAcknowledgedGeneration = projection.projectionGeneration;
+    final int nativeResultsBeforeAck = channel.results.length;
+    final TerminalNoteProductTopologyResult firstAcknowledged = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    projection = channel.projections.last;
+    _expect(
+      firstAcknowledged.disposition ==
+              TerminalNoteProductTopologyDisposition.applied &&
+          projection.storeRevision == dueRevision + BigInt.one &&
+          projection.projectionGeneration > firstAcknowledgedGeneration &&
+          projection.dueCount == 1 &&
+          projection.cards.first.body == fifoBodies[1] &&
+          projection.cards.first.due &&
+          channel.results.length == nativeResultsBeforeAck,
+      'one visible wake commits only one due and republishes the next FIFO head',
+    );
+
+    channel.presentationProjectionGeneration = firstAcknowledgedGeneration;
+    channel.visibleAcknowledgementEligibleGeneration =
+        firstAcknowledgedGeneration;
+    final TerminalNoteProductTopologyResult duplicateOldWake = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    channel.presentationProjectionGeneration = null;
+    channel.visibleAcknowledgementEligibleGeneration = null;
+    projection = channel.projections.last;
+    _expect(
+      duplicateOldWake.disposition ==
+              TerminalNoteProductTopologyDisposition.noChange &&
+          projection.storeRevision == dueRevision + BigInt.one &&
+          projection.dueCount == 1,
+      'a duplicate wake for the old generation cannot consume the next due',
+    );
+
+    final TerminalNoteProductTopologyResult secondAcknowledged = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    projection = channel.projections.last;
+    _expect(
+      secondAcknowledged.disposition ==
+              TerminalNoteProductTopologyDisposition.applied &&
+          projection.storeRevision == dueRevision + BigInt.from(2) &&
+          projection.dueCount == 0,
+      'the next projection wake commits the second due separately',
+    );
+  } finally {
+    if (subsystem != null && !subsystem.isStopped) await subsystem.shutdown();
+    if (temporary.existsSync()) temporary.deleteSync(recursive: true);
+  }
+}
+
 Future<void> _testStartupFailureStaysContentFree() async {
   final int productBaseline =
       TerminalNoteProductSubsystem.debugLiveProductSubsystemCount;
@@ -1691,6 +2006,12 @@ final class _FakeProductNativeChannel
   int discardConfirmationCount = 0;
   bool editorDirty = false;
   bool confirmingDiscard = false;
+  bool smallPane = false;
+  bool railVisible = true;
+  int? snapshotProjectionGeneration;
+  int? presentationProjectionGeneration;
+  int? visibleAcknowledgementEligibleGeneration;
+  TerminalNotesRect? firstCard;
   void Function()? notificationHandler;
   final List<TerminalNotesNativeFocusTarget> focusTargets =
       <TerminalNotesNativeFocusTarget>[];
@@ -1701,7 +2022,8 @@ final class _FakeProductNativeChannel
     return TerminalNotesNativeSnapshot(
       paneId: projection.paneId,
       surfaceGeneration: projection.surfaceGeneration,
-      projectionGeneration: projection.projectionGeneration,
+      projectionGeneration:
+          snapshotProjectionGeneration ?? projection.projectionGeneration,
       storeRevision: projection.storeRevision,
       acceptedProjectionCount: projections.length,
       rejectedProjectionCount: 0,
@@ -1720,6 +2042,7 @@ final class _FakeProductNativeChannel
       differentiateWithoutColor: projection.differentiateWithoutColor,
       reduceMotion: projection.reduceMotion,
       systemBadgeVisible: projection.systemBadgeVisible,
+      onReturnEnabled: projection.onReturnEnabled,
       featureState: projection.featureState,
       surfaceState: projection.surfaceState,
       section: projection.section,
@@ -1744,8 +2067,17 @@ final class _FakeProductNativeChannel
     final TerminalNotesProjection projection = projections.last;
     final bool expanded =
         projection.visibility == TerminalNotesVisibility.expanded;
+    final bool visibleRail = expanded && railVisible && !smallPane;
+    final bool visibleDue =
+        visibleRail &&
+        projection.presentationEligible &&
+        projection.editorMode == TerminalNotesEditorMode.inactive &&
+        projection.dueCount > 0 &&
+        projection.cards.isNotEmpty &&
+        projection.cards.first.due;
     return TerminalNotesNativePresentation(
-      projectionGeneration: projection.projectionGeneration,
+      projectionGeneration:
+          presentationProjectionGeneration ?? projection.projectionGeneration,
       paneWidth: layout?.$1 ?? 800,
       paneHeight: layout?.$2 ?? 500,
       backingScale: layout?.$3 ?? 2,
@@ -1757,12 +2089,16 @@ final class _FakeProductNativeChannel
         height: 28,
       ),
       rail: const TerminalNotesRect(x: 468, y: 12, width: 320, height: 476),
-      firstCard: const TerminalNotesRect(x: 480, y: 74, width: 284, height: 88),
-      flags: expanded ? 2 : 1,
+      firstCard:
+          firstCard ??
+          const TerminalNotesRect(x: 480, y: 74, width: 284, height: 88),
+      flags: (visibleRail ? 2 : 1) | (smallPane ? 4 : 0),
       materializedCardCount: projection.cards.length,
       accessibilityNodeCount: 1,
       accessibilityBodyCount: projection.cards.length,
-      visibleAcknowledgementEligibleGeneration: projection.projectionGeneration,
+      visibleAcknowledgementEligibleGeneration:
+          visibleAcknowledgementEligibleGeneration ??
+          (visibleDue ? projection.projectionGeneration : 0),
       accessibilityAnnouncementCount: 0,
       animationMilliseconds: 0,
       bodyFontMilliPoints: projection.bodyFontMilliPoints,

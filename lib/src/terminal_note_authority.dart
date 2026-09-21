@@ -1552,7 +1552,13 @@ final class TerminalNoteAuthority {
         projection == null ||
         surface.generation != surfaceGeneration ||
         projection.projectionGeneration != projectionGeneration ||
+        projection.visibility != TerminalNoteSurfaceVisibility.expanded ||
         !projection.presentationEligible ||
+        projection.section != TerminalNoteCollectionSection.current ||
+        projection.editorMode != TerminalNoteEditorMode.inactive ||
+        projection.cards.isEmpty ||
+        projection.cards.first.token != cardToken ||
+        !projection.cards.first.due ||
         !visiblyLaidOut) {
       return Future<TerminalNoteAuthorityMutationResult>.value(
         _result(TerminalNoteAuthorityMutationDisposition.stale),
@@ -1582,6 +1588,11 @@ final class TerminalNoteAuthority {
               expectedStoreRevision: snapshot.storeRevision,
             ),
           ),
+      onBeforePublication: () => _selectNextDueAfterAcknowledgement(
+        paneId: paneId,
+        surfaceGeneration: surfaceGeneration,
+        acknowledgedProjectionGeneration: projectionGeneration,
+      ),
     );
   }
 
@@ -2375,6 +2386,46 @@ final class TerminalNoteAuthority {
       ..pendingAutomaticPresentationVisit = visit;
   }
 
+  void _selectNextDueAfterAcknowledgement({
+    required PaneId paneId,
+    required int surfaceGeneration,
+    required int acknowledgedProjectionGeneration,
+  }) {
+    final _LiveNotePane? pane = _livePanes[paneId];
+    final _LiveNoteSurface? surface = pane?.surface;
+    if (pane == null ||
+        pane.retired ||
+        surface == null ||
+        surface.retired ||
+        surface.generation != surfaceGeneration ||
+        surface.latest?.projectionGeneration !=
+            acknowledgedProjectionGeneration ||
+        surface.visibility != TerminalNoteSurfaceVisibility.expanded ||
+        !surface.foreground ||
+        surface.occluded ||
+        surface.editorMode != TerminalNoteEditorMode.inactive) {
+      return;
+    }
+    final TerminalNoteContextProjection projection;
+    try {
+      projection = _document.snapshot.projectionFor(pane.contextId);
+    } on Object {
+      return;
+    }
+    NoteId? nextDue;
+    for (final NoteRecord note in projection.orderedNotes) {
+      if (_document.snapshot.deliveryFor(note.id) != null) {
+        nextDue = note.id;
+        break;
+      }
+    }
+    if (nextDue == null) return;
+    surface
+      ..section = TerminalNoteCollectionSection.current
+      ..pageStart = 0
+      ..selectedNoteId = nextDue;
+  }
+
   Future<void> _disposeSurface(_LiveNoteSurface surface) async {
     if (surface.retired) return;
     _sourceEventHighWatermarks.remove(surface.intentSourceGeneration);
@@ -2431,12 +2482,14 @@ final class TerminalNoteAuthority {
 
   Future<TerminalNoteAuthorityMutationResult> _enqueueStructuralMutation({
     required TerminalNoteAuthorityTransition transition,
+    void Function()? onBeforePublication,
     void Function(TerminalNoteAuthorityMutationResult result)? onResult,
   }) {
     final _PendingAuthorityMutation pending = _PendingAuthorityMutation(
       transition: transition,
       bodyUtf8Bytes: 0,
       countsTowardUserIntentLimit: false,
+      onBeforePublication: onBeforePublication,
       onResult: onResult,
     );
     _enqueue(pending);

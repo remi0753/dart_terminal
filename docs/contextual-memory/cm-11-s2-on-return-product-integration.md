@@ -301,3 +301,86 @@ shutdown-awayは後続サブタスクの順序どおり未実装である。
 
 第2サブタスクの未検証事項と阻害要因はない。Visible acknowledgement、shutdown-away、crash boundaryは
 後続サブタスクの順序どおり変更していない。
+
+## 2026-09-21: 第3サブタスク着手
+
+- ROADMAPを再確認し、CM-11の先頭未完了が「visible acknowledgement、shutdown-away、crash境界を接続する」
+  であることを確認した。
+- 目的は、actual native layoutを唯一のdelivery consume境界にし、application終了時のarmed-hereをawayとして
+  durable保存し、commit/ack前後のfaultでもat-least-once規則を崩さないことである。
+- 対象はnativeのcontent-free visible eligibility、productのone-intent-or-one-ack pump、authorityの既存generation/token
+  validation、ordered shutdown candidate、restart/fault testである。S2 runtime matrix、alternate-screen/TUI、配布版の
+  named aggregateは次のROADMAP項目で扱う。
+- 実装範囲がnative layout、product pump、durable shutdown、worker faultへまたがるため、次の順序へ分割した。
+  1. Actual visible layout wake-upからfirst due一件だけをFIFO acknowledgementする。Background、occluded、small、
+     stale、duplicateではconsume 0とする。
+  2. Ordered shutdown candidateでretained/restorable contextのarmed-hereだけをawayへ遷移し、restart後の最初の
+     eligible observationでdeliveryする。
+  3. Commit前後、ack前後のworker fault/crash vectorを固定し、親項目のfocused/full validationを完了する。
+- 各子項目を個別に検証・文書更新・ROADMAP更新・commitし、親項目は3件すべて完了するまで未完了とする。
+- `dart_appkit`は変更せず、Dart Terminal固有のlayout/Note acknowledgementはproduct/native Note package側に閉じる。
+
+## 2026-09-21: actual visible layout wake-upとsingle FIFO acknowledgement
+
+### 実装と境界
+
+- Native surfaceは、host viewへ合成済み、expanded Current rail、presentation eligible、editor inactive、small-paneではない、
+  first cardがdueかつ実際のclip内へ正の面積で見えている、という条件を満たす新しいprojection generationだけを
+  `visibleAcknowledgementEligibleGeneration`へ公開する。同じgenerationのlayout反復、background、occluded、collapsed、
+  small-pane、editor、Detachedでは0を返し、既存scalar surface callbackも発行しない。
+- Visible wakeはaccessibility用`readyCue` presentation flagへ依存させない。Applicationが注入する通常presentationでは
+  `readyCue=false`が既定であり、durable `due`とactual layoutがack資格の正本である。Generation単位の
+  `lastAnnouncedGeneration`をscalar wakeとVoiceOver announcementの共通dedup境界にした。
+- Product pumpは必ずnative user intentを先に一件だけtakeする。Intentがない場合だけ、authority projection、adapterが保持する
+  native projection、content-free native snapshot、presentation snapshotを照合する。Pane/surface/projection generation、store
+  revision、expanded/Current/editor inactive、feature/surface ready、On Return enablement、first due token、materialized count、rail/small
+  flags、first-card/rail/pane intersectionの全条件が一致した場合だけauthorityへ一件のackを渡す。不一致は`noChange`で
+  deliveryを保持し、native intent resultは生成しない。
+- `Copy`のように新projectionを作らないuser intentがvisible wakeと競合すると、同generationのnative wakeはdedup済みになる。
+  そのためintent resultをnativeへ返した後、dueが残る場合だけproduct event handlerへ一回の後続checkをscheduleする。
+  Coordinatorの既存pane単位microtask coalescingを使い、現在のpump内でackを連続実行しない。
+- Authority acknowledgementはvisible projection内の任意cardではなく、Current sectionのfirst due card tokenだけを受理する。
+  Commit成功後、同じsurface/projectionがまだforeground visibleなら、次のdurable FIFO dueをpublication前にCurrent先頭へ選択する。
+  これにより一回のwake/commitで一件だけ消費し、次dueは新しいprojection generationと別wakeで処理する。Concurrent duplicate
+  token、late surface、visibility/editor変化は既存stale/duplicate境界でconsumeしない。
+- 変更は`dart_terminal`のauthority/productとproduct-owned Notes native packageに限定した。`dart_appkit`へNote、delivery、
+  acknowledgement、product schedulerを追加していない。
+
+### 検討結果と実装中の判明事項
+
+- Rail表示時に全dueを一括ackする案はviewport外のfalse consumeと同期disk commit loopを生むため不採用とした。
+  Native actual visibilityとproduct exact snapshotを二重に照合し、first card一件だけを受理する。
+- `readyCue` bitをwake条件に流用する案はproduction既定値がfalseでdeliveryを永久に保持するため不採用とした。Ready表示の装飾値と
+  durable delivery stateを分離し、native testも`readyCue=false`のvisible dueでwakeするfixtureへ変更した。
+- User intent処理後に同じpumpでackまで行う案は、UI mutationとdelivery commitを一つのevent turnへ連結するため不採用とした。
+  一回だけ後続eventをscheduleし、native projection wakeと同じcoalescing境界へ戻す。
+- Product testの最初の試行では、同一return transactionでdueになった2件を作成順のbody labelで期待した。しかし同一transactionの
+  tie-breakはopaque Note IDであり、作成順は契約ではない。Actual first projectionのDeliverySequence順を基準に、first ack後も
+  その次のcardが先頭になることを検証する形へ修正した。
+- Sandbox内のnative focused testはMetal device/cache accessを得られずrenderer composition fixtureが連鎖失敗した。同一binaryを
+  通常のmacOS権限で実行するとpassし、`make -B`後のhashも同一だったため、Notes logicまたは増分artifactの不具合ではなく
+  sandbox制約と確認した。Native sanitizerも同じcache拒否後に通常権限で再実行してpassした。
+
+### 検証
+
+- `dart run test/terminal_note_authority_test.dart`: pass。First due限定、2件dueの別commit、ack後の次FIFO先頭選択、delivery 0までの
+  generation更新を確認した。
+- `dart run test/terminal_note_product_subsystem_test.dart`: pass。Intent優先と後続check、background、occluded、small-pane、stale
+  generation、zero/outside geometry、hidden rail、duplicate old wakeのconsume 0、2件dueのone-per-pump commitを確認した。
+- `dart run test/terminal_note_native_adapter_test.dart`、
+  `dart run test/terminal_note_application_coordinator_test.dart`: pass。Projection変換とscalar wake coalescing/focus ownershipに回帰なし。
+- `make terminal-notes-native-test`: pass（通常macOS権限）。`readyCue=false`、small→visible layoutでwake 1、同generation relayout 0、
+  hidden due 0、notification ID一致をactual AppKit viewで確認した。
+- `make terminal-notes-dart-test`: pass。Package format/analyze、codec、native asset hookが通過した。
+- `make product-native-sanitizer`: pass。
+  `PRODUCT_NATIVE_SANITIZER_PASS suites=5 artifacts=11 asan_artifacts=11 ubsan_artifacts=9 architecture=arm64`。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: pass。383 Dart filesのformat、root analyze、全native/package/root、
+  Developer JIT/Release AOT host acceptance、privacy/restoration/shell/distributionを含む全gateが通過した。
+- 隣接`dart_appkit`で`CI=true DART_SUPPRESS_ANALYTICS=true make test`: pass。
+  `GENERIC_REPOSITORY_AUDIT_PASS paths=148 text_files=147`。実行前から存在する
+  `docs/BUILDING_DART_ENGINE.md`、`scripts/bootstrap_dart_engine.sh`、`scripts/build_dart_engine.sh`の変更だけが残り、
+  本サブタスクは編集していない。
+- `dart analyze`: pass、issue 0。`git diff --check`: pass。
+
+本子項目の未検証事項と阻害要因はない。Shutdown-awayとrestart delivery、commit/ack crash vectorは次のROADMAP子項目として
+未実装のまま保持する。

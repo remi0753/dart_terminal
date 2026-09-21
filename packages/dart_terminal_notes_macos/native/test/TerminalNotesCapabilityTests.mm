@@ -292,7 +292,10 @@ int main(int argc, const char* argv[]) {
       "process-lifetime scalar notification callback is immutable");
   ok &= expect(dtn_debug_live_surfaces() == 0u, "initial owner count");
   DtnSurface* surface = dtn_surface_create();
-  ok &= expect(surface != nullptr, "surface creation");
+  ok &= expect(surface != nullptr &&
+                   dtn_surface_set_notification_id(surface, 101u) ==
+                       DTN_STATUS_OK,
+               "surface creation");
   ok &= expect(dtn_debug_live_surfaces() == 1u, "live owner count");
 
   DtnSurfaceSnapshotV1 snapshot = {};
@@ -732,8 +735,12 @@ int main(int argc, const char* argv[]) {
 
   const uint64_t announcements_before =
       presentation.accessibility_announcement_count;
+  const uint64_t due_notifications_before = g_surface_notification_count;
+  ok &= expect(dtn_surface_update_layout(surface, &small_layout) ==
+                   DTN_STATUS_OK,
+               "small layout before due projection");
   std::vector<uint8_t> foreground_due =
-      packet(12u, 9u, {"first", "second", "third"}, 0x03u);
+      packet(12u, 9u, {"first", "second", "third"}, 0x01u);
   mark_cards_due(foreground_due, 3u);
   id responder_before = note_view.window.firstResponder;
   ok &= expect(dtn_surface_apply_projection(surface, foreground_due.data(),
@@ -748,7 +755,18 @@ int main(int argc, const char* argv[]) {
   ok &= expect(
       dtn_surface_presentation_snapshot(surface, &presentation) ==
               DTN_STATUS_OK &&
+          presentation.visible_acknowledgement_eligible_generation == 0u &&
+          g_surface_notification_count == due_notifications_before,
+      "small pane does not wake visible acknowledgement");
+  ok &= expect(dtn_surface_update_layout(surface, &normal_layout) ==
+                   DTN_STATUS_OK,
+               "visible due layout");
+  ok &= expect(
+      dtn_surface_presentation_snapshot(surface, &presentation) ==
+              DTN_STATUS_OK &&
           presentation.visible_acknowledgement_eligible_generation == 12u &&
+          g_surface_notification_count == due_notifications_before + 1u &&
+          g_last_surface_notification_id == 101u &&
           presentation.accessibility_announcement_count ==
               announcements_before + 1u &&
           presentation.accessibility_body_count == 3u &&
@@ -767,6 +785,8 @@ int main(int argc, const char* argv[]) {
                        DTN_STATUS_OK &&
                    dtn_surface_presentation_snapshot(surface, &presentation) ==
                        DTN_STATUS_OK &&
+                   g_surface_notification_count ==
+                       due_notifications_before + 1u &&
                    presentation.accessibility_announcement_count ==
                        due_announcement_count,
                "ready announcement is not repeated by layout");
@@ -784,6 +804,7 @@ int main(int argc, const char* argv[]) {
       dtn_surface_presentation_snapshot(surface, &presentation) ==
               DTN_STATUS_OK &&
           presentation.visible_acknowledgement_eligible_generation == 0u &&
+          g_surface_notification_count == due_notifications_before + 1u &&
           presentation.accessibility_announcement_count ==
               due_announcement_count &&
           presentation.accessibility_body_count == 0u,
