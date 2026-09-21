@@ -151,11 +151,11 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
       - [x] native-assets CLI bundleと4-phase hard gateを完了する
     - [x] actual AppKit native apply/first-visible budget fixtureを実装する
     - [x] versioned content-free evidenceと全hard gateを接続する
-  - [ ] named aggregateとarm64/x86_64/Universal auditを接続する
+  - [x] named aggregateとarm64/x86_64/Universal auditを接続する
     - [x] versioned cross-architecture Note capability/resource equality auditを実装する
-    - [ ] R0 named aggregateへfull gate inventoryを接続する
+    - [x] R0 named aggregateへfull gate inventoryを接続する
       - [x] exact serial inventoryとfail-closed checker contractを実装する
-      - [ ] fresh 8-gate aggregateとfinal evidence checkerを完走する
+      - [x] fresh 8-gate aggregateとfinal evidence checkerを完走する
   - [ ] manual IME/keyboard/VoiceOver/appearance/TUI checklistとR0 stage decisionを完了する
 - [ ] CM-13 R1 internal S1/S2 opt-inを完了する
 - [ ] CM-14 R2 public S1/S2 opt-inを完了する

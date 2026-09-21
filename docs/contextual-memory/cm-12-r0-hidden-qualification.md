@@ -1392,3 +1392,33 @@ new window、全pane巡回、close fallback、windowless reopenに同じ契約�
   53,187 us／primitive p95 19,925 usだった。
 - `dart_appkit`にはcode、API、test、dart_terminal固有概念を追加していない。隣接repositoryの既存user変更3件は変更もstageもしていない。失敗したfresh
   aggregateが生成したbudget evidenceは本修正commitから除外し、次のfresh aggregateでgate 1から再生成・判定する。
+
+### Fresh named aggregateの完了結果
+
+User-actions foreground readiness修正commit後、
+`CI=true DART_SUPPRESS_ANALYTICS=true make RUNTIME_ARCH=arm64 contextual-memory-r0-qualification`をretry wrapperなしでgate 1から実行した。
+Exact serial inventoryはgate 1〜8を順番どおり完走し、後続gateへの到達を前段passに依存させるfail-fast契約を維持した。
+
+- Gate 1のversioned budget evidenceはcombined first-visible p95 19,402 us／100,000 us、periodic timer 0、display link 0、request timeout
+  timer 1、content-freeでpassした。Dart projection p95は4,780 us、native apply p95は5,174 us、native first-visible p95は14,622 usだった。
+- Gate 2のcross-architecture evidenceは4 bundles、21 resources、1,388,080 bytes、8 Note images、arm64／x86_64／Universal、sentinel 0、
+  absolute path 0、content-freeでpassした。
+- Gate 3のNotes acceptanceはwindow interaction Developer JIT 2,400 ms／Release AOT 995 msを含め両runtimeでpassした。Gate 4のS1は
+  1,305／504 ms、gate 5のS2は1,306／533 msでpassし、いずれも`dart_appkit=generic`だった。
+- Gate 6のsanitizer／fuzz／faultはnative suites 5、artifacts 11、fuzz executions 1,296、fault boundaries 4、runtime modes 2でpassした。
+  Rootは393 files、format 0、analyze issue 0、`dart_terminal tests passed`。PTY large pipelineはtotal 33／retained 32／p95 242 us、
+  Note storeはcommit p95 47,202 us／primitive p95 18,014 usだった。
+- Gate 7はsource auditに続き、standard smoke 1,956／1,437 ms、display 11,467／10,088 ms、hierarchy 58,876／65,538 ms、
+  bounded reliability 7,207／6,377 ms、user actions 2,177／1,270 ms、AppleScript 3,187／2,791 ms、system automation
+  1,228／516 msをDeveloper JIT／Release AOTでpassした。残るnative content、window interaction、Quick Terminal、Secure Keyboard Entry、
+  diagnostics、configuration、theme、shell integration、desktop signals、OSC 52、restoration、S1／S2 Note、clipboard、lifecycle、traffic、
+  resource、shutdown/faultも同じfail-fast `runtime-verify`内で完走し、gate 8へ進んだ。
+- Gate 8はarm64／x86_64 thin bundleとUniversal bundleのbuild、audit、integrationを完走した。最終architecture evidenceはNote capability ABI 1、
+  resources／bytes／Universal evidence equality、thin manifest ownership、privacyの全gateをpassしている。
+- 長大なaggregate出力の末尾は実行クライアントの出力上限で切り詰められ、完了後のsessionから再取得できなかった。生成済みbudget／architecture evidenceと
+  gate 8成果物を照合したうえでfinal checkerだけを単独再実行した。Sandbox内初回はMetal hookがworkspace外Clang module cacheへ書けず停止したため
+  product failureには数えず、必要なcache権限とanalytics抑止を付けた同一checkerは次の規定行を返してstatus 0でpassした。
+  `TERMINAL_NOTE_R0_QUALIFICATION_PASS version=1 gates=8 runtime_modes=2 release_architectures=3 budget_evidence=checked architecture_evidence=checked manual_claim=false promotion_claim=false content_free=true`
+- `dart_appkit`はgenericのままで、code、API、test、dart_terminal固有概念を追加していない。これによりnamed aggregate、full gate inventory、
+  arm64／x86_64／Universal auditの自動qualification成果を完了とする。Manual claimとpromotion claimは引き続きfalseであり、CM-12の残作業は次の
+  manual IME／keyboard／VoiceOver／appearance／TUI checklistとR0 stage decisionだけである。
