@@ -2761,7 +2761,7 @@ Future<void> _runSecureKeyboardEntry(
       'DT_RUNTIME_SECURE_KEYBOARD_ENTRY_TEST': '1',
     },
     timeout: const Duration(seconds: 45),
-    activateAfterLaunch: true,
+    throughLaunchServices: true,
   );
   _expect(
     observation.status == 0,

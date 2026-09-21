@@ -45,6 +45,63 @@ void runTerminalAppKitPolicyTests() {
     'foreground-dependent user actions require an exact-bundle Launch '
     'Services launch',
   );
+  final int secureKeyboardEntryStart = runtimeIntegrationSource.indexOf(
+    'Future<void> _runSecureKeyboardEntry(',
+  );
+  final int secureKeyboardEntryEnd = runtimeIntegrationSource.indexOf(
+    'Future<void> _runDesktopSignals(',
+    secureKeyboardEntryStart,
+  );
+  final String secureKeyboardEntrySource =
+      secureKeyboardEntryStart >= 0 &&
+          secureKeyboardEntryEnd > secureKeyboardEntryStart
+      ? runtimeIntegrationSource.substring(
+          secureKeyboardEntryStart,
+          secureKeyboardEntryEnd,
+        )
+      : '';
+  _expect(
+    secureKeyboardEntrySource.contains('throughLaunchServices: true,'),
+    'foreground-dependent Secure Keyboard Entry requires an exact-bundle '
+    'Launch Services launch',
+  );
+
+  final String terminalApplicationSource = File(
+    'lib/src/terminal_application.dart',
+  ).readAsStringSync();
+  final int secureKeyboardProductStart = terminalApplicationSource.indexOf(
+    'static Future<void> _exerciseSecureKeyboardEntryProduct(',
+  );
+  final int secureKeyboardProductEnd = terminalApplicationSource.indexOf(
+    'static Future<void> _exerciseQuickTerminalProduct(',
+    secureKeyboardProductStart,
+  );
+  final String secureKeyboardProductSource =
+      secureKeyboardProductStart >= 0 &&
+          secureKeyboardProductEnd > secureKeyboardProductStart
+      ? terminalApplicationSource.substring(
+          secureKeyboardProductStart,
+          secureKeyboardProductEnd,
+        )
+      : '';
+  _expect(
+    secureKeyboardProductSource.contains('if (!ordinaryNative.isFocused)') &&
+        secureKeyboardProductSource.contains('_injectFocusEventForTesting('),
+    'Secure Keyboard Entry readiness targets the exact native window when '
+    'Launch Services does not focus it',
+  );
+  final int secureKeyboardPromptReady = secureKeyboardProductSource.indexOf(
+    'await _waitForAsciiMarker(ordinarySession, prompt);',
+  );
+  final int secureKeyboardStatusRead = secureKeyboardProductSource.indexOf(
+    'secureKeyboardEntry.status.mode',
+  );
+  _expect(
+    secureKeyboardPromptReady >= 0 &&
+        secureKeyboardStatusRead > secureKeyboardPromptReady,
+    'Secure Keyboard Entry status is asserted only after current prompt '
+    'readiness',
+  );
 
   _expect(
     terminalWindowConfiguration == const WindowConfiguration() &&

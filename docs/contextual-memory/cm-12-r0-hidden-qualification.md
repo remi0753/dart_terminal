@@ -1191,3 +1191,92 @@ event、AppKit bridge、汎用runnerは変更しない。Pane start failureは�
 - `dart_appkit`にはcode、API、test、dart_terminal固有概念を追加していない。隣接repositoryに元からあるuser変更3件は変更もstageもしていない。
 - ユーザー指示に従い、ROADMAPは個別不具合の履歴を列挙せず、完了済みのexact aggregate contractと未完了のfresh aggregateという成果単位へ整理した。
   各阻害、選択肢、修正、検証結果は本メモを正本として保持する。
+
+### Fresh named aggregate 7回目の阻害
+
+New Window active identity修正commit後、fresh 8-gate aggregateをretry wrapperなしでgate 1から再実行した。Gate 1〜6はpassし、gate 7は
+source audit、standard smoke、terminal display、native hierarchy、bounded reliability、user actions、AppleScript、system automation、native content、
+Quick Terminalまで両runtimeでpassした。その次のDeveloper JIT Secure Keyboard Entry acceptanceが
+`ordinary terminal did not become the focused secure-input target`でstatus 70となり停止した。初期statusは`application_active=false`であり、
+Release AOT Secure Keyboard Entry、残りのgate 7 vectors、gate 8、final checkerは未実行、final R0 summaryは出ていない。このaggregateは失敗後に
+再試行していない。
+
+このrunのfresh evidence／主要結果:
+
+- Budget combined first-visible p95 19,355 us／100,000 us、periodic timer／display link 0、content-free。
+- Cross-architectureは4 bundles、21 resources、1,388,080 bytes、8 Note images、sentinel／absolute path 0。
+- Notes acceptanceはwindow interaction Developer JIT 2,059 ms／Release AOT 1,006 msを含めpass。S1は1,289／495 ms、S2は
+  1,373／531 msでpassし、いずれも`dart_appkit=generic`だった。
+- Sanitizer／fuzz／faultはnative suites 5、artifacts 11、fuzz executions 1,296、fault boundaries 4、runtime modes 2でpass。Rootは393 files、
+  analyze issue 0、`dart_terminal tests passed`。PTY large pipelineはtotal 33／retained 32／p95 248 us、Note storeはcommit p95 51,710 us／
+  primitive p95 18,524 usだった。
+- Gate 7はstandard smoke 2,085／1,437 ms、display 11,470／10,071 ms、hierarchy 61,406／65,088 ms、reliability
+  7,350／6,393 ms、user actions 2,658／1,689 ms、AppleScript 3,259／2,884 ms、system automation 1,538／693 ms、native content
+  27,452／26,035 ms、Quick Terminal 1,299／3,556 msで両runtime passした。
+
+Secure Keyboard Entry fixtureはforeground/focused native windowを最初の受け入れ条件とする一方、direct executable launch後に
+`activateAfterLaunch: true`でshared bundle identifierをactivationしている。Developer JIT／Release AOT／既存appが同じ`dev.dart-terminal`を持つため、
+`open -b`は検証対象と異なるinstanceを選び得る。今回もproductの1/1/1 hierarchy、PTY、workerはreadyだが、対象windowはfocusedにならなかった。
+これはuser-actionsと既存native-contentで確認済みのexact-bundle launch境界と同型である。
+
+検討した選択肢:
+
+- AggregateまたはSecure Keyboard Entryだけのretry、timeout延長、固定sleepは対象instanceを一意にせず、fresh一発完走を証明しないため不採用。
+- Fixture内でnative window focusをsynthetic注入する、またはforeground条件を外す案は、実AppKit Secure Keyboard Entry leaseの前提を偽装するため不採用。
+- Product focus semantics、native secure-input controller、generic `dart_appkit` runnerを変更する案は、product-owned acceptance launcherの対象選択問題を
+  汎用library／製品挙動へ持ち込むため不採用。
+- Secure Keyboard Entry fixtureを、検証対象bundle絶対pathの既存bounded `open -W -n -F`経路へ変更する。Environment injection、output capture、
+  diagnostics、timeout cleanupは共通`_launch`の既存契約を使い、product codeとtimeoutは変更しない。Source policy testで当該function自身の
+  `throughLaunchServices: true`を固定し、両runtime focused acceptance、generated freshness、root suiteで検証する。
+
+ユーザー指示に従い、この個別修正はROADMAPへ追加しない。未完了の成果項目は引き続き「fresh 8-gate aggregateとfinal evidence checker完走」であり、
+修正完了後にgate 1から再実行する。
+
+### Exact-bundle launch単独でのfocused failureとreadiness方針の修正
+
+Secure Keyboard Entry fixtureを`throughLaunchServices: true`へ移し、formatter 2 files／0 changes、focused analyzer issue 0、source policy test passを
+確認した。しかしDeveloper JIT focused acceptanceは同じ初期focus assertionでstatus 70となり、Release AOTは未実行だった。Exact bundleのroot／worker／
+PTYはreadyで、initial diagnosticは`application_active=false`、`system_enabled=true`、owned falseだった。したがってbundle対象の曖昧性は除けたが、現在の
+自動検証sessionではLaunch Services起動だけでnative windowがkeyになる保証がない。
+
+既存のwindow-interactionとnative-content acceptanceは、この同じheadless／foreground readiness境界で、対象applicationがinactiveならraw application-active
+eventを、対象windowがunfocusedならそのexact native handleへのfocus eventを条件付きで注入してから製品vectorを開始する。Secure Keyboard Entryもすでに
+application-active eventは条件付き注入するが、window focusだけが欠けていた。この差により、application stateをactiveへ進めても
+`ordinaryNative.isFocused`がfalseのまま10秒待機していた。
+
+検討の結果、exact-bundle launchは維持し、同じ対象native windowがunfocusedの場合だけ既存`_injectFocusEventForTesting`でfocus readinessを補完する。
+これはfixture開始条件を他のforeground-dependent acceptanceと揃えるもので、Secure Keyboard Entry controller、native lease、system state assertion、IME／
+menu／palette／keybind／Settings／Quick Terminal／cleanup vectorは変更しない。無条件focus、fixed sleep、timeout延長、製品起動時のfocus強制、
+`dart_appkit`変更は行わない。Source policy testはSecure Keyboard Entry function内にexact-bundle launchとconditional exact-window focusの両方があることを
+固定する。
+
+### Focus readiness補完後に判明したprompt前termios race
+
+Conditional exact-window focusを追加後、formatter 3 files／1 change、focused analyzer issue 0、policy test passを確認した。Developer JIT focused
+acceptanceは初期focus条件より前の1/1/1 assertionで`Secure Keyboard Entry product did not start released`となりstatus 70、Release AOTは未実行だった。
+今回はLaunch Servicesが実際に対象をforeground化しており、initial statusはapplication active true、terminal echo off、automatic mode、desired／owned true、
+native system enabledだった。つまりfocus修正は機能し、product controllerは観測したECHO-offに対して安全側へ正しくleaseを取得していた。
+
+Fixtureはこのassertionの後でcurrent promptを待ち、実PTYへ`stty echo`を送り、marker到着後にdisabled／desired false／owned falseを明示確認する。Shell
+startup中はtermios ECHOが一時的にoffとなり得るため、prompt前からsecure stateがreleasedであるという先行assertionはcurrent PTY readinessより強く、後段の
+実echo-on assertionと重複していた。Timeout／sleep追加、controllerのautomatic acquisition抑制、initial ECHO-offを無視する案は安全契約を弱めるため不採用。
+
+初期assertionは1 window／1 tab／1 pane、native resource、session、ownerのclean hierarchyだけに限定する。Secure stateはcurrent prompt、focus readiness、
+explicit `stty echo` markerの後に既存条件で検証し、その後のreal ECHO-off automatic acquisition、manual override、IME、menu、palette、keybind、Settings、
+application lifecycle、Quick Terminal、cleanupを一切弱めない。Policy testでproduct fixture内の最初のsecure status判定がcurrent prompt待機より後にあることを固定する。
+
+### Secure Keyboard Entry readiness修正の完了結果
+
+- Final fixtureは検証対象bundle絶対pathをLaunch Servicesから起動し、current prompt到着後、必要な場合だけexact native windowへfocus eventを補完する。
+  Prompt前はclean 1/1/1 owner graphだけを確認し、secure stateはexplicit ECHO-on marker後にdisabled／desired false／owned falseとして検証する。
+- Focused formatterは3 files／0 changes、analyzerはissue 0、AppKit policy testはpassした。Policyはexact-bundle launch、conditional exact-window
+  focus、最初のsecure status assertionがcurrent prompt readinessより後であることを固定する。
+- `make RUNTIME_ARCH=arm64 runtime-secure-keyboard-entry-integration`はDeveloper JIT 3,355 ms、Release AOT 2,119 msでpassした。
+  Automatic／manual mode、real PTY echo、IME、menu、palette、keybind、Settings、application lifecycle、Quick Terminal、native lease release、2 session／
+  text client／native handle cleanupを両runtimeで完走した。
+- 正規generatorでPhase 7 AppKit acceptance、Ghostty P0/P1 gap inventory、release-candidate daily-use matrixを更新した。変更はproduct source、runtime driver、
+  それらをbindする成果物のSHA-256だけで、gap／acceptance分類に意味差分はない。
+- Root `make test`は全package／native／generated／privacy／distribution／root suiteをpassした。Rootは393 files／format 0 changes、analyze issue 0、
+  `dart_terminal tests passed`。PTY large pipelineはtotal 33／retained 32／p95 268 us、Note store acceptanceは20 runs／commit p95
+  54,378 us／primitive p95 20,578 usだった。`git diff --check`もpassした。
+- `dart_appkit`にはcode、API、test、dart_terminal固有概念を追加していない。隣接repositoryの既存user変更3件は変更もstageもしていない。

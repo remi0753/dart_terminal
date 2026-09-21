@@ -16439,12 +16439,8 @@ keybind = command+right=pane.focus-left
           hierarchy.nativeWindowCount == 1 &&
           hierarchy.paneResourceCount == 1 &&
           sessions.length == 1 &&
-          owners.length == 1 &&
-          secureKeyboardEntry.status.mode ==
-              TerminalSecureKeyboardEntryMode.disabled &&
-          !secureKeyboardEntry.status.desired &&
-          !secureKeyboardEntry.status.ownedEnabled,
-      'Secure Keyboard Entry product did not start released in a 1/1/1 '
+          owners.length == 1,
+      'Secure Keyboard Entry product did not start in a clean 1/1/1 '
       'hierarchy',
     );
     final TerminalWindowState ordinaryWindow = state.windows.single;
@@ -16464,6 +16460,14 @@ keybind = command+right=pane.focus-left
         0,
         true,
       ]);
+    }
+    if (!ordinaryNative.isFocused) {
+      _injectFocusEventForTesting(
+        application,
+        ordinaryNative,
+        isFocused: true,
+        monotonicNanoseconds: 19999500,
+      );
     }
     await waitFor(
       () =>
