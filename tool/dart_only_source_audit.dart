@@ -175,6 +175,34 @@ Future<void> main() async {
       'application process-resource facade owns a native boundary',
     );
 
+    const String systemEntropyPackagePath =
+        'packages/dart_system_entropy_macos/lib/src/system_entropy.dart';
+    final String systemEntropyPackage = await File(systemEntropyPackagePath)
+        .readAsString();
+    final String systemEntropyFacade = await File(
+      'lib/src/terminal_system_entropy.dart',
+    ).readAsString();
+    _expect(
+      tracked.contains(systemEntropyPackagePath) &&
+          systemEntropyPackage.contains("import 'dart:ffi';") &&
+          systemEntropyPackage.contains('DynamicLibrary.process()') &&
+          systemEntropyPackage.contains("'arc4random_buf'") &&
+          systemEntropyPackage.contains('maximumRequestBytes = 4096') &&
+          !systemEntropyPackage.contains('Terminal') &&
+          !systemEntropyPackage.contains('Note'),
+      'system-entropy FFI package boundary differs',
+    );
+    _expect(
+      systemEntropyFacade.contains(
+            "import 'package:dart_system_entropy_macos/"
+            "dart_system_entropy_macos.dart';",
+          ) &&
+          systemEntropyFacade.contains('MacosSystemEntropy.bytes(length)') &&
+          !systemEntropyFacade.contains("import 'dart:ffi';") &&
+          !systemEntropyFacade.contains('DynamicLibrary.'),
+      'application system-entropy facade owns a native boundary',
+    );
+
     final String terminalApplication = await File(
       'lib/src/terminal_application.dart',
     ).readAsString();
@@ -351,6 +379,7 @@ Future<void> main() async {
       'application_native_sources=0 '
       'product_package_native_sources=${productPackageNativeSources.length} '
       'process_resource_ffi_packages=1 '
+      'system_entropy_ffi_packages=1 '
       'reviewed_test_native_sources=${reviewedTestNativeSources.length} '
       'reviewed_tool_native_sources=${reviewedToolNativeSources.length}',
     );

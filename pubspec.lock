@@ -68,6 +68,13 @@ packages:
       relative: true
     source: path
     version: "0.1.0-dev.1"
+  dart_system_entropy_macos:
+    dependency: "direct main"
+    description:
+      path: "packages/dart_system_entropy_macos"
+      relative: true
+    source: path
+    version: "0.1.0-dev.1"
   dart_terminal_app_intents_macos:
     dependency: "direct main"
     description:
@@ -97,7 +104,7 @@ packages:
     source: path
     version: "0.1.0-dev.1"
   ffi:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: ffi
       sha256: "6d7fd89431262d8f3125e81b50d3847a091d846eafcd4fdb88dd06f36d705a45"

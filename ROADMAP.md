@@ -159,7 +159,7 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
       - [x] PTY sanitizerのlarge-pipeline readiness raceを除去する
       - [ ] serial 8-gate inventoryとfinal evidence checkerを完了する
         - [x] exact serial inventoryとfail-closed checker contractを実装する
-        - [ ] product-owned generic macOS entropy packageへdirect FFI boundaryを分離する
+        - [x] product-owned generic macOS entropy packageへdirect FFI boundaryを分離する
         - [ ] fresh 8-gate aggregateとfinal evidence checkerを完走する
   - [ ] manual IME/keyboard/VoiceOver/appearance/TUI checklistとR0 stage decisionを完了する
 - [ ] CM-13 R1 internal S1/S2 opt-inを完了する

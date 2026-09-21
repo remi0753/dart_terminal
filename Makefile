@@ -157,7 +157,7 @@ override PRODUCT_PERFORMANCE_MICRO_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)/pro
 override PRODUCT_PERFORMANCE_RUNTIME_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)/product-performance-runtime-result.log
 override PRODUCT_PERFORMANCE_AGGREGATE_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)/product-performance-regression-result.json
 
-.PHONY: help dependencies test process-resource-dart-test durable-file-dart-test \
+.PHONY: help dependencies test process-resource-dart-test system-entropy-dart-test durable-file-dart-test \
 	dpty-contract-check dpty-child-audit \
 	dpty-native-test dpty-dart-test \
 	terminal-renderer-contract-check terminal-renderer-native-test \
@@ -221,6 +221,7 @@ help:
 	@echo "Dart-only macOS application targets:"
 	@echo "  make test                         Format, analyze, and unit-test Dart source"
 	@echo "  make process-resource-dart-test  Test the generic macOS process sampler"
+	@echo "  make system-entropy-dart-test   Test generic bounded macOS system entropy"
 	@echo "  make durable-file-dart-test      Test generic durable macOS file primitives"
 	@echo "  make dpty-native-test             Test the product-owned PTY native asset"
 	@echo "  make dpty-dart-test               Test its Dart facade and build-hook asset"
@@ -778,6 +779,14 @@ process-resource-dart-test:
 	@cd $(PROJECT_ROOT)/packages/dart_process_resource_macos && \
 		$(DART) run test/run_tests.dart
 
+system-entropy-dart-test:
+	@cd $(PROJECT_ROOT)/packages/dart_system_entropy_macos && $(DART) pub get
+	@cd $(PROJECT_ROOT)/packages/dart_system_entropy_macos && \
+		$(DART) format --output=none --set-exit-if-changed lib test
+	@cd $(PROJECT_ROOT)/packages/dart_system_entropy_macos && $(DART) analyze
+	@cd $(PROJECT_ROOT)/packages/dart_system_entropy_macos && \
+		$(DART) run test/run_tests.dart
+
 durable-file-dart-test:
 	@cd $(PROJECT_ROOT)/packages/dart_durable_file_macos && $(DART) pub get
 	@cd $(PROJECT_ROOT)/packages/dart_durable_file_macos && \
@@ -786,7 +795,7 @@ durable-file-dart-test:
 	@cd $(PROJECT_ROOT)/packages/dart_durable_file_macos && \
 		$(DART) run test/run_tests.dart
 
-test: dependencies process-resource-dart-test durable-file-dart-test dpty-native-test dpty-dart-test terminal-renderer-native-test terminal-renderer-dart-test terminal-applescript-native-test terminal-applescript-dart-test terminal-app-intents-native-test terminal-app-intents-dart-test terminal-notes-native-test terminal-notes-dart-test terminal-notes-host-acceptance terminal-notes-capability-audit vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check terminal-localization-check terminal-diagnostics-privacy-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check ghostty-p0-p1-gap-inventory-check release-candidate-daily-use-matrix-check terminal-distribution-policy-test
+test: dependencies process-resource-dart-test system-entropy-dart-test durable-file-dart-test dpty-native-test dpty-dart-test terminal-renderer-native-test terminal-renderer-dart-test terminal-applescript-native-test terminal-applescript-dart-test terminal-app-intents-native-test terminal-app-intents-dart-test terminal-notes-native-test terminal-notes-dart-test terminal-notes-host-acceptance terminal-notes-capability-audit vt-parser-table-check terminal-parser-trace-check configuration-reference-check keybind-action-reference-check terminal-localization-check terminal-diagnostics-privacy-check phase7-appkit-acceptance-check terminal-compatibility-regression-coverage-check compatibility-inventory-check compatibility-manifest-check terminal-differential-contract-check terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check terminal-differential-acceptance-check terminal-application-matrix-contract-check terminal-application-evidence-check terminal-application-acceptance-check terminal-terminfo-check terminal-shell-integration-check ghostty-p0-p1-gap-inventory-check release-candidate-daily-use-matrix-check terminal-distribution-policy-test
 	@cd $(PROJECT_ROOT) && $(DART) format --output=none --set-exit-if-changed bin lib test tool
 	@cd $(PROJECT_ROOT) && $(DART) analyze
 	@cd $(PROJECT_ROOT) && $(DART) run test/run_tests.dart

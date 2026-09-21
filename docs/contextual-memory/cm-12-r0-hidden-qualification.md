@@ -777,3 +777,31 @@ packageへ隔離する契約を持つ。CM-10のfull `make test`はこのruntime
   を一行出した。
 - 初回fresh graphはgate 1〜6を順にpassし、gate 7 source auditで停止してgate 8／checkerを実行しなかったため、serial／fail-fast contractも
   実graphで確認した。阻害の修正と全8 gateのpassは後続2成果物で追跡する。
+
+### Generic macOS entropy package分離の実装・検証経過
+
+- `dart_system_entropy_macos` packageへ`arc4random_buf` FFI、4,096-byte hard cap、immutable copy、invalid-length rejectionを移した。
+  Packageのpublic API／README／testはapplication、Note、store、path、UIの概念を持たない。Rootの`TerminalSystemEntropy`はpackage APIへ委譲する
+  facadeだけを残し、既存production injectionと16-byte ID要求は変更していない。
+- Rootの`ffi`直接依存をgeneric packageのtransitive dependencyへ変更し、standalone format/analyze/test targetを通常`make test`へ追加した。
+  Source auditはpackageが唯一のsystem-entropy FFI ownerであることと、app facadeに`dart:ffi`／`DynamicLibrary`がないことを固定する。
+- Standalone package testはformat 0 changes、analyze issue 0で、4,096-byte境界、immutable result、invalid lengthをpassした。Root facade testと
+  focused analyzeもpassし、`runtime-source-check`はapplication native source 0、process-resource FFI package 1、system-entropy FFI package 1でpassした。
+- 正規generatorでrelease-candidate matrixを更新後に実行した最初のroot `make test`は、全package/native/generated/privacy/distribution testを
+  通過した後、root formatterが`terminal_system_entropy.dart`と`dart_only_source_audit.dart`の未整形を検出して停止した。先行focused commandは
+  `--output=none`のため書き換えを行わず差分を報告していた。製品挙動のfailureではない。正規formatterを適用し、同じfull testを先頭から再実行する。
+
+### Generic macOS entropy package分離の完了結果
+
+- 正規formatter適用後、focused formatterは2 files／0 changes、focused analyzerはissue 0。Standalone package testは
+  `DART_SYSTEM_ENTROPY_MACOS_PASS bounded=true immutable=true content_free=true`を出力し、root facade testもpassした。
+- 最終`runtime-source-check`は
+  `DART_ONLY_SOURCE_AUDIT_PASS tracked=873 application_native_sources=0 product_package_native_sources=33 process_resource_ffi_packages=1 system_entropy_ffi_packages=1 reviewed_test_native_sources=1 reviewed_tool_native_sources=2`。
+  Appの`bin/`／`lib/`にdirect FFIはなく、new packageのapplication／Note／pane／store固有語scanも0だった。
+- 正規release-candidate generatorでMakefile hashを更新した。再実行したroot `make test`は393 Dart files／0 format changes、root／package
+  analyze issue 0、new entropy package、全native/package/generated/privacy/distribution/root suiteを完走し、`dart_terminal tests passed`。
+  PTY large pipelineもtotal 33／retained 32／p95 270 usでpassした。
+- 隣接`dart_appkit`のfull `make test`はpassし、
+  `GENERIC_REPOSITORY_AUDIT_PASS paths=148 text_files=147`。Runtime builder／Universal／publisher／AppKit API／launcher／exampleもpassした。
+  既存user変更3件（`docs/BUILDING_DART_ENGINE.md`、`scripts/bootstrap_dart_engine.sh`、`scripts/build_dart_engine.sh`）は変更もstageもしていない。
+- `git diff --check`はpass。`dart_appkit`へ新API、製品名、Note型、random policyは追加していない。
