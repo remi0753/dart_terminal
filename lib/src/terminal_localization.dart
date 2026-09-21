@@ -49,6 +49,9 @@ enum TerminalActionMessageId {
   goToFileOrFolder,
   moveInDirectoryNavigator,
   focusTerminal,
+  newNote,
+  toggleNotes,
+  focusTerminalFromNotes,
   openTerminalInspector,
   moveDividerLeft,
   moveDividerRight,
@@ -839,6 +842,19 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _englishActions =
           'Focus Terminal',
           <String>['keyboard', 'input', 'return', 'escape'],
         ),
+        TerminalActionMessageId.newNote: _action('New Note…', <String>[
+          'note',
+          'memory',
+          'create',
+        ]),
+        TerminalActionMessageId.toggleNotes: _action(
+          'Show/Hide Notes',
+          <String>['notes', 'show', 'hide', 'rail'],
+        ),
+        TerminalActionMessageId.focusTerminalFromNotes: _action(
+          'Focus Terminal',
+          <String>['terminal', 'focus', 'return'],
+        ),
         TerminalActionMessageId.openTerminalInspector: _action(
           'Open Terminal Inspector',
           <String>['parser', 'diagnostics', 'state', 'debug'],
@@ -1044,6 +1060,21 @@ final Map<TerminalActionMessageId, TerminalActionMessages> _japaneseActions =
         '戻る',
         'Escape',
       ]),
+      TerminalActionMessageId.newNote: _action('新規ノート…', <String>[
+        'ノート',
+        'メモリ',
+        '作成',
+      ]),
+      TerminalActionMessageId.toggleNotes: _action('ノートを表示／非表示', <String>[
+        'ノート',
+        '表示',
+        '非表示',
+        'レール',
+      ]),
+      TerminalActionMessageId.focusTerminalFromNotes: _action(
+        'ターミナルにフォーカス',
+        <String>['ターミナル', 'フォーカス', '戻る'],
+      ),
       TerminalActionMessageId.openTerminalInspector: _action(
         'ターミナルインスペクタを開く',
         <String>['パーサー', '診断', '状態', 'デバッグ'],

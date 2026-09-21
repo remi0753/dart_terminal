@@ -93,10 +93,21 @@ Future<void> _testNonBlockingDispatchScheduler() async {
 }
 
 void _testStableStandardCatalog() {
-  final TerminalActionCatalog catalog = TerminalActionCatalog.standard();
+  final TerminalActionCatalog hiddenCatalog = TerminalActionCatalog.standard();
+  final TerminalActionCatalog catalog = TerminalActionCatalog.standard(
+    includeNotes: true,
+  );
   _expect(
     catalog.actions.length == TerminalActionId.values.length,
-    'standard catalog covers every stable application action exactly once',
+    'enabled standard catalog covers every stable application action exactly once',
+  );
+  _expect(
+    hiddenCatalog.actions.length == TerminalActionId.values.length - 3 &&
+        hiddenCatalog.actionForId(TerminalActionId.newNote) == null &&
+        hiddenCatalog.actionForId(TerminalActionId.toggleNotes) == null &&
+        hiddenCatalog.actionForId(TerminalActionId.focusTerminalFromNotes) ==
+            null,
+    'default-off Notes contribute no action, menu, or palette definition',
   );
   final Set<String> stableNames = TerminalActionId.values
       .map((TerminalActionId id) => id.stableName)
@@ -158,6 +169,9 @@ void _testStableStandardCatalog() {
           TerminalActionId.goToFileOrFolder,
           TerminalActionId.moveInDirectoryNavigator,
           TerminalActionId.focusTerminal,
+          TerminalActionId.newNote,
+          TerminalActionId.toggleNotes,
+          TerminalActionId.focusTerminalFromNotes,
           TerminalActionId.quickLook,
           TerminalActionId.togglePaneZoom,
           TerminalActionId.equalizeSplits,
@@ -205,6 +219,19 @@ void _testStableStandardCatalog() {
             .actionForId(TerminalActionId.moveInDirectoryNavigator)!
             .restoresTerminalFocusAfterInvocation &&
         catalog.actionForId(TerminalActionId.focusTerminal)!.shortcut == null &&
+        catalog.actionForId(TerminalActionId.newNote)!.shortcut!.identity ==
+            'control+command+n' &&
+        !catalog
+            .actionForId(TerminalActionId.newNote)!
+            .restoresTerminalFocusAfterInvocation &&
+        catalog.actionForId(TerminalActionId.toggleNotes)!.shortcut == null &&
+        !catalog
+            .actionForId(TerminalActionId.toggleNotes)!
+            .restoresTerminalFocusAfterInvocation &&
+        catalog
+                .actionForId(TerminalActionId.focusTerminalFromNotes)!
+                .shortcut ==
+            null &&
         catalog
                 .actionForId(TerminalActionId.toggleContextDock)!
                 .shortcut!
@@ -227,8 +254,19 @@ void _testStableStandardCatalog() {
             .restoresTerminalFocusAfterInvocation &&
         TerminalActionCatalog.standard(
               localization: TerminalLocalization.japanese,
+              includeNotes: true,
             ).actionForId(TerminalActionId.focusTerminal)!.title ==
             'ターミナルにフォーカス' &&
+        TerminalActionCatalog.standard(
+              localization: TerminalLocalization.japanese,
+              includeNotes: true,
+            ).actionForId(TerminalActionId.newNote)!.title ==
+            '新規ノート…' &&
+        TerminalActionCatalog.standard(
+              localization: TerminalLocalization.japanese,
+              includeNotes: true,
+            ).actionForId(TerminalActionId.toggleNotes)!.title ==
+            'ノートを表示／非表示' &&
         TerminalActionCatalog.standard(
               localization: TerminalLocalization.japanese,
             ).actionForId(TerminalActionId.toggleHiddenFiles)!.title ==

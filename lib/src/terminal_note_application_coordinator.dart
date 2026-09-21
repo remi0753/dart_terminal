@@ -20,6 +20,8 @@ typedef TerminalNoteApplicationErrorHandler = void Function(
 
 enum TerminalNoteApplicationPointerPhase { down, drag, up, moved, cancel }
 
+enum TerminalNoteApplicationActionKind { newNote, toggleNotes, focusTerminal }
+
 /// Content-free logical placement of one pane in the application hierarchy.
 final class TerminalNoteApplicationPaneBinding {
   const TerminalNoteApplicationPaneBinding({
@@ -193,6 +195,74 @@ final class TerminalNoteApplicationCoordinator {
 
   TerminalWindowNoteInteractionAdapter? interactionForPane(PaneId paneId) =>
       _surfaces[paneId]?.interaction;
+
+  bool notesVisibleForPane(PaneId paneId) =>
+      _runtime?.interactionSnapshotForPane(paneId)?.visibility ==
+      TerminalNoteSurfaceVisibility.expanded;
+
+  bool canPerformAction(
+    PaneId paneId,
+    TerminalNoteApplicationActionKind action,
+  ) {
+    if (_stopping) return false;
+    final TerminalNoteProductTopologyPort? runtime = _runtime;
+    final _TerminalNoteApplicationSurface? surface = _surfaces[paneId];
+    if (runtime == null || surface == null || surface.interaction.isDisposed) {
+      return false;
+    }
+    final TerminalNoteProductInteractionSnapshot? snapshot = runtime
+        .interactionSnapshotForPane(paneId);
+    return switch (action) {
+      TerminalNoteApplicationActionKind.newNote => runtime.canPerformAction(
+        paneId,
+        TerminalNoteProductActionKind.newNote,
+      ),
+      TerminalNoteApplicationActionKind.toggleNotes => runtime.canPerformAction(
+        paneId,
+        TerminalNoteProductActionKind.toggleNotes,
+      ),
+      TerminalNoteApplicationActionKind.focusTerminal =>
+        _ownsNoteInteraction(surface) &&
+            snapshot?.editorMode == TerminalNoteEditorMode.inactive &&
+            snapshot?.draftGeneration == 0 &&
+            snapshot?.editorDirty == false &&
+            snapshot?.confirmingDiscard == false,
+    };
+  }
+
+  Future<TerminalNoteProductTopologyResult> performAction(
+    PaneId paneId,
+    TerminalNoteApplicationActionKind action,
+  ) => _serialize(() async {
+    if (!canPerformAction(paneId, action)) return _unavailable;
+    final TerminalNoteProductTopologyPort runtime = _runtime!;
+    final _TerminalNoteApplicationSurface surface = _surfaces[paneId]!;
+    if (action == TerminalNoteApplicationActionKind.focusTerminal) {
+      final TerminalWindowInteractionTransferResult transfer = surface
+          .interaction
+          .requestTerminalAfterResolution();
+      return _completeFocusTransfer(surface, transfer, surface.focusTerminal)
+          ? TerminalNoteProductTopologyResult(
+              TerminalNoteProductTopologyDisposition.applied,
+              surfaceGeneration: runtime.surfaceGenerationForPane(paneId),
+            )
+          : _busy;
+    }
+    final TerminalNoteProductTopologyResult result = await runtime
+        .performAction(
+          paneId,
+          action == TerminalNoteApplicationActionKind.newNote
+              ? TerminalNoteProductActionKind.newNote
+              : TerminalNoteProductActionKind.toggleNotes,
+        );
+    if (!result.isAccepted) return result;
+    final TerminalNoteProductInteractionSnapshot? snapshot = runtime
+        .interactionSnapshotForPane(paneId);
+    if (snapshot == null || !_synchronizeInteraction(surface, snapshot)) {
+      return _busy;
+    }
+    return result;
+  });
 
   /// Routes one window pointer event without replaying Note-owned input to the
   /// terminal. Coordinates are pane-local and contain no Note content.
@@ -614,6 +684,17 @@ final class TerminalNoteApplicationCoordinator {
     }
     return surface.interaction.confirmNativeFocus(request).disposition ==
         TerminalWindowInteractionTransferDisposition.confirmed;
+  }
+
+  static bool _ownsNoteInteraction(_TerminalNoteApplicationSurface surface) {
+    final TerminalWindowInteractionSnapshot? snapshot = surface
+        .interaction
+        .authority
+        .snapshotForWindow(surface.windowId);
+    return snapshot?.owner.isNoteOwner == true &&
+        snapshot?.owner.paneId == surface.paneId &&
+        snapshot?.owner.surfaceGeneration ==
+            surface.interaction.surfaceGeneration;
   }
 
   int _takePointerEventSequence() {

@@ -5634,6 +5634,7 @@ final class TerminalApplication {
       }
       final TerminalActionCatalog catalog = TerminalActionCatalog.standard(
         localization: localization,
+        includeNotes: configurationAuthority.noteConfiguration.surfaceEnabled,
       );
       late final TerminalCommandPalettePresenter installedPalette;
       late final TerminalActionDispatcher dispatcher;
@@ -6075,6 +6076,31 @@ final class TerminalApplication {
         return TerminalUpdateFocusTarget(window: window, view: resources.view);
       }
 
+      PaneId? activeNotePaneId() =>
+          state.activeWindow?.selectedTab.focusedPaneId;
+
+      bool canPerformNoteAction(TerminalNoteApplicationActionKind action) {
+        final PaneId? paneId = activeNotePaneId();
+        return paneId != null &&
+            productResourceDisposalFuture == null &&
+            !state.isDisposed &&
+            createdNoteCoordinator.canPerformAction(paneId, action);
+      }
+
+      Future<void> performNoteAction(
+        TerminalNoteApplicationActionKind action,
+      ) async {
+        final PaneId? paneId = activeNotePaneId();
+        if (paneId == null) {
+          throw StateError('active Note surface unavailable');
+        }
+        final TerminalNoteProductTopologyResult result =
+            await createdNoteCoordinator.performAction(paneId, action);
+        if (!result.isAccepted) {
+          throw StateError('Note action unavailable');
+        }
+      }
+
       updatePresenter = TerminalUpdatePresenter(
         controller: updateController,
         focusTarget: activeUpdateTarget,
@@ -6090,6 +6116,35 @@ final class TerminalApplication {
             id: TerminalActionId.openCommandPalette,
             handler: () => installedPalette.open(),
           ),
+          if (configurationAuthority.noteConfiguration.surfaceEnabled)
+            TerminalActionRegistration(
+              id: TerminalActionId.newNote,
+              isAvailable: () => canPerformNoteAction(
+                TerminalNoteApplicationActionKind.newNote,
+              ),
+              handler: () =>
+                  performNoteAction(TerminalNoteApplicationActionKind.newNote),
+            ),
+          if (configurationAuthority.noteConfiguration.surfaceEnabled)
+            TerminalActionRegistration(
+              id: TerminalActionId.toggleNotes,
+              isAvailable: () => canPerformNoteAction(
+                TerminalNoteApplicationActionKind.toggleNotes,
+              ),
+              handler: () => performNoteAction(
+                TerminalNoteApplicationActionKind.toggleNotes,
+              ),
+            ),
+          if (configurationAuthority.noteConfiguration.surfaceEnabled)
+            TerminalActionRegistration(
+              id: TerminalActionId.focusTerminalFromNotes,
+              isAvailable: () => canPerformNoteAction(
+                TerminalNoteApplicationActionKind.focusTerminal,
+              ),
+              handler: () => performNoteAction(
+                TerminalNoteApplicationActionKind.focusTerminal,
+              ),
+            ),
           TerminalActionRegistration(
             id: TerminalActionId.openTerminalInspector,
             isAvailable: () =>
@@ -6481,6 +6536,12 @@ final class TerminalApplication {
         checkedReaders: <TerminalActionId, TerminalMenuCheckedReader>{
           TerminalActionId.toggleSecureKeyboardEntry: () =>
               createdSecureKeyboardEntry.manualRequested,
+          if (configurationAuthority.noteConfiguration.surfaceEnabled)
+            TerminalActionId.toggleNotes: () {
+              final PaneId? paneId = activeNotePaneId();
+              return paneId != null &&
+                  createdNoteCoordinator.notesVisibleForPane(paneId);
+            },
           TerminalActionId.toggleProcessArguments: () =>
               createdDockProcess.argumentsVisible,
           TerminalActionId.toggleContextDockContent: () =>

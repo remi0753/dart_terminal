@@ -845,6 +845,47 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
       'one explicit pump drains at most one delivered native intent',
     );
 
+    final TerminalNoteProductTopologyResult actionClosed = await subsystem
+        .performAction(
+          const PaneId(1),
+          TerminalNoteProductActionKind.toggleNotes,
+        );
+    final TerminalNoteProductTopologyResult actionOpened = await subsystem
+        .performAction(
+          const PaneId(1),
+          TerminalNoteProductActionKind.toggleNotes,
+        );
+    final TerminalNoteProductTopologyResult actionCreated = await subsystem
+        .performAction(const PaneId(1), TerminalNoteProductActionKind.newNote);
+    final TerminalNotesProjection actionDraft = first.projections.last;
+    _expect(
+      actionClosed.isAccepted &&
+          actionOpened.isAccepted &&
+          actionCreated.isAccepted &&
+          actionDraft.visibility == TerminalNotesVisibility.expanded &&
+          actionDraft.editorMode == TerminalNotesEditorMode.creating &&
+          !subsystem.canPerformAction(
+            const PaneId(1),
+            TerminalNoteProductActionKind.toggleNotes,
+          ),
+      'product actions route toggle and new through the authority without native synthesis',
+    );
+    first.intents.add(
+      _nativeIntent(
+        actionDraft,
+        eventGeneration: 23,
+        kind: TerminalNotesIntentKind.cancel,
+      ),
+    );
+    final TerminalNoteProductTopologyResult actionCancelled = await subsystem
+        .pumpSurfaceIntent(const PaneId(1));
+    final TerminalNotesProjection afterActionCancel = first.projections.last;
+    _expect(
+      actionCancelled.isAccepted &&
+          afterActionCancel.editorMode == TerminalNotesEditorMode.inactive,
+      'native cancellation resolves an action-created volatile draft',
+    );
+
     initialAttachments.add(TerminalNotesAttachDisposition.rendererUnavailable);
     final TerminalNoteProductTopologyResult failedSurface = await subsystem
         .attachSurface(
@@ -864,8 +905,8 @@ Future<void> _testProductionAuthorityAndTopologyLifecycle() async {
     first.nextResultApply = TerminalNotesResultApplyDisposition.failed;
     first.intents.add(
       _nativeIntent(
-        afterDelete,
-        eventGeneration: 23,
+        afterActionCancel,
+        eventGeneration: 24,
         kind: TerminalNotesIntentKind.export,
       ),
     );

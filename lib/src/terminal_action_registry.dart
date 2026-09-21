@@ -43,6 +43,9 @@ enum TerminalActionId {
   goToFileOrFolder('view.goto-file-or-folder'),
   moveInDirectoryNavigator('view.move-in-directory-navigator'),
   focusTerminal('view.focus-terminal'),
+  newNote('notes.new'),
+  toggleNotes('notes.toggle'),
+  focusTerminalFromNotes('notes.focus-terminal'),
   openTerminalInspector('view.open-terminal-inspector'),
   moveDividerLeft('pane.move-divider-left'),
   moveDividerRight('pane.move-divider-right'),
@@ -255,7 +258,10 @@ final class TerminalActionCatalog {
     );
   }
 
-  factory TerminalActionCatalog.standard({TerminalLocalization? localization}) {
+  factory TerminalActionCatalog.standard({
+    TerminalLocalization? localization,
+    bool includeNotes = false,
+  }) {
     final TerminalLocalization messages =
         localization ?? TerminalLocalization.english;
     TerminalActionDefinition action(
@@ -488,6 +494,29 @@ final class TerminalActionCatalog {
         restoresTerminalFocusAfterInvocation: false,
       ),
       action(TerminalActionId.focusTerminal, TerminalActionMenu.view),
+      if (includeNotes)
+        action(
+          TerminalActionId.newNote,
+          TerminalActionMenu.view,
+          shortcut: const TerminalActionShortcut(
+            keyEquivalent: 'n',
+            control: true,
+            command: true,
+          ),
+          separatorBefore: true,
+          restoresTerminalFocusAfterInvocation: false,
+        ),
+      if (includeNotes)
+        action(
+          TerminalActionId.toggleNotes,
+          TerminalActionMenu.view,
+          restoresTerminalFocusAfterInvocation: false,
+        ),
+      if (includeNotes)
+        action(
+          TerminalActionId.focusTerminalFromNotes,
+          TerminalActionMenu.view,
+        ),
       action(
         TerminalActionId.quickLook,
         TerminalActionMenu.view,
@@ -606,6 +635,10 @@ TerminalActionMessageId _actionMessageId(TerminalActionId id) => switch (id) {
   TerminalActionId.moveInDirectoryNavigator =>
     TerminalActionMessageId.moveInDirectoryNavigator,
   TerminalActionId.focusTerminal => TerminalActionMessageId.focusTerminal,
+  TerminalActionId.newNote => TerminalActionMessageId.newNote,
+  TerminalActionId.toggleNotes => TerminalActionMessageId.toggleNotes,
+  TerminalActionId.focusTerminalFromNotes =>
+    TerminalActionMessageId.focusTerminalFromNotes,
   TerminalActionId.openTerminalInspector =>
     TerminalActionMessageId.openTerminalInspector,
   TerminalActionId.moveDividerLeft => TerminalActionMessageId.moveDividerLeft,

@@ -114,6 +114,8 @@ enum TerminalNoteSurfaceIntentKind {
   export,
 }
 
+enum TerminalNoteApplicationSurfaceAction { newNote, toggleNotes }
+
 /// Content-free semantic intent result for one authority-owned surface.
 final class TerminalNoteSurfaceIntentResult {
   const TerminalNoteSurfaceIntentResult({
@@ -995,6 +997,77 @@ final class TerminalNoteAuthority {
           color: color,
         );
     }
+  }
+
+  /// Applies one application action without aliasing the native event stream.
+  Future<TerminalNoteSurfaceIntentResult> submitApplicationSurfaceAction({
+    required TerminalNoteAuthoritySequence sequence,
+    required PaneId paneId,
+    required int surfaceGeneration,
+    required int projectionGeneration,
+    required BigInt expectedStoreRevision,
+    required TerminalNoteApplicationSurfaceAction action,
+  }) {
+    final TerminalNoteAuthorityMutationResult? sequenceFailure =
+        _acceptStructuralSequence(sequence);
+    if (sequenceFailure != null) {
+      return Future<TerminalNoteSurfaceIntentResult>.value(
+        _surfaceIntentFailure(sequenceFailure),
+      );
+    }
+    final _LiveNotePane? pane = _livePanes[paneId];
+    final _LiveNoteSurface? surface = pane?.surface;
+    final TerminalNoteSurfaceProjection? projection = surface?.latest;
+    if (pane == null ||
+        pane.retired ||
+        surface == null ||
+        surface.retired ||
+        projection == null ||
+        surface.generation != surfaceGeneration ||
+        projection.projectionGeneration != projectionGeneration ||
+        projection.storeRevision != expectedStoreRevision ||
+        expectedStoreRevision != _document.snapshot.storeRevision) {
+      return Future<TerminalNoteSurfaceIntentResult>.value(
+        _surfaceIntentResult(
+          TerminalNoteAuthorityMutationDisposition.stale,
+          surface: surface,
+          mutationFailure:
+              expectedStoreRevision != _document.snapshot.storeRevision
+              ? TerminalNoteMutationFailure.revisionConflict
+              : null,
+        ),
+      );
+    }
+    if (surface.editorMode != TerminalNoteEditorMode.inactive ||
+        surface.draftGeneration != 0) {
+      return Future<TerminalNoteSurfaceIntentResult>.value(
+        _invalidSurfaceIntent(surface),
+      );
+    }
+    return Future<TerminalNoteSurfaceIntentResult>.value(switch (action) {
+      TerminalNoteApplicationSurfaceAction.toggleNotes =>
+        _applyRuntimeSurfaceIntent(pane, surface, () {
+          surface.visibility =
+              surface.visibility == TerminalNoteSurfaceVisibility.collapsed
+              ? TerminalNoteSurfaceVisibility.expanded
+              : TerminalNoteSurfaceVisibility.collapsed;
+        }),
+      TerminalNoteApplicationSurfaceAction.newNote
+          when surface.nextDraftGeneration <=
+              TerminalNoteProjectionLimits.maximumGeneration =>
+        _applyRuntimeSurfaceIntent(pane, surface, () {
+          surface
+            ..visibility = TerminalNoteSurfaceVisibility.expanded
+            ..section = TerminalNoteCollectionSection.current
+            ..pageStart = 0
+            ..selectedNoteId = null
+            ..editorMode = TerminalNoteEditorMode.creating
+            ..draftGeneration = surface.nextDraftGeneration++;
+        }),
+      TerminalNoteApplicationSurfaceAction.newNote => _invalidSurfaceIntent(
+        surface,
+      ),
+    });
   }
 
   Future<TerminalNoteAuthorityMutationResult> bindPane({

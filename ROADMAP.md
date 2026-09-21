@@ -114,7 +114,7 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
     - [x] product-owned native-to-native Note overlay composition seamを実装する
     - [x] production Note subsystemのauthority/topology lifecycleを実装する
     - [x] application composition、interaction、live font、disabled lifecycleを接続する
-  - [ ] S1 mutation、Detached、export、localized actionを接続する
+  - [x] S1 mutation、Detached、export、localized actionを接続する
     - [x] rail/editor navigationとdurable CRUD/reorder mutation bridgeを接続する
       - [x] authority-owned surface stateとsemantic mutation contractを実装する
       - [x] native navigation ABIとproduct intent pumpを実装する
@@ -124,7 +124,7 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
       - [x] selected Noteのexplicit body-only pasteboard copyを接続する
       - [x] sensitive warning、save panel、portable exportを接続する
     - [x] Notes native sanitizer harnessをcurrent composition contractへ追随させる
-    - [ ] hidden create/open actionとlocalized menu/palette projectionを接続する
+    - [x] hidden create/open actionとlocalized menu/palette projectionを接続する
   - [ ] restart、fault、close/quit、両runtime product acceptanceを完了する
 - [ ] CM-11 S2 On Returnをproductへ統合する
 - [ ] CM-12 R0 hidden qualificationを完了する

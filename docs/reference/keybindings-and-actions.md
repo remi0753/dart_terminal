@@ -102,6 +102,9 @@ Every ID below can be a target on a non-reserved chord. Availability is evaluate
 | `view.goto-file-or-folder` | Go To File or Folder | view | `shift+command+g` |
 | `view.move-in-directory-navigator` | Move in Directory Navigator | view | `shift+command+m` |
 | `view.focus-terminal` | Focus Terminal | view | — |
+| `notes.new` | New Note… | view | `control+command+n` |
+| `notes.toggle` | Show/Hide Notes | view | — |
+| `notes.focus-terminal` | Focus Terminal | view | — |
 | `pane.quick-look` | Quick Look | view | `control+command+d` |
 | `pane.toggle-zoom` | Toggle Pane Zoom | view | — |
 | `pane.equalize-splits` | Equalize Splits | view | — |
@@ -144,5 +147,6 @@ AppKit consumes these standard menu shortcuts before raw terminal key routing. A
 | `shift+command+f` | `view.search-files-and-folders` | Search Files and Folders |
 | `shift+command+g` | `view.goto-file-or-folder` | Go To File or Folder |
 | `shift+command+m` | `view.move-in-directory-navigator` | Move in Directory Navigator |
+| `control+command+n` | `notes.new` | New Note… |
 | `control+command+d` | `pane.quick-look` | Quick Look |
 | `option+command+i` | `view.open-terminal-inspector` | Open Terminal Inspector |

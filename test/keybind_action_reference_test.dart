@@ -30,8 +30,9 @@ void runKeybindActionReferenceTests() {
       'generated reference contains pane action ${action.configName}',
     );
   }
-  for (final TerminalActionDefinition action
-      in TerminalActionCatalog.standard().actions) {
+  for (final TerminalActionDefinition action in TerminalActionCatalog.standard(
+    includeNotes: true,
+  ).actions) {
     _expect(
       generated.contains('`${action.id.stableName}`') &&
           generated.contains(action.title),

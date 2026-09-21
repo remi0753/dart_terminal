@@ -960,6 +960,57 @@ Future<void> _testSurfaceSemanticMutationContract() async {
     return result;
   }
 
+  Future<TerminalNoteSurfaceIntentResult> applicationAction(
+    TerminalNoteApplicationSurfaceAction action,
+  ) async {
+    final TerminalNoteSurfaceIntentResult result = await authority
+        .submitApplicationSurfaceAction(
+          sequence: authority.nextSequence(),
+          paneId: const PaneId(1),
+          surfaceGeneration: projection.surfaceGeneration,
+          projectionGeneration: projection.projectionGeneration,
+          expectedStoreRevision: projection.storeRevision,
+          action: action,
+        );
+    if (result.projection != null) projection = result.projection!;
+    return result;
+  }
+
+  final int commitsBeforeApplicationActions = store.commitCount;
+  final TerminalNoteSurfaceIntentResult actionOpened = await applicationAction(
+    TerminalNoteApplicationSurfaceAction.toggleNotes,
+  );
+  final TerminalNoteSurfaceIntentResult actionClosed = await applicationAction(
+    TerminalNoteApplicationSurfaceAction.toggleNotes,
+  );
+  final TerminalNoteSurfaceIntentResult actionCreated = await applicationAction(
+    TerminalNoteApplicationSurfaceAction.newNote,
+  );
+  final int applicationDraftGeneration = projection.draftGeneration;
+  final TerminalNoteSurfaceIntentResult blockedWhileEditing =
+      await applicationAction(TerminalNoteApplicationSurfaceAction.toggleNotes);
+  _expect(
+    actionOpened.isAccepted &&
+        actionClosed.isAccepted &&
+        actionCreated.isAccepted &&
+        blockedWhileEditing.disposition ==
+            TerminalNoteAuthorityMutationDisposition.rejected &&
+        projection.visibility == TerminalNoteSurfaceVisibility.expanded &&
+        projection.editorMode == TerminalNoteEditorMode.creating &&
+        projection.draftGeneration > 0 &&
+        store.commitCount == commitsBeforeApplicationActions &&
+        !actionCreated.toString().contains('body'),
+    'application actions toggle visibility and create a volatile draft without durable content',
+  );
+  final TerminalNoteSurfaceIntentResult actionCancelled = await intent(
+    TerminalNoteSurfaceIntentKind.cancelEditor,
+  );
+  _expect(
+    actionCancelled.isAccepted &&
+        projection.editorMode == TerminalNoteEditorMode.inactive,
+    'native cancellation resolves an application-created draft',
+  );
+
   final TerminalNoteSurfaceIntentResult opened = await intent(
     TerminalNoteSurfaceIntentKind.open,
   );
@@ -973,7 +1024,7 @@ Future<void> _testSurfaceSemanticMutationContract() async {
             TerminalNoteAuthorityMutationDisposition.runtimeApplied &&
         projection.visibility == TerminalNoteSurfaceVisibility.expanded &&
         projection.editorMode == TerminalNoteEditorMode.creating &&
-        projection.draftGeneration == 1 &&
+        projection.draftGeneration == applicationDraftGeneration + 1 &&
         projection.selectedToken == null,
     'surface navigation is authority-owned and starts a bounded create draft',
   );

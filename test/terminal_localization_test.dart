@@ -400,9 +400,11 @@ void _testLocaleSelectionAndDirection() {
 void _testActionCatalogCompletenessAndStablePolicy() {
   final TerminalActionCatalog english = TerminalActionCatalog.standard(
     localization: TerminalLocalization.english,
+    includeNotes: true,
   );
   final TerminalActionCatalog japanese = TerminalActionCatalog.standard(
     localization: TerminalLocalization.japanese,
+    includeNotes: true,
   );
   _expect(
     english.actions.length == TerminalActionId.values.length &&
@@ -433,6 +435,12 @@ void _testActionCatalogCompletenessAndStablePolicy() {
   }
   _expect(
     japanese.actionForId(TerminalActionId.copy)!.title == 'コピー' &&
+        english.actionForId(TerminalActionId.newNote)!.title == 'New Note…' &&
+        english.actionForId(TerminalActionId.toggleNotes)!.title ==
+            'Show/Hide Notes' &&
+        japanese.actionForId(TerminalActionId.newNote)!.title == '新規ノート…' &&
+        japanese.actionForId(TerminalActionId.toggleNotes)!.title ==
+            'ノートを表示／非表示' &&
         TerminalActionDispatcher(catalog: japanese)
             .search('分割')
             .map((snapshot) => snapshot.definition.id)

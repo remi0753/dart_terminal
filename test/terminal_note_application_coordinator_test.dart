@@ -329,6 +329,68 @@ Future<void> _testTopologySurfaceInteractionAndShutdown() async {
         coordinator.liveInteractionAdapterCount == 2,
     'renderer host replacement recreates the released interaction adapter',
   );
+  _expect(
+    coordinator.canPerformAction(
+          standardPane,
+          TerminalNoteApplicationActionKind.toggleNotes,
+        ) &&
+        coordinator.canPerformAction(
+          standardPane,
+          TerminalNoteApplicationActionKind.newNote,
+        ) &&
+        !coordinator.canPerformAction(
+          standardPane,
+          TerminalNoteApplicationActionKind.focusTerminal,
+        ),
+    'collapsed idle surface exposes only create and visibility actions',
+  );
+  final TerminalNoteProductTopologyResult actionOpened = await coordinator
+      .performAction(
+        standardPane,
+        TerminalNoteApplicationActionKind.toggleNotes,
+      );
+  final TerminalNoteProductTopologyResult actionCreated = await coordinator
+      .performAction(standardPane, TerminalNoteApplicationActionKind.newNote);
+  _expect(
+    actionOpened.isAccepted &&
+        actionCreated.isAccepted &&
+        runtime.actionRequests.join(',') ==
+            '${TerminalNoteProductActionKind.toggleNotes},${TerminalNoteProductActionKind.newNote}' &&
+        authority.snapshotForWindow(standard.id)?.owner.kind ==
+            TerminalWindowInteractionOwnerKind.noteEditor &&
+        !coordinator.canPerformAction(
+          standardPane,
+          TerminalNoteApplicationActionKind.toggleNotes,
+        ) &&
+        !coordinator.canPerformAction(
+          standardPane,
+          TerminalNoteApplicationActionKind.focusTerminal,
+        ),
+    'application action routing opens the rail then transfers the new draft to the editor',
+  );
+  runtime.notify(
+    standardPane,
+    TerminalNoteProductInteractionSnapshot(
+      surfaceGeneration: runtime.surfaces[standardPane]!,
+      visibility: TerminalNoteSurfaceVisibility.expanded,
+      editorMode: TerminalNoteEditorMode.inactive,
+      draftGeneration: 0,
+      editorDirty: false,
+      confirmingDiscard: false,
+    ),
+  );
+  await _drainSurfaceEvents();
+  final TerminalNoteProductTopologyResult actionFocused = await coordinator
+      .performAction(
+        standardPane,
+        TerminalNoteApplicationActionKind.focusTerminal,
+      );
+  _expect(
+    actionFocused.isAccepted &&
+        authority.snapshotForWindow(standard.id)?.owner.kind ==
+            TerminalWindowInteractionOwnerKind.terminal,
+    'Focus Terminal transfers ownership without hiding the expanded Notes rail',
+  );
   await state.removeWindow(quick.id);
   await coordinator.synchronizeTopology(<TerminalNoteApplicationPaneBinding>[
     TerminalNoteApplicationPaneBinding(
@@ -404,6 +466,8 @@ final class _FakeNoteTopologyRuntime
       <PaneId, TerminalNoteProductInteractionSnapshot>{};
   final List<(PaneId, TerminalNoteProductFocusTarget)> focusRequests =
       <(PaneId, TerminalNoteProductFocusTarget)>[];
+  final List<TerminalNoteProductActionKind> actionRequests =
+      <TerminalNoteProductActionKind>[];
   final List<TerminalNoteFeatureConfiguration> configurations =
       <TerminalNoteFeatureConfiguration>[];
   TerminalNoteProductSurfaceEventHandler? surfaceEventHandler;
@@ -505,6 +569,48 @@ final class _FakeNoteTopologyRuntime
     return TerminalNoteProductTopologyResult(
       TerminalNoteProductTopologyDisposition.noChange,
       surfaceGeneration: surfaces[paneId],
+    );
+  }
+
+  @override
+  bool canPerformAction(PaneId paneId, TerminalNoteProductActionKind action) {
+    final TerminalNoteProductInteractionSnapshot? current =
+        interactions[paneId];
+    return current != null &&
+        current.editorMode == TerminalNoteEditorMode.inactive &&
+        current.draftGeneration == 0;
+  }
+
+  @override
+  Future<TerminalNoteProductTopologyResult> performAction(
+    PaneId paneId,
+    TerminalNoteProductActionKind action,
+  ) async {
+    if (!canPerformAction(paneId, action)) {
+      return const TerminalNoteProductTopologyResult(
+        TerminalNoteProductTopologyDisposition.unavailable,
+      );
+    }
+    actionRequests.add(action);
+    final TerminalNoteProductInteractionSnapshot current =
+        interactions[paneId]!;
+    interactions[paneId] = TerminalNoteProductInteractionSnapshot(
+      surfaceGeneration: current.surfaceGeneration,
+      visibility: action == TerminalNoteProductActionKind.toggleNotes
+          ? current.visibility == TerminalNoteSurfaceVisibility.collapsed
+                ? TerminalNoteSurfaceVisibility.expanded
+                : TerminalNoteSurfaceVisibility.collapsed
+          : TerminalNoteSurfaceVisibility.expanded,
+      editorMode: action == TerminalNoteProductActionKind.newNote
+          ? TerminalNoteEditorMode.creating
+          : TerminalNoteEditorMode.inactive,
+      draftGeneration: action == TerminalNoteProductActionKind.newNote ? 1 : 0,
+      editorDirty: false,
+      confirmingDiscard: false,
+    );
+    return TerminalNoteProductTopologyResult(
+      TerminalNoteProductTopologyDisposition.applied,
+      surfaceGeneration: current.surfaceGeneration,
     );
   }
 

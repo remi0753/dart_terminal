@@ -212,7 +212,9 @@ final class _ReferenceInventory {
   });
 
   factory _ReferenceInventory.load() {
-    final TerminalActionCatalog catalog = TerminalActionCatalog.standard();
+    final TerminalActionCatalog catalog = TerminalActionCatalog.standard(
+      includeNotes: true,
+    );
     final List<TerminalPhysicalKey> keys = TerminalPhysicalKey.values
         .where((TerminalPhysicalKey key) => key != TerminalPhysicalKey.unknown)
         .toList(growable: false);

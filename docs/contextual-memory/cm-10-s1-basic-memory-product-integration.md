@@ -610,6 +610,24 @@ explicit exportをdurable authorityに接続する。Default-offではentry/surf
 - Authority-owned Detached paging/reorder/reattach、body-only copy、consented portable exportの全childが個別commitとfull gateを完了したため、
   集約親「Detached collection、reattach、explicit copy/exportを接続する」も完了状態へ更新した。追加実装や未追跡のchildはない。
 
+## 2026-09-21: hidden create/open actionとlocalized menu/palette着手
+
+- ROADMAPを再確認し、先頭未完了が「hidden create/open actionとlocalized menu/palette projectionを接続する」であることを確認した。
+- 目的はstable action `notes.new`、`notes.toggle`、`notes.focus-terminal`を、internal/test-only `notes=true`時だけ既存のshared action catalog、
+  View menu、command paletteへ投影し、active paneのS1 authorityへ接続することである。`notes=false`のnormal pathでは3 action、menu item、
+  palette result、surface/store ownerを0のままにする。
+- `New Note…`はControl+Command+N、`Show/Hide Notes`はdefault shortcutなしでconfigurable、`Focus Terminal`もshortcutなしとする。
+  英語と日本語のtitle/keywordsをstable localization IDで追加し、menuとpaletteは同じdefinitionを使う。
+- Native Note controlをprogrammatic clickしてintentを偽装する案は、native event generationとapplication actionのidentityを混ぜるため不採用とする。
+  Product topology portへ`new`/`toggle`のfixed action kindを追加し、authorityはsurface/projection/store generationを照合する専用semantic ingressで
+  projectionを更新する。Persistent Note/context ID、本文、pathはaction層へ出さない。
+- `Focus Terminal`はNote visibilityを変えず、application coordinatorが既存window interaction authorityのrequest/native focus/confirmを使う。
+  Dirty editor中のtoggle/new、owner解決前、native surface unavailable、active paneなしはfail closedでdisabledまたはfixed unavailableとする。
+- 対象外はpublic opt-in/documentation、new trigger action、autosave、new App Intent/AppleScript、restart/fault aggregateである。最後の項目は次の
+  ROADMAP taskで扱う。`dart_appkit`へDart Terminal固有actionを追加しない。
+- 完了条件はdefault-off entry 0、notes-enabled時の3 stable action、英日menu/palette、shortcut/no-shortcut、active pane routing、
+  open→new editor→focus terminal、PTY byte 0、fault/dirty fail-closed、focused/full/両runtime gate、個別commitである。
+
 ## 2026-09-21: S1 mutation/Detached/export/action task分割
 
 - ROADMAPを再確認し、先頭未完了がCM-10の「S1 mutation、Detached、export、localized actionを接続する」であることを確認した。
@@ -834,3 +852,51 @@ explicit exportをdurable authorityに接続する。Default-offではentry/surf
 - Current collectionのdurable create/edit/reorder/resolve/reopen/deleteとrail/editor navigationはapplication lifecycleまで接続済みである。
 - 次のROADMAP項目はDetached collection、reattach、explicit copy/exportである。現時点のnative semantic intentは存在するが、Detached selectionや
   export destination/pasteboard effectをproductへ接続しておらず、先行実装していない。
+
+## 2026-09-21: hidden create/open actionとlocalized menu/palette完了
+
+### 実装と判断
+
+- Stable action `notes.new`、`notes.toggle`、`notes.focus-terminal`をproduct action registryへ追加した。通常のstandard catalogは引き続き
+  Notes 3 actionを含まず、production compositionがtyped `notes=true`を解決した場合だけView menuとcommand paletteへ同じdefinitionを投影する。
+  `notes=false`ではregistration、menu item、palette resultはいずれも0である。
+- `New Note…`はControl+Command+Nを持ち、`Show/Hide Notes`とNotes用`Focus Terminal`にはdefault shortcutを設けていない。
+  Keybinding target inventoryは3 stable IDを含み、Control+Command+Nはnative menuがPTYより先に消費するreserved chordとして固定した。
+  English/Japaneseのtitleとsearch keywordはtyped localization mapへ追加し、stable ID自体は翻訳しない。
+- Action handlerはactive paneだけを解決し、product topology portのfixed `newNote`/`toggleNotes` kindからauthority専用semantic ingressへ渡す。
+  Authorityはpane/surface/projection/store generationとinactive editorを照合し、toggleはvisibilityだけ、newはexpanded Current collectionのvolatile
+  create draftだけを更新する。Native button clickやnative event generationは合成せず、persistent Note/context ID、body、pathをaction層へ返さない。
+- `Focus Terminal`は既存window interaction authorityのrequest/native-focus/confirmだけを使い、expanded railのvisibilityは維持する。
+  Editor active、dirty、discard confirmation、owner不一致、surface unavailable、active paneなしでは全actionをfail closedにした。特にdirty draftを
+  残したままterminal ownerへ移してclose admissionを迂回できない。
+- Menu check stateはactive paneのauthority-owned visibilityを読む。Action後のmenu/palette refreshは既存dispatcher callbackを再利用し、新しいtimerや
+  polling ownerは追加していない。Generated keybinding/action referenceにはconfigurable stable targetとnative shortcut reservationを反映した。
+- 実装はすべて`dart_terminal`に限定した。隣接`dart_appkit`には着手前からある3 file以外の差分を追加せず、Notes固有action、型、状態を汎用libraryへ
+  持ち込んでいない。
+
+### 検証と試行記録
+
+- `dart analyze`: issue 0。終了時のDart telemetry timestamp更新だけがsandbox外として拒否されたが、解析自体は完了した。
+- Focused testはaction registry、localization、authority、product subsystem、application coordinator、keybinding referenceがpassした。
+  Authority testの初回は先にapplication-created draftを追加したため既存の「最初のdraft generation = 1」期待が不正確になり失敗した。
+  単調増加契約へ修正し、再実行でpassした。最初のsandbox runはMetal module cacheへの書き込み拒否でtest本体前に停止し、許可済み環境で再実行した。
+- Authority/product/coordinator coverageはtoggle→new editor、editor中action unavailable、native Cancel、expanded railのままFocus Terminal、active pane routing、
+  durable commit 0、content-free result、window input owner transferを固定した。Catalog/localization coverageはdefault-off 3 entry 0、enabled時全stable action、
+  英日title/search、Control+Command+N、toggle/focus shortcut 0を固定した。
+- 最初のfull gateはhidden-aware catalog追加後もkeybinding reference generatorが旧「default catalog = 全action」前提を持っていたため停止した。
+  Generatorの完全性inventoryだけ`includeNotes=true`とし、productionのdefault-off catalogは変えず、正規generatorでreferenceを更新した。
+  次のrunはformat gateが更新したtest 1 fileを検出して停止したため、その整形とsource hashを再生成してから再実行した。
+- `make phase7-appkit-acceptance ghostty-p0-p1-gap-inventory release-candidate-daily-use-matrix`でsource hashを依存順に更新した。
+  Classification、件数、release blockerは変更していない。
+- 最終`CI=true DART_SUPPRESS_ANALYTICS=true make test`: 成功。377 Dart filesのformat変更0、root/package analyze issue 0、
+  Notes host/capability/store、localization/privacy、application、compatibility、distributionを含む全gateを完走し、`dart_terminal tests passed`を確認した。
+  Capability auditは`exports=20`、`snapshot=content-free`、`dart_appkit=generic`である。
+- `make RUNTIME_ARCH=arm64 developer-jit-audit release-aot-audit`: 両runtimeで成功。Notesを含む5 native assets、3 capabilities、8 localizationの
+  exact bundleを受理した。`git diff --check`も成功した。
+
+### 次への引き継ぎ
+
+- S1 mutation、Detached、copy/export、localized actionの全childが完了したため、集約親も完了できる。
+- 次の先頭未完了taskはCM-10の「restart、fault、close/quit、両runtime product acceptanceを完了する」である。ここまでのunit/focused testを
+  product vectorへ束ね、exact context restart、store/native fault、dirty close/quit、複数window/tab/pane、Quick Terminal、PTY/shell/geometry sentinelを
+  Developer JITとRelease AOTで受け入れる。S2以降はまだ実装しない。

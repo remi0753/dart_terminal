@@ -27,6 +27,8 @@ typedef TerminalNoteExportDestinationChooser =
 
 enum TerminalNoteProductFocusTarget { rail, editor }
 
+enum TerminalNoteProductActionKind { newNote, toggleNotes }
+
 /// Content-free interaction state read from one generation-bound surface.
 final class TerminalNoteProductInteractionSnapshot {
   const TerminalNoteProductInteractionSnapshot({
@@ -171,6 +173,13 @@ abstract interface class TerminalNoteProductTopologyPort
   /// The application invokes this after a routed native Note interaction;
   /// there is deliberately no idle polling timer.
   Future<TerminalNoteProductTopologyResult> pumpSurfaceIntent(PaneId paneId);
+
+  bool canPerformAction(PaneId paneId, TerminalNoteProductActionKind action);
+
+  Future<TerminalNoteProductTopologyResult> performAction(
+    PaneId paneId,
+    TerminalNoteProductActionKind action,
+  );
 
   void setSurfaceEventHandler(TerminalNoteProductSurfaceEventHandler? handler);
 
@@ -362,6 +371,59 @@ final class TerminalNoteProductSubsystem
 
   int? surfaceGenerationForPane(PaneId paneId) =>
       _surfaces[paneId]?.surfaceGeneration;
+
+  @override
+  bool canPerformAction(PaneId paneId, TerminalNoteProductActionKind action) {
+    if (!_isRunning) return false;
+    final _TerminalNoteProductSurface? surface = _surfaces[paneId];
+    final TerminalNoteSurfaceProjection? projection =
+        surface?.adapter.lastAuthorityProjection;
+    if (surface == null ||
+        !surface.hostAttached ||
+        surface.adapter.isDisposed ||
+        projection == null ||
+        projection.editorMode != TerminalNoteEditorMode.inactive ||
+        projection.draftGeneration != 0) {
+      return false;
+    }
+    return switch (action) {
+      TerminalNoteProductActionKind.newNote ||
+      TerminalNoteProductActionKind.toggleNotes => true,
+    };
+  }
+
+  @override
+  Future<TerminalNoteProductTopologyResult> performAction(
+    PaneId paneId,
+    TerminalNoteProductActionKind action,
+  ) => _serialize(() async {
+    if (!canPerformAction(paneId, action)) return _unavailable();
+    final _TerminalNoteProductSurface surface = _surfaces[paneId]!;
+    final TerminalNoteSurfaceProjection projection =
+        surface.adapter.lastAuthorityProjection!;
+    final TerminalNoteSurfaceIntentResult result;
+    try {
+      result = await _authority.submitApplicationSurfaceAction(
+        sequence: _authority.nextSequence(),
+        paneId: paneId,
+        surfaceGeneration: projection.surfaceGeneration,
+        projectionGeneration: projection.projectionGeneration,
+        expectedStoreRevision: projection.storeRevision,
+        action: switch (action) {
+          TerminalNoteProductActionKind.newNote =>
+            TerminalNoteApplicationSurfaceAction.newNote,
+          TerminalNoteProductActionKind.toggleNotes =>
+            TerminalNoteApplicationSurfaceAction.toggleNotes,
+        },
+      );
+    } on Object {
+      return _unavailable();
+    }
+    return TerminalNoteProductTopologyResult(
+      _fromSurfaceIntent(result),
+      surfaceGeneration: result.projection?.surfaceGeneration,
+    );
+  });
 
   @override
   void applyLiveConfiguration(TerminalNoteFeatureConfiguration configuration) {

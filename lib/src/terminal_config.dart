@@ -2789,7 +2789,7 @@ final Set<String> _terminalKeyBindingModifiers = Set<String>.unmodifiable(
 
 final Set<TerminalKeyBindingChord> _reservedNativeMenuChords =
     Set<TerminalKeyBindingChord>.unmodifiable(
-      TerminalActionCatalog.standard().actions
+      TerminalActionCatalog.standard(includeNotes: true).actions
           .where((TerminalActionDefinition action) => action.shortcut != null)
           .map((TerminalActionDefinition action) {
             final TerminalActionShortcut shortcut = action.shortcut!;
