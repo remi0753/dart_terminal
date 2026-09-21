@@ -32,8 +32,12 @@ final class TerminalNoteIdGenerator {
     );
   }
 
+  const TerminalNoteIdGenerator.fromEntropySource(
+    TerminalNoteIdEntropySource source,
+  ) : _source = source;
+
   const TerminalNoteIdGenerator.forTesting(TerminalNoteIdEntropySource source)
-    : _source = source;
+    : this.fromEntropySource(source);
 
   const TerminalNoteIdGenerator._(this._source);
 
@@ -226,6 +230,25 @@ abstract interface class TerminalNoteAuthorityStorePort {
   );
 
   Future<TerminalNoteStoreResult> stop();
+}
+
+/// One bounded store worker startup, independent of its transport.
+final class TerminalNoteAuthorityStoreStartup {
+  const TerminalNoteAuthorityStoreStartup({
+    required this.store,
+    required this.loadResult,
+  });
+
+  final TerminalNoteAuthorityStorePort? store;
+  final TerminalNoteStoreResult loadResult;
+}
+
+/// Product injection boundary for isolate- or helper-process-backed stores.
+abstract interface class TerminalNoteAuthorityStoreFactory {
+  Future<TerminalNoteAuthorityStoreStartup> start({
+    required TerminalNoteStoreLocation location,
+    required int authorityGeneration,
+  });
 }
 
 /// Adapter from the CM-03 isolate client to the application authority port.

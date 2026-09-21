@@ -48,6 +48,7 @@ enum _Suite {
   performance,
   reliability,
   restoration,
+  noteS1,
   clipboard,
   lifecycle,
   traffic,
@@ -65,6 +66,7 @@ enum _Suite {
     _Suite.systemAutomation => 'system-automation',
     _Suite.quickTerminal => 'quick-terminal',
     _Suite.secureKeyboardEntry => 'secure-keyboard-entry',
+    _Suite.noteS1 => 'note-s1',
     _ => name,
   };
 }
@@ -185,6 +187,7 @@ _Options _parseOptions(List<String> arguments) {
       if (selected == null) {
         throw const _SmokeException(
           '--suite must be smoke, display, hierarchy, actions, restoration, '
+          'note-s1, '
           'configuration, theme, shell-integration, desktop-signals, '
           'osc52, native-content, window-interaction, applescript, '
           'system-automation, quick-terminal, '
@@ -3575,6 +3578,102 @@ Future<void> _runRestoration(_Options options, _Invocation invocation) async {
   }
 }
 
+Future<void> _runNoteS1(_Options options, _Invocation invocation) async {
+  final Directory directory = await Directory.systemTemp.createTemp(
+    'dart-terminal-note-s1-',
+  );
+  try {
+    final _ProcessObservation observation = await _launch(
+      options,
+      invocation,
+      const <String>['--runtime-note-s1-test'],
+      environment: <String, String>{
+        'DT_RUNTIME_NOTE_S1_TEST': '1',
+        'DT_RUNTIME_NOTE_S1_DIRECTORY': directory.path,
+      },
+      timeout: const Duration(seconds: 90),
+      throughLaunchServices: true,
+    );
+    _expect(
+      observation.status == 0,
+      'Note S1 application exited with status ${observation.status}; '
+      'stdout=${observation.stdoutText.trim()} '
+      'stderr=${observation.stderrText.trim()}',
+    );
+    _expect(
+      observation.stderrText.trim().isEmpty,
+      'Note S1 application wrote unexpected stderr: '
+      '${observation.stderrText.trim()}',
+    );
+    _expect(
+      RegExp(
+            r'^TERMINAL_NOTE_S1_PRODUCT_PASS windows=2 tabs=3 panes=5 '
+            r'quick=1 durable_flows=12 dirty_pane=1 dirty_window=1 '
+            r'dirty_quit=1 store_fault=1 native_faults=2 restart=1 '
+            r'default_off=1 protected_state=1 owners=0$',
+            multiLine: true,
+          ).allMatches(observation.stdoutText).length ==
+          1,
+      'Note S1 product summary is missing or malformed',
+    );
+    _expect(
+      RegExp(
+            r'^TERMINAL_NOTE_S1_CLEANUP sessions=1 metal=1 '
+            r'text_clients=0 native_handles=0$',
+            multiLine: true,
+          ).allMatches(observation.stdoutText).length ==
+          1,
+      'Note S1 ordinary product owners were not released',
+    );
+    _expect(
+      RegExp(
+                r'^TERMINAL_SESSION_SHUTDOWN pane=1 session=1:1 '
+                r'process_id=[1-9][0-9]* disposition=clean '
+                r'termination_observed=true cleanup_completed=true$',
+                multiLine: true,
+              ).allMatches(observation.stdoutText).length ==
+              1 &&
+          RegExp(
+                r'^TERMINAL_PANE_OWNER_SHUTDOWN pane_count=1 '
+                r'disposition=clean$',
+                multiLine: true,
+              ).allMatches(observation.stdoutText).length ==
+              1,
+      'Note S1 did not cleanly stop its ordinary PTY owner',
+    );
+    _expect(
+      RegExp(
+            r'^TERMINAL_SHELL_INTEGRATION_BUNDLE disposition=bundled '
+            r'version=2 shells=4 files=5$',
+            multiLine: true,
+          ).allMatches(observation.stdoutText).length ==
+          1,
+      'Note S1 launch did not validate the exact shell resource',
+    );
+    _expect(
+      observation.stdoutText.contains('Dart Terminal shut down cleanly.') &&
+          !observation.stdoutText.contains(directory.path) &&
+          !observation.stdoutText.contains('s1-vector-') &&
+          !observation.stdoutText.contains('TERMINAL_TEXT_INPUT_OVERFLOW') &&
+          !observation.stdoutText.contains('HIERARCHY_MISMATCH'),
+      'Note S1 output leaked content/path or reported a product mismatch',
+    );
+    _expectWorkerProcessContract(
+      observation,
+      scenario: 'normal',
+      expectedCount: 1,
+    );
+    stdout.writeln(
+      'RUNTIME_NOTE_S1_PASS mode=${options.mode.name} '
+      'launch_architecture=${options.launchArchitecture ?? 'native'} '
+      'vector=true protected_state=true sessions_clean=1 elapsed_ms='
+      '${observation.elapsed.inMilliseconds}',
+    );
+  } finally {
+    if (await directory.exists()) await directory.delete(recursive: true);
+  }
+}
+
 Future<void> _runShellExitPolicySmoke(
   _Options options,
   _Invocation invocation, {
@@ -4567,6 +4666,9 @@ Future<void> main(List<String> arguments) async {
     }
     if (options.suite == _Suite.restoration || options.suite == _Suite.all) {
       await _runRestoration(options, invocation);
+    }
+    if (options.suite == _Suite.noteS1 || options.suite == _Suite.all) {
+      await _runNoteS1(options, invocation);
     }
     if (options.suite == _Suite.clipboard || options.suite == _Suite.all) {
       await _runClipboardProduct(options, invocation);

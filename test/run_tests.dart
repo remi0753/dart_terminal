@@ -102,6 +102,7 @@ import 'terminal_note_s1_product_acceptance_test.dart'
 import 'terminal_note_store_acceptance_test.dart';
 import 'terminal_note_store_codec_test.dart';
 import 'terminal_note_store_isolate_test.dart';
+import 'terminal_note_store_process_test.dart';
 import 'terminal_note_store_worker_test.dart';
 import 'terminal_osc52_policy_test.dart';
 import 'terminal_osc52_projection_test.dart';
@@ -143,6 +144,7 @@ import 'terminal_shell_integration_test.dart';
 import 'terminal_snapshot_test.dart';
 import 'terminal_style_test.dart';
 import 'terminal_system_automation_product_test.dart';
+import 'terminal_system_entropy_test.dart';
 import 'terminal_system_recovery_test.dart';
 import 'terminal_terminfo_environment_test.dart';
 import 'terminal_terminfo_test.dart';
@@ -230,7 +232,9 @@ Future<void> main() async {
   await runTerminalNoteStoreAcceptanceTests();
   runTerminalNoteStoreCodecTests();
   await runTerminalNoteStoreIsolateTests();
+  await runTerminalNoteStoreProcessTests();
   runTerminalNoteStoreWorkerTests();
+  runTerminalSystemEntropyTests();
   runTerminalInputMatrixTests();
   runTerminalAppKitKeyAdapterTests();
   runTerminalAppKitPolicyTests();
@@ -1199,6 +1203,11 @@ void _testOptions() {
     options.runtimeRestorationPath == null,
     'restoration path defaults off',
   );
+  _expect(!options.runtimeNoteS1Test, 'Note S1 test defaults off');
+  _expect(
+    options.runtimeNoteS1Directory == null,
+    'Note S1 directory defaults off',
+  );
   _expect(
     options.runtimeShellExitTestScenario == RuntimeShellExitTestScenario.none,
     'shell exit policy test defaults off',
@@ -1935,6 +1944,63 @@ void _testOptions() {
       },
     ),
     'restoration and native hierarchy tests are mutually exclusive',
+  );
+  final TerminalOptions noteS1TestOptions = _parseOptions(
+    const <String>['--runtime-note-s1-test'],
+    environment: const <String, String>{
+      'DT_RUNTIME_NOTE_S1_TEST': '1',
+      'DT_RUNTIME_NOTE_S1_DIRECTORY': '/private/tmp/note-s1',
+    },
+  );
+  _expect(
+    noteS1TestOptions.runtimeNoteS1Test &&
+        noteS1TestOptions.runtimeNoteS1Directory == '/private/tmp/note-s1',
+    'gated Note S1 product test and isolated directory',
+  );
+  _expectThrows(
+    () => _parseOptions(const <String>['--runtime-note-s1-test']),
+    'Note S1 product test gate',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>['--runtime-note-s1-test'],
+      environment: const <String, String>{'DT_RUNTIME_NOTE_S1_TEST': '1'},
+    ),
+    'Note S1 product test directory',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>['--runtime-note-s1-test'],
+      environment: const <String, String>{
+        'DT_RUNTIME_NOTE_S1_TEST': '1',
+        'DT_RUNTIME_NOTE_S1_DIRECTORY': 'relative/note-s1',
+      },
+    ),
+    'Note S1 product test requires an absolute directory',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>['--runtime-note-s1-test', '--runtime-note-s1-test'],
+      environment: const <String, String>{
+        'DT_RUNTIME_NOTE_S1_TEST': '1',
+        'DT_RUNTIME_NOTE_S1_DIRECTORY': '/private/tmp/note-s1',
+      },
+    ),
+    'duplicate Note S1 product test option',
+  );
+  _expectThrows(
+    () => _parseOptions(
+      const <String>[
+        '--runtime-note-s1-test',
+        '--runtime-native-hierarchy-test',
+      ],
+      environment: const <String, String>{
+        'DT_RUNTIME_NOTE_S1_TEST': '1',
+        'DT_RUNTIME_NOTE_S1_DIRECTORY': '/private/tmp/note-s1',
+        'DT_RUNTIME_NATIVE_HIERARCHY_TEST': '1',
+      },
+    ),
+    'Note S1 and native hierarchy tests are mutually exclusive',
   );
   _expectThrows(
     () => _parseOptions(

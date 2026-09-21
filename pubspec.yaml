@@ -6,6 +6,7 @@ environment:
   sdk: '>=3.13.2 <3.14.0'
 
 dependencies:
+  ffi: 2.2.0
   dart_appkit:
     path: ../dart_appkit/packages/dart_appkit
   dart_durable_file_macos:

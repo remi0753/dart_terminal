@@ -879,6 +879,7 @@ RuntimeLifecycleCoordinator _coordinator(
   scenario: scenario,
   observer: (_) {},
   initialGeneration: initialGeneration,
+  startupTimeout: const Duration(seconds: 15),
   workerCommand: RuntimeLifecycleWorkerCommand(
     executable: Platform.resolvedExecutable,
     arguments: <String>['${Directory.current.path}/bin/runtime_worker.dart'],

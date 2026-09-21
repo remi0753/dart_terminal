@@ -51,6 +51,13 @@ Map<String, Object?> _source() => <String, Object?>{
         'name': 'dart_terminal_runtime_worker',
         'entrypoint': 'bin/runtime_worker.dart',
         'payload': 'DartHelpers/dart_terminal_runtime_worker.aot',
+        'nativeAssets': <String>[
+          'libdart_durable_file_macos.dylib',
+          'libdart_pty_macos.dylib',
+          'libdart_terminal_applescript_macos.dylib',
+          'libdart_terminal_notes_macos.dylib',
+          'libdart_terminal_renderer_macos.dylib',
+        ],
       },
     ],
     'nativeAssets': <Object?>[

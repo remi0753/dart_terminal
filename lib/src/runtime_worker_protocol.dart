@@ -5,7 +5,9 @@ import 'dart:typed_data';
 const int runtimeWorkerProtocolMagic = 0x44545257;
 const int runtimeWorkerProtocolVersion = 1;
 const int runtimeWorkerHeaderLength = 20;
-const int runtimeWorkerMaximumPayloadLength = 1024 * 1024 + 64;
+// Includes one canonical 16 MiB Note document plus bounded base64 framing and
+// its deletion journal. Individual worker services retain stricter limits.
+const int runtimeWorkerMaximumPayloadLength = 32 * 1024 * 1024;
 
 enum RuntimeWorkerMessageType {
   ready(1),

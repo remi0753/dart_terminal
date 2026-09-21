@@ -43,9 +43,13 @@ final class TerminalNoteContextIdGenerator {
     );
   }
 
-  const TerminalNoteContextIdGenerator.forTesting(
+  const TerminalNoteContextIdGenerator.fromEntropySource(
     TerminalNoteContextEntropySource source,
   ) : _source = source;
+
+  const TerminalNoteContextIdGenerator.forTesting(
+    TerminalNoteContextEntropySource source,
+  ) : this.fromEntropySource(source);
 
   const TerminalNoteContextIdGenerator._(this._source);
 

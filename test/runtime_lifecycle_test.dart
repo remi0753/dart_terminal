@@ -688,6 +688,7 @@ final class _Harness {
          },
          workerCommand: _workerCommand,
          maximumInFlightRequests: maximumInFlightRequests,
+         startupTimeout: const Duration(seconds: 15),
          shutdownTimeout: shutdownTimeout,
        );
 

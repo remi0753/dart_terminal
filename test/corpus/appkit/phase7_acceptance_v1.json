@@ -55,7 +55,7 @@
       "sources": [
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "d6dfe38134dcdfffbff030088fbd50d7aa0b750ed51336259a55bdc0e8323cb6"
+          "sha256": "8243770b8f3e2f8346270ad457a9803234aa519ca988f242203af8ffd4dd4d59"
         },
         {
           "path": "lib/src/terminal_renderer/terminal_screen_metal_compositor.dart",
@@ -172,7 +172,7 @@
         {
           "path": "test/runtime_lifecycle_test.dart",
           "entrypoint": "runRuntimeLifecycleTests",
-          "sha256": "1784d8f0ac79310b28c5a84892ac281b8de4d2b0064cdc8f56ecc97b7909d232"
+          "sha256": "15081a4df66b567b9a065bc59d7dc23569fc03bc205f8c8c8a57d2241343078d"
         }
       ],
       "integration_tests": [
@@ -215,7 +215,7 @@
         },
         {
           "path": "lib/src/terminal_application.dart",
-          "sha256": "d6dfe38134dcdfffbff030088fbd50d7aa0b750ed51336259a55bdc0e8323cb6"
+          "sha256": "8243770b8f3e2f8346270ad457a9803234aa519ca988f242203af8ffd4dd4d59"
         }
       ],
       "unit_tests": [

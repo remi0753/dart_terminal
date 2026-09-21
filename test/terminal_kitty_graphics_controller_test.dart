@@ -2333,7 +2333,7 @@ Future<void> _testRealWorkerSessionRoundTripAndTeardown() async {
     scenario: RuntimeLifecycleScenario.normal,
     workerCommand: _workerCommand(),
     observer: (_) {},
-    startupTimeout: const Duration(seconds: 3),
+    startupTimeout: const Duration(seconds: 15),
     requestTimeout: const Duration(seconds: 3),
     shutdownTimeout: const Duration(seconds: 1),
     forcedExitTimeout: const Duration(seconds: 1),

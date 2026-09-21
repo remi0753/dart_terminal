@@ -70,11 +70,15 @@ import 'terminal_memory_pressure.dart';
 import 'terminal_native_content.dart';
 import 'terminal_native_hierarchy.dart';
 import 'terminal_note_application_coordinator.dart';
+import 'terminal_note_authority.dart';
+import 'terminal_note_context_restoration.dart';
 import 'terminal_note_export_panel.dart';
 import 'terminal_note_model.dart';
 import 'terminal_note_native_adapter.dart';
 import 'terminal_note_product_subsystem.dart';
 import 'terminal_note_projection.dart';
+import 'terminal_note_s1_product_acceptance.dart';
+import 'terminal_note_store_process.dart';
 import 'terminal_notification_product.dart';
 import 'terminal_osc52_confirmation.dart';
 import 'terminal_osc52_projection.dart';
@@ -99,6 +103,7 @@ import 'terminal_settings_document.dart';
 import 'terminal_settings_editor.dart';
 import 'terminal_settings_inspector.dart';
 import 'terminal_shell_integration.dart';
+import 'terminal_system_entropy.dart';
 import 'terminal_system_recovery.dart';
 import 'terminal_tab_metadata.dart';
 import 'terminal_tab_presentation.dart';
@@ -192,6 +197,8 @@ final class TerminalOptions {
     this.runtimePerformanceTest = false,
     this.runtimeRestorationTest = false,
     this.runtimeRestorationPath,
+    this.runtimeNoteS1Test = false,
+    this.runtimeNoteS1Directory,
     this.runtimeShellExitTestScenario = RuntimeShellExitTestScenario.none,
     this.runtimeLifecycleScenario = RuntimeLifecycleScenario.normal,
     this.runtimeWorkerCommand =
@@ -256,6 +263,7 @@ final class TerminalOptions {
     var runtimeDiagnosticsTest = false;
     var runtimePerformanceTest = false;
     var runtimeRestorationTest = false;
+    var runtimeNoteS1Test = false;
     RuntimeShellExitTestScenario? runtimeShellExitTestScenario;
     RuntimeLifecycleScenario? runtimeLifecycleScenario;
     for (final String argument in configuration.remainingArguments) {
@@ -449,6 +457,15 @@ final class TerminalOptions {
           );
         }
         runtimeRestorationTest = true;
+        continue;
+      }
+      if (argument == '--runtime-note-s1-test') {
+        if (runtimeNoteS1Test) {
+          throw const FormatException(
+            '--runtime-note-s1-test may only be supplied once',
+          );
+        }
+        runtimeNoteS1Test = true;
         continue;
       }
       if (argument.startsWith(autoClosePrefix)) {
@@ -1059,6 +1076,54 @@ final class TerminalOptions {
         'restoration test cannot be combined with another runtime test',
       );
     }
+    final String? runtimeNoteS1Directory = runtimeNoteS1Test
+        ? selectedEnvironment['DT_RUNTIME_NOTE_S1_DIRECTORY']
+        : null;
+    if (runtimeNoteS1Test &&
+        selectedEnvironment['DT_RUNTIME_NOTE_S1_TEST'] != '1') {
+      throw const FormatException(
+        'Note S1 test requires the integration-test gate',
+      );
+    }
+    if (runtimeNoteS1Test &&
+        (runtimeNoteS1Directory == null ||
+            runtimeNoteS1Directory.isEmpty ||
+            runtimeNoteS1Directory.contains('\u0000') ||
+            utf8.encode(runtimeNoteS1Directory).length > 4096 ||
+            !Directory(runtimeNoteS1Directory).isAbsolute)) {
+      throw const FormatException(
+        'Note S1 test requires a bounded absolute directory',
+      );
+    }
+    if (runtimeNoteS1Test &&
+        (selectedScenario != RuntimeLifecycleScenario.normal ||
+            autoCloseAfter != null ||
+            runtimeResourceStress ||
+            runtimeShutdownFaultInjection ||
+            runtimePtyExitFaultInjection ||
+            runtimeTerminalDisplayTest ||
+            runtimeClipboardTest ||
+            runtimeNativeHierarchyTest ||
+            runtimeUserActionsTest ||
+            runtimeConfigurationTest ||
+            runtimeThemeTest ||
+            runtimeShellIntegrationTest ||
+            runtimeDesktopSignalsTest ||
+            runtimeOsc52Test ||
+            runtimeNativeContentTest ||
+            runtimeWindowInteractionTest ||
+            runtimeQuickTerminalTest ||
+            runtimeSecureKeyboardEntryTest ||
+            runtimeAppleScriptTest ||
+            runtimeSystemAutomationTest ||
+            runtimeDiagnosticsTest ||
+            runtimePerformanceTest ||
+            runtimeRestorationTest ||
+            selectedShellExitTest != RuntimeShellExitTestScenario.none)) {
+      throw const FormatException(
+        'Note S1 test cannot be combined with another runtime test',
+      );
+    }
     return TerminalOptions(
       initialWorkingDirectory: initialWorkingDirectory,
       autoCloseAfter: autoCloseAfter,
@@ -1085,6 +1150,8 @@ final class TerminalOptions {
       runtimePerformanceTest: runtimePerformanceTest,
       runtimeRestorationTest: runtimeRestorationTest,
       runtimeRestorationPath: runtimeRestorationPath,
+      runtimeNoteS1Test: runtimeNoteS1Test,
+      runtimeNoteS1Directory: runtimeNoteS1Directory,
       runtimeShellExitTestScenario: selectedShellExitTest,
       runtimeLifecycleScenario: selectedScenario,
       runtimeWorkerCommand:
@@ -1133,6 +1200,8 @@ final class TerminalOptions {
   final bool runtimePerformanceTest;
   final bool runtimeRestorationTest;
   final String? runtimeRestorationPath;
+  final bool runtimeNoteS1Test;
+  final String? runtimeNoteS1Directory;
   final RuntimeShellExitTestScenario runtimeShellExitTestScenario;
   final RuntimeLifecycleScenario runtimeLifecycleScenario;
   final RuntimeLifecycleWorkerCommand runtimeWorkerCommand;
@@ -1230,6 +1299,7 @@ final class TerminalApplication {
         options.runtimeSystemAutomationTest ||
         options.runtimeDiagnosticsTest ||
         options.runtimePerformanceTest ||
+        options.runtimeNoteS1Test ||
         _usesInteractiveProductHierarchy(options)) {
       final TerminalProductConfiguration productConfiguration =
           options.effectiveConfiguration == null
@@ -1266,6 +1336,8 @@ final class TerminalApplication {
         runDiagnosticsAcceptance: options.runtimeDiagnosticsTest,
         diagnosticsExportDirectory: options.runtimeDiagnosticsDirectory,
         runPerformanceAcceptance: options.runtimePerformanceTest,
+        runNoteS1Acceptance: options.runtimeNoteS1Test,
+        noteS1Directory: options.runtimeNoteS1Directory,
         osc52Clipboard: options.runtimeOsc52Test
             ? _MemoryTerminalOsc52Clipboard()
             : null,
@@ -2777,6 +2849,7 @@ final class TerminalApplication {
       !options.runtimeDiagnosticsTest &&
       !options.runtimePerformanceTest &&
       !options.runtimeRestorationTest &&
+      !options.runtimeNoteS1Test &&
       options.runtimeShellExitTestScenario == RuntimeShellExitTestScenario.none;
 
   static Future<void> _runInteractiveHierarchyProduct(
@@ -2807,6 +2880,8 @@ final class TerminalApplication {
     bool runDiagnosticsAcceptance = false,
     String? diagnosticsExportDirectory,
     bool runPerformanceAcceptance = false,
+    bool runNoteS1Acceptance = false,
+    String? noteS1Directory,
     TerminalOsc52ClipboardPort? osc52Clipboard,
   }) async {
     const String acceptancePrompt = '__DT_USER_ACTIONS_PROMPT__ ';
@@ -2870,6 +2945,11 @@ final class TerminalApplication {
     if (runDiagnosticsAcceptance && diagnosticsExportDirectory == null) {
       throw StateError(
         'diagnostics acceptance requires an isolated export directory',
+      );
+    }
+    if (runNoteS1Acceptance && noteS1Directory == null) {
+      throw StateError(
+        'Note S1 acceptance requires an isolated product directory',
       );
     }
     TerminalNativeHierarchyAdapter? hierarchy;
@@ -3130,7 +3210,8 @@ final class TerminalApplication {
                   runAppleScriptAcceptance ||
                   runSystemAutomationAcceptance ||
                   runDiagnosticsAcceptance ||
-                  runPerformanceAcceptance;
+                  runPerformanceAcceptance ||
+                  runNoteS1Acceptance;
               final Map<String, String> shellEnvironment =
                   usesDeterministicShell
                   ? <String, String>{
@@ -4945,6 +5026,7 @@ final class TerminalApplication {
           RuntimeLifecycleCoordinator(
             scenario: RuntimeLifecycleScenario.normal,
             workerCommand: workerCommand,
+            requestTimeout: const Duration(seconds: 3),
             observer: (RuntimeLifecycleObservation observation) {
               stdout.writeln(
                 observation.machineLine(RuntimeLifecycleScenario.normal),
@@ -4971,6 +5053,16 @@ final class TerminalApplication {
       );
       MacosRuntime.recordDiagnosticPhase(RuntimeDiagnosticPhase.rootReady);
       await _expectResponse(createdLifecycle);
+      final TerminalNoteProcessStoreFactory noteStoreFactory =
+          TerminalNoteProcessStoreFactory(createdLifecycle);
+      final TerminalNoteContextIdGenerator noteContextIdGenerator =
+          TerminalNoteContextIdGenerator.fromEntropySource(
+            () => TerminalSystemEntropy.bytes(16),
+          );
+      final TerminalNoteIdGenerator noteIdGenerator =
+          TerminalNoteIdGenerator.fromEntropySource(
+            () => TerminalSystemEntropy.bytes(16),
+          );
       if (runUserActionAcceptance) {
         stdout.writeln('TERMINAL_USER_ACTIONS_STAGE stage=worker-ready');
       }
@@ -5018,6 +5110,9 @@ final class TerminalApplication {
                 ),
             presentation: notePresentationForPane(initialPane.id),
             onError: recordAsynchronousError,
+            storeFactory: noteStoreFactory,
+            contextIdGenerator: noteContextIdGenerator,
+            noteIdGenerator: noteIdGenerator,
           );
       noteApplicationCoordinator = createdNoteCoordinator;
       noteConfigurationObserver = createdNoteCoordinator.applyLiveConfiguration;
@@ -6708,7 +6803,42 @@ final class TerminalApplication {
       }, onError: recordAsynchronousError);
 
       stdout.writeln('Dart Terminal is attached to the AppKit main thread.');
-      if (runPerformanceAcceptance) {
+      if (runNoteS1Acceptance) {
+        final TerminalSession initialSession = sessions[initialPane.id]!;
+        await _waitForAsciiMarker(initialSession, acceptancePrompt.trimRight());
+        TerminalNoteS1SentinelSnapshot protectedState() {
+          final TerminalScreen screen =
+              initialSession.terminalScreenSet.activeScreen;
+          return TerminalNoteS1SentinelSnapshot(
+            terminalOutputBytes: utf8.encode(initialSession.render()).length,
+            terminalRows: screen.rows,
+            terminalColumns: screen.columns,
+            shellIntegrationEvents: initialSession
+                .terminalScreenSet
+                .semanticPrompt
+                .shellState
+                .index,
+            restorationPayloadEntries: 0,
+            diagnosticContentFields: sessions.values
+                .where(
+                  (TerminalSession session) =>
+                      session.diagnosticsCaptureEnabled,
+                )
+                .length,
+          );
+        }
+
+        final TerminalNoteS1ProductAcceptanceResult result =
+            await TerminalNoteS1ProductAcceptance.run(
+              rootDirectory: Directory(noteS1Directory!),
+              sentinelProbe: protectedState,
+              storeFactory: noteStoreFactory,
+              contextIdGenerator: noteContextIdGenerator,
+              noteIdGenerator: noteIdGenerator,
+            );
+        stdout.writeln(result.machineLine());
+        if (!closed.isCompleted) closed.complete();
+      } else if (runPerformanceAcceptance) {
         await _exerciseProductPerformance(
           application: application,
           state: state,
@@ -7022,6 +7152,23 @@ final class TerminalApplication {
         );
         stdout.writeln(
           'TERMINAL_PRODUCT_PERFORMANCE_CLEANUP sessions=1 metal=1 '
+          'text_clients=0 native_handles=0',
+        );
+      }
+      if (runNoteS1Acceptance) {
+        _expectLifecycle(
+          shutdown.sessions.length == 1 &&
+              shutdown.isClean &&
+              owners.values.every(
+                (_TerminalHierarchyProductPane owner) =>
+                    owner.adaptersDisposed && owner.surface.isDisposed,
+              ) &&
+              debugLiveTerminalTextInputClientCount() == 0 &&
+              application.debugLiveObjectCount == 0,
+          'Note S1 acceptance did not release ordinary product owners',
+        );
+        stdout.writeln(
+          'TERMINAL_NOTE_S1_CLEANUP sessions=1 metal=1 '
           'text_clients=0 native_handles=0',
         );
       }

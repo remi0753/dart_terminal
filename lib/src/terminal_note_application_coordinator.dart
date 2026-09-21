@@ -138,6 +138,9 @@ final class TerminalNoteApplicationCoordinator {
     TerminalNoteNativeCapabilityInitializer? initializeNativeCapability,
     TerminalNoteNativeSurfaceChannelFactory? surfaceFactory,
     TerminalNoteStoreLocationResolver? locationResolver,
+    TerminalNoteAuthorityStoreFactory? storeFactory,
+    TerminalNoteContextIdGenerator? contextIdGenerator,
+    TerminalNoteIdGenerator? noteIdGenerator,
     TerminalNoteNativePresentationState presentation =
         const TerminalNoteNativePresentationState(),
     TerminalNoteApplicationClock clock = _systemClock,
@@ -174,6 +177,9 @@ final class TerminalNoteApplicationCoordinator {
             initializeNativeCapability: initializeNativeCapability,
             surfaceFactory: surfaceFactory,
             locationResolver: locationResolver,
+            storeFactory: storeFactory,
+            contextIdGenerator: contextIdGenerator,
+            noteIdGenerator: noteIdGenerator,
             presentation: presentation,
           ),
     );

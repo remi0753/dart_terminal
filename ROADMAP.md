@@ -106,7 +106,7 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
   - [x] semantic intent/result ABIとone-outstanding stateを実装する
   - [x] native multiline editor、draft admission、actionsを実装する
   - [x] input isolation、focus/accessibility、teardown acceptanceを完了する
-- [ ] CM-10 S1 Basic memoryをproductへ統合する
+- [x] CM-10 S1 Basic memoryをproductへ統合する
   （[`cm-10-s1-basic-memory-product-integration.md`](docs/contextual-memory/cm-10-s1-basic-memory-product-integration.md)
   を参照して実施する）
   - [x] native capability manifestとproduct Note subsystem adapterを実装する
@@ -125,10 +125,10 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
       - [x] sensitive warning、save panel、portable exportを接続する
     - [x] Notes native sanitizer harnessをcurrent composition contractへ追随させる
     - [x] hidden create/open actionとlocalized menu/palette projectionを接続する
-  - [ ] restart、fault、close/quit、両runtime product acceptanceを完了する
+  - [x] restart、fault、close/quit、両runtime product acceptanceを完了する
     - [x] ordered Note shutdownとexact restoration commit境界をproductへ接続する
     - [x] S1 restart/fault/close/quit product vectorを実装する
-    - [ ] Developer JIT/Release AOT named acceptanceと全監査を完了する
+    - [x] Developer JIT/Release AOT named acceptanceと全監査を完了する
 - [ ] CM-11 S2 On Returnをproductへ統合する
 - [ ] CM-12 R0 hidden qualificationを完了する
 - [ ] CM-13 R1 internal S1/S2 opt-inを完了する

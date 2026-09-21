@@ -6,6 +6,7 @@ import 'runtime_image_worker.dart';
 import 'runtime_image_worker_protocol.dart';
 import 'runtime_lifecycle.dart';
 import 'runtime_worker_protocol.dart';
+import 'terminal_note_store_process.dart';
 
 Future<void> runRuntimeLifecycleWorkerProcess(List<String> arguments) async {
   RuntimeLifecycleScenario? scenario;
@@ -49,6 +50,8 @@ Future<void> runRuntimeLifecycleWorkerProcess(List<String> arguments) async {
   final RuntimeWorkerFrameDecoder decoder = RuntimeWorkerFrameDecoder(stdin);
   final RuntimeWorkerFrameWriter writer = RuntimeWorkerFrameWriter(stdout);
   final RuntimeImageWorkerService imageWorker = RuntimeImageWorkerService();
+  final TerminalNoteStoreProcessWorkerService noteStoreWorker =
+      TerminalNoteStoreProcessWorkerService();
   Timer? idleAction;
   Future<void>? lateResponse;
   try {
@@ -95,6 +98,8 @@ Future<void> runRuntimeLifecycleWorkerProcess(List<String> arguments) async {
           final Uint8List responsePayload;
           if (RuntimeImageWorkerRequestCodec.hasMagic(frame.payload)) {
             responsePayload = imageWorker.handle(frame.payload);
+          } else if (TerminalNoteStoreProcessProtocol.hasMagic(frame.payload)) {
+            responsePayload = noteStoreWorker.handle(frame.payload);
           } else {
             final int value = RuntimeWorkerFrameCodec.readInt64Payload(frame);
             responsePayload = RuntimeWorkerFrameCodec.int64Payload(value + 1);
@@ -125,6 +130,7 @@ Future<void> runRuntimeLifecycleWorkerProcess(List<String> arguments) async {
             throw StateError('requested worker failure while stopping');
           }
           imageWorker.dispose();
+          noteStoreWorker.dispose();
           await writer.send(
             RuntimeWorkerFrame(
               type: RuntimeWorkerMessageType.stopAcknowledged,
@@ -148,6 +154,7 @@ Future<void> runRuntimeLifecycleWorkerProcess(List<String> arguments) async {
     }
   } finally {
     imageWorker.dispose();
+    noteStoreWorker.dispose();
     idleAction?.cancel();
     await decoder.cancel();
     await stdout.flush();

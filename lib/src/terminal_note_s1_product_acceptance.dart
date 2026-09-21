@@ -19,6 +19,7 @@ import 'terminal_note_native_adapter.dart';
 import 'terminal_note_product_subsystem.dart';
 import 'terminal_note_projection.dart';
 import 'terminal_note_store_isolate.dart';
+import 'terminal_note_store_process.dart';
 import 'terminal_note_store_worker.dart';
 import 'terminal_pane.dart';
 import 'terminal_pane_close_coordinator.dart';
@@ -154,12 +155,21 @@ abstract final class TerminalNoteS1ProductAcceptance {
   static Future<TerminalNoteS1ProductAcceptanceResult> run({
     required Directory rootDirectory,
     required TerminalNoteS1SentinelProbe sentinelProbe,
+    TerminalNoteAuthorityStoreFactory? storeFactory,
+    TerminalNoteContextIdGenerator? contextIdGenerator,
+    TerminalNoteIdGenerator? noteIdGenerator,
   }) async {
     final Directory root = Directory(
       await rootDirectory.resolveSymbolicLinks(),
     );
     final TerminalNoteS1SentinelSnapshot before = sentinelProbe();
     final _NoteOwnerCounts ownerBaseline = _NoteOwnerCounts.capture();
+    final TerminalNoteContextIdGenerator selectedContextIdGenerator =
+        contextIdGenerator ?? TerminalNoteContextIdGenerator.secure();
+    final TerminalNoteIdGenerator selectedNoteIdGenerator =
+        noteIdGenerator ?? TerminalNoteIdGenerator.secure();
+    selectedContextIdGenerator.next();
+    selectedNoteIdGenerator.next();
     final Map<String, String> environment = <String, String>{
       'XDG_STATE_HOME': '${root.path}/state',
     };
@@ -204,6 +214,9 @@ abstract final class TerminalNoteS1ProductAcceptance {
               disabledLocationResolutions++;
               throw StateError('unexpected');
             },
+            storeFactory: storeFactory,
+            contextIdGenerator: selectedContextIdGenerator,
+            noteIdGenerator: selectedNoteIdGenerator,
           );
       final bool defaultOffZeroCost =
           disabled.capability == TerminalNoteApplicationCapability.disabled &&
@@ -251,6 +264,9 @@ abstract final class TerminalNoteS1ProductAcceptance {
             TerminalNoteApprovedExportPath.fromAbsolutePath(exportFile.path),
         initializeNativeCapability: () {},
         surfaceFactory: createChannel,
+        storeFactory: storeFactory,
+        contextIdGenerator: selectedContextIdGenerator,
+        noteIdGenerator: selectedNoteIdGenerator,
         clock: () => timestamp++,
       );
       await coordinator.synchronizeTopology(topology.allBindings);
@@ -260,7 +276,14 @@ abstract final class TerminalNoteS1ProductAcceptance {
             topology.standardPaneIds.length == 5 &&
             topology.quickPaneId != null &&
             coordinator.liveBindingCount == 6,
-        'S1 product topology is not 2 windows, 3 tabs, 5 panes plus Quick',
+        'S1 product topology mismatch: '
+        'windows=${topology.standardWindowCount} '
+        'tabs=${topology.standardTabCount} '
+        'panes=${topology.standardPaneIds.length} '
+        'quick=${topology.quickPaneId == null ? 0 : 1} '
+        'bindings=${coordinator.liveBindingCount} '
+        'capability=${coordinator.capability.name} '
+        'store_failure=${storeFactory is TerminalNoteProcessStoreFactory ? storeFactory.debugLastStartupFailure?.name ?? 'none' : 'in-process'}',
       );
 
       interactionAuthority = TerminalWindowInteractionAuthority(topology.state);
@@ -504,6 +527,9 @@ abstract final class TerminalNoteS1ProductAcceptance {
             surfaceFactory: () => _S1NativeChannel(
               attachment: TerminalNotesAttachDisposition.attached,
             ),
+            storeFactory: storeFactory,
+            contextIdGenerator: selectedContextIdGenerator,
+            noteIdGenerator: selectedNoteIdGenerator,
             clock: () => timestamp++,
           );
       storeFaultReduced =
@@ -578,6 +604,9 @@ abstract final class TerminalNoteS1ProductAcceptance {
               reopenedChannels.add(channel);
               return channel;
             },
+            storeFactory: storeFactory,
+            contextIdGenerator: selectedContextIdGenerator,
+            noteIdGenerator: selectedNoteIdGenerator,
             clock: () => timestamp++,
           );
       await reopenedCoordinator.synchronizeTopology(
@@ -696,6 +725,7 @@ final class _NoteOwnerCounts {
     required this.products,
     required this.authorities,
     required this.workers,
+    required this.processPorts,
     required this.interactions,
   });
 
@@ -704,6 +734,7 @@ final class _NoteOwnerCounts {
     products: TerminalNoteProductSubsystem.debugLiveProductSubsystemCount,
     authorities: TerminalNoteAuthority.debugLiveAuthorityCount,
     workers: TerminalNoteStoreWorkerClient.debugLiveClientCount,
+    processPorts: TerminalNoteProcessStoreFactory.debugLivePortCount,
     interactions:
         TerminalNoteApplicationCoordinator.debugLiveInteractionAdapterCount,
   );
@@ -712,6 +743,7 @@ final class _NoteOwnerCounts {
   final int products;
   final int authorities;
   final int workers;
+  final int processPorts;
   final int interactions;
 
   int delta(_NoteOwnerCounts baseline) =>
@@ -719,6 +751,7 @@ final class _NoteOwnerCounts {
       (products - baseline.products).abs() +
       (authorities - baseline.authorities).abs() +
       (workers - baseline.workers).abs() +
+      (processPorts - baseline.processPorts).abs() +
       (interactions - baseline.interactions).abs();
 
   @override
@@ -726,8 +759,14 @@ final class _NoteOwnerCounts {
       other is _NoteOwnerCounts && delta(other) == 0;
 
   @override
-  int get hashCode =>
-      Object.hash(compositions, products, authorities, workers, interactions);
+  int get hashCode => Object.hash(
+    compositions,
+    products,
+    authorities,
+    workers,
+    processPorts,
+    interactions,
+  );
 }
 
 final class _AcceptanceTopology {

@@ -1011,3 +1011,86 @@ explicit exportをdurable authorityに接続する。Default-offではentry/surf
 - 次の先頭未完了taskは「Developer JIT/Release AOT named acceptanceと全監査を完了する」である。新vectorを実appのisolated pathと
   content-free terminal sentinelへ接続し、runtime smokeの両mode target、sanitizer、bundle/privacy/restoration/shell/diagnostics監査を集約する。
 - Named runtime gateを通すまではCM-10親と第4サブタスク親を完了にしない。S2には進まない。
+
+## 2026-09-21: Developer JIT/Release AOT named acceptanceと全監査着手
+
+- ROADMAPを再確認し、先頭未完了がCM-10最後の子項目「Developer JIT/Release AOT named acceptanceと全監査を完了する」
+  であることを確認した。完了するまでCM-11へ進まない。
+- Gated optionで通常のinteractive AppKit application、実PTY、renderer、runtime lifecycle workerを起動し、そのlive productを保持したまま
+  前サブタスクの同一S1 vectorをisolated directoryで実行する。別の簡略entrypointやtest executableは作らない。
+- Protected-state probeはactual initial sessionのrendered UTF-8 byte count、active rows/columns、semantic shell state、diagnostics capture owner数を
+  前後で読む。Note vectorはこれらを変更できず、本文やrendered text自体はmachine line、diagnostics、restorationへ出さない。
+- Runtime smokeはisolated pathを環境から注入し、exact content-free summary、通常PTY/lifecycle clean shutdown、stderr 0、path/body leak 0を
+  Developer JITとRelease AOTで同じ正規表現により検証する。
+- Named aggregateは両runtime Note S1 suite、両bundle audit、Notes capability、ASan/UBSan、diagnostics privacy、shell integration resourceを束ねる。
+  Restorationはvectorのexact bytes/restartとpayload sentinel、diagnostics/shellはactual probeと既存strict auditの双方で固定する。
+- `dart_appkit`のruntime option、Note型、store、product harnessは追加しない。変更は`dart_terminal`のapp/tool/Makefile/test/docsに限定する。
+- Focused analyzeは更新したapplication/vector/root runner/runtime smokeでissue 0、`git diff --check`も成功した。最初のroot testは
+  `terminal_application.dart`変更によりGhostty P0/P1 gap inventoryのsource hash freshnessだけで停止した。実装/test failureではなく、正規generatorを
+  再実行してPhase 7 inventory、release-candidate matrixとともに新しいsource coverageへ更新してから全gateを再実行する。
+- 最初のDeveloper JIT named acceptanceは通常AppKit/PTY/workerをclean shutdownしたが、S1 vector startup後の2/3/5+Quick topology判定で停止した。
+  Focused processでは成功していたため、既存application ownerと同居した場合にだけ生じる差を調べる。本文・pathを出さず、window/tab/pane/Quick/binding件数と
+  capability enumだけを失敗diagnosticへ追加して、ID値やcontentを前提にせず原因を特定する。
+- Helper native assetをbundle/update/distributionのexact code inventoryへ追加した後、focused release-symbol testは
+  `application-code-inventory-differs`で停止した。fixtureが生成したMach-O集合は正しかったが、検出側がpathを辞書順へsortして比較する一方、
+  `Contents/lib`を`Contents/MacOS`より前へ追加していたためである。契約の集合比較へ緩めず、既存の決定的順序を保つため、code path定数を
+  `Frameworks`、`Helpers`、`MacOS`、`Resources`、`lib`の辞書順へ揃える。
+- 順序修正後のrelease-symbol testはinventory検証を通過し、旧10 imageのmachine-line期待値だけで停止した。Helper用5 dylibも
+  署名・UUID・dSYM・symbol coverage対象なので、固定期待値を15 image/15 symbolsへ更新する。動的な自己一致だけにはせず、配布契約の
+  exact個数をtestに保持する。
+
+### 両runtime接続で判明した制約と採用判断
+
+- Embedded root Dart VMでは`Isolate.spawn`が利用できず、最初のDeveloper JIT acceptanceはauthority worker生成時に停止した。
+  `dart_appkit`へterminal固有workerやNote protocolを追加する案は汎用境界を壊すため不採用、同一processでstoreを直接実行する案は
+  authority isolationを失うため不採用とした。既存のapp-owned `dart_terminal_runtime_worker` processへ、bounded JSON envelopeと
+  canonical Note store codecを持つ汎用payload client経由でstore serviceを追加し、factoryをproduct compositionへ注入する方式を採用した。
+  Note型、store location、protocol、lifecycle ownerはすべて`dart_terminal`に置き、`dart_appkit`はhelperのnative assetを一般的にbundleするだけである。
+- Helper processで5つのpackage native libraryがbundleされず、最初の実store起動が失敗した。`dart_appkit`側は任意のDart helperがbuild hookで
+  宣言したnative assetを`Contents/lib`へ決定的にstageし、manifestへ列挙し、Universal assemblyでcode imageとしてmerge/auditする汎用機能だけを
+  実装した。terminal package名をruntime APIやbuilder policyへhard-codeしていない。
+- Embedded root Dart VMでは`Random.secure()`も利用できず、Developer JITでID生成が停止した。固定値や時刻fallbackはID強度を下げるため不採用とし、
+  `dart_terminal`がmacOS `arc4random_buf`をbounded FFIで呼ぶentropy sourceを所有する。Context/Note generatorにはproduction entropy injection
+  constructorを追加し、通常appとacceptanceの双方へ同じsecure sourceを注入した。`dart_appkit`への製品固有random API追加は行っていない。
+- Release AOT helperではnative asset symbol解決が`unknown`へ縮退した。手動のcontent-free probeでAOT snapshotに
+  `NativeAssetsApi::dlopen_absolute` callbackとhelper asset mappingがないことを確認した。`dart_appkit`へ、Dart build hookが生成したmappingを
+  helper配置に相対化してAOT compileへ渡す処理と、absolute/relative/system/process/executable lookupおよび`dlsym`/`dlclose`を提供する
+  generic native-assets resolverを追加した。fixtureはprocess symbolを解決して7を返すため、terminal固有libraryに依存しない。
+
+### Named acceptanceと監査結果
+
+- Developer JIT named acceptance:
+  `RUNTIME_NOTE_S1_PASS mode=developer-jit launch_architecture=native vector=true protected_state=true sessions_clean=1 elapsed_ms=2237`。
+- Release AOT named acceptance:
+  `RUNTIME_NOTE_S1_PASS mode=release-aot launch_architecture=native vector=true protected_state=true sessions_clean=1 elapsed_ms=948`。
+- `contextual-memory-s1-acceptance`はNotes capability、5 native sanitizer suite/11 artifact、両bundle audit、diagnostics privacy、
+  shell integration resources、両runtime vectorを完走し、
+  `CONTEXTUAL_MEMORY_S1_ACCEPTANCE_PASS runtimes=2 sanitizer=true bundle=true privacy=true restoration=true shell=true diagnostics=true dart_appkit=generic`
+  を出力した。Developer/Release bundleはいずれも`helper_assets=5`、`capabilities=3`、`localizations=8`のexact contractを受理した。
+- Focused update transaction、release symbols、process store、S1 product vector、system entropy testはすべてpassした。Release symbol packageは
+  app本体10 code imageにhelper native asset 5件を加えた15 image/15 symbol contractを検証する。
+- 最初のbundle audit再実行はMetal compilerがsandbox外の`~/.cache/clang/ModuleCache`へ書けず、製品build前に停止した。
+  同一commandを通常のcache権限で再実行し両modeともpassしたため、製品codeまたはacceptance failureではない。
+- 最初のfull `make test`は既存source-worker lifecycle testの最初のready待ちで停止した。Workerへprocess store serviceを追加したことで、
+  testが`Platform.resolvedExecutable bin/runtime_worker.dart`を起動する際に5 native packageのbuild/link hookも実行され、実測約5.6秒となった一方、
+  test harnessがproduction既定の1秒startup deadlineをそのまま使っていたことが原因である。Workerを直接同じ引数で起動すると正しいready frameを
+  出力し、protocol/worker failureではないことを確認した。Prebuilt helperを使うproductの1秒deadlineは維持し、source compilationを含むtest harnessだけを
+  15秒へ広げる。併せて新しいsystem entropy test importのalphabetical lintを修正する。
+- 2回目のfull gateではlifecycle suite通過後、同じsource workerを直接起動するimage-worker fixtureがproduction既定1秒のままで停止した。
+  Repository内の`bin/runtime_worker.dart`を`Platform.resolvedExecutable`で起動する全fixtureを再確認し、image-workerとKitty session integrationも
+  test-only 15秒deadlineへ統一した。Bundled helperを起動するNote process testおよびproductのdeadlineは変更していない。
+
+### 最終検証と完了
+
+- Source workerを使うlifecycle、image-worker、Kitty sessionのfocused integrationはすべてpassした。Freshness対象を変更するたびに正規generator
+  `phase7-appkit-acceptance`、`ghostty-p0-p1-gap-inventory`、`release-candidate-daily-use-matrix`を再実行し、生成済みJSONを最新source hashへ揃えた。
+- 最終`CI=true DART_SUPPRESS_ANALYTICS=true make test`は成功した。383 Dart fileのformat変更0、root/package analyze issue 0、
+  Notes host/capability/store、S1 vector、lifecycle/image worker、security stress、privacy、distribution/update/release symbolsを含む全gateを完走し、
+  `dart_terminal tests passed`を確認した。
+- 隣接`dart_appkit`では`make test`がgeneric repository audit、native bridge/runtime host、AOT command native symbol、builder、Universal assembly、
+  Dart API、launcher、FFI smokeをすべてpassした。汎用変更だけを`9c753f1 Bundle native assets used by Dart helpers`としてコミットした。
+  Note型、terminal product option、store protocol/path、acceptance vectorは含まれない。着手前から存在した
+  `docs/BUILDING_DART_ENGINE.md`、`scripts/bootstrap_dart_engine.sh`、`scripts/build_dart_engine.sh`はstageせず、そのまま保持した。
+- `git diff --check`は両repositoryで成功した。CM-10のS1 durable flow、exact restart、fault縮退、dirty close/quit、2/3/5+Quick topology、
+  protected terminal state、両runtime、sanitizer/bundle/privacy/shell/diagnostics、全owner cleanupという完了条件を満たしたため、最後の子項目、
+  product acceptance親、CM-10を同時に完了へ更新する。次の先頭未完了はCM-11であり、S2実装にはこのコミットまで先行していない。

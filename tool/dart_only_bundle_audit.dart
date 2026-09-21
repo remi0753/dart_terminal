@@ -6,6 +6,14 @@ import 'package:dart_terminal/dart_terminal.dart';
 import 'terminal_differential_sha256.dart';
 import 'terminal_terminfo.dart';
 
+const List<String> _helperNativeAssets = <String>[
+  'libdart_durable_file_macos.dylib',
+  'libdart_pty_macos.dylib',
+  'libdart_terminal_applescript_macos.dylib',
+  'libdart_terminal_notes_macos.dylib',
+  'libdart_terminal_renderer_macos.dylib',
+];
+
 final class _AuditException implements Exception {
   const _AuditException(this.message);
 
@@ -175,7 +183,13 @@ Future<void> main(List<String> arguments) async {
       helperDeclaration['name'] == 'dart_terminal_runtime_worker' &&
           helperDeclaration['entrypoint'] == 'bin/runtime_worker.dart' &&
           helperDeclaration['payload'] == helperPayload &&
-          helperDeclaration.length == (mode == 'release-aot' ? 3 : 2),
+          helperDeclaration.length == (mode == 'release-aot' ? 4 : 3) &&
+          helperDeclaration['nativeAssets'] is List<Object?> &&
+          _sameStrings(
+            (helperDeclaration['nativeAssets']! as List<Object?>)
+                .cast<String>(),
+            _helperNativeAssets,
+          ),
       'Dart helper manifest mismatch',
     );
     _expect(
@@ -281,6 +295,9 @@ Future<void> main(List<String> arguments) async {
         '$contents/Frameworks/libdart_terminal_notes_macos.dylib';
     final String appIntentsImage =
         '$contents/Frameworks/libdart_terminal_app_intents_macos.dylib';
+    final List<String> helperNativeImages = <String>[
+      for (final String asset in _helperNativeAssets) '$contents/lib/$asset',
+    ];
     final String applicationIconPath = '$resources/DartTerminal.icns';
     final String scriptingDictionary = '$resources/DartTerminal.sdef';
     final String appIntentsMetadata = '$resources/Metadata.appintents';
@@ -300,6 +317,7 @@ Future<void> main(List<String> arguments) async {
       appleScript,
       notes,
       appIntentsImage,
+      ...helperNativeImages,
       if (helperPayloadPath != null) helperPayloadPath,
       if (mode == 'release-aot') payload,
     ];
@@ -381,6 +399,7 @@ Future<void> main(List<String> arguments) async {
       appleScript,
       notes,
       appIntentsImage,
+      ...helperNativeImages,
       applicationIconPath,
       scriptingDictionary,
       appIntentsActions,
@@ -586,6 +605,7 @@ Future<void> main(List<String> arguments) async {
     stdout.writeln(
       'DART_ONLY_BUNDLE_AUDIT_PASS mode=$mode architecture=$architecture '
       'helpers=${helpers.length} assets=${assets.length} '
+      'helper_assets=${helperNativeImages.length} '
       'capabilities=${capabilities.length} scripting_definition=1 '
       'app_intents=${actionNames.length} localizations=${localizedResources.length}',
     );

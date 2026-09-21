@@ -22,6 +22,11 @@ const List<String> terminalUpdateCodePaths = <String>[
   'Contents/MacOS/dart_terminal',
   'Contents/Resources/DartHelpers/dart_terminal_runtime_worker.aot',
   'Contents/Resources/application.aot',
+  'Contents/lib/libdart_durable_file_macos.dylib',
+  'Contents/lib/libdart_pty_macos.dylib',
+  'Contents/lib/libdart_terminal_applescript_macos.dylib',
+  'Contents/lib/libdart_terminal_notes_macos.dylib',
+  'Contents/lib/libdart_terminal_renderer_macos.dylib',
 ];
 
 final class TerminalUpdateTransactionException implements Exception {

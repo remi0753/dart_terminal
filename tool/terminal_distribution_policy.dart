@@ -20,6 +20,11 @@ const List<String> terminalDistributionCodePaths = <String>[
   'Contents/MacOS/dart_terminal',
   'Contents/Resources/DartHelpers/dart_terminal_runtime_worker.aot',
   'Contents/Resources/application.aot',
+  'Contents/lib/libdart_durable_file_macos.dylib',
+  'Contents/lib/libdart_pty_macos.dylib',
+  'Contents/lib/libdart_terminal_applescript_macos.dylib',
+  'Contents/lib/libdart_terminal_notes_macos.dylib',
+  'Contents/lib/libdart_terminal_renderer_macos.dylib',
 ];
 
 List<String> terminalDistributionEntitlementsDisplayArguments(
@@ -78,11 +83,18 @@ final class TerminalDistributionPolicy {
     final List<Map<String, Object?>> helpers = _maps(contract['dartHelpers']);
     _expect(
       helpers.length == 1 &&
-          _exactEntries(helpers.single, const <String, Object>{
-            'name': 'dart_terminal_runtime_worker',
-            'entrypoint': 'bin/runtime_worker.dart',
-            'payload': 'DartHelpers/dart_terminal_runtime_worker.aot',
-          }),
+          helpers.single['name'] == 'dart_terminal_runtime_worker' &&
+          helpers.single['entrypoint'] == 'bin/runtime_worker.dart' &&
+          helpers.single['payload'] ==
+              'DartHelpers/dart_terminal_runtime_worker.aot' &&
+          helpers.single.length == 4 &&
+          _sameStrings(_strings(helpers.single['nativeAssets']), const <String>[
+            'libdart_durable_file_macos.dylib',
+            'libdart_pty_macos.dylib',
+            'libdart_terminal_applescript_macos.dylib',
+            'libdart_terminal_notes_macos.dylib',
+            'libdart_terminal_renderer_macos.dylib',
+          ]),
       'source helper contract is invalid',
     );
     final List<Map<String, Object?>> assets = _maps(contract['nativeAssets']);
@@ -210,15 +222,6 @@ final class TerminalDistributionPolicy {
       'distribution code evidence is invalid',
     );
   }
-
-  static bool _exactEntries(
-    Map<String, Object?> source,
-    Map<String, Object> expected,
-  ) =>
-      source.length == expected.length &&
-      expected.entries.every(
-        (MapEntry<String, Object> entry) => source[entry.key] == entry.value,
-      );
 
   static List<String> _strings(Object? value) {
     _expect(value is List<Object?>, 'expected a string list');

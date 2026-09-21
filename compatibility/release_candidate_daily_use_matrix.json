@@ -43,7 +43,7 @@
   "evidence_sources": [
     {
       "path": "Makefile",
-      "sha256": "368c28bbb9bca44af2b4c7b08bbba232fb9c804f27d0fa89117667c8bea99d9f"
+      "sha256": "aeba8308995ce90ffc8edfc5fae4cec273badd87a6dc2e4e04a962009cba1ffd"
     },
     {
       "path": "test/corpus/applications/matrix_v1.json",
@@ -55,7 +55,7 @@
     },
     {
       "path": "compatibility/ghostty_p0_p1_gap_inventory.json",
-      "sha256": "fa01b161a35e072386c630174da799f43049f8498c7b9423535881b092639bfb"
+      "sha256": "3a032d8334875c5503aad5e2e575a443d91cae8e3bb42ff70ccfc72eff3733ef"
     },
     {
       "path": "benchmark/evidence/product-performance-regression-macos-arm64-m1.json",
@@ -67,7 +67,7 @@
     },
     {
       "path": "test/corpus/appkit/phase7_acceptance_v1.json",
-      "sha256": "750562e0c4e31708eee96033986de01de2296b64547cea137459095bb9d05416"
+      "sha256": "772f09af0c04eed9776de83585a27bb02cd9c489635f41003c429e919e6248a5"
     },
     {
       "path": "test/corpus/fuzz/phase11_v1.json",
@@ -79,11 +79,11 @@
     },
     {
       "path": "tool/dart_only_bundle_audit.dart",
-      "sha256": "eda2ed99d9ef69a19e7ea0fc5ce4bbf4ec91b0d490478d1eef02841f7dab8eb1"
+      "sha256": "484c293c5d43e67189b3cc168ecca9b5127447fb3f593557cf12f942ed9944cb"
     },
     {
       "path": "tool/terminal_distribution_policy.dart",
-      "sha256": "cdc4d6d2fd3fcf8c06322647a683f99a1ade26be3f8d3dd0abd1c5cf08599613"
+      "sha256": "aa29aaf471b4e370e4afb3276523cc74e0ca5c2f54158961ef34d415ae341fff"
     },
     {
       "path": "tool/product_performance_regression_gate.dart",
@@ -103,7 +103,7 @@
     },
     {
       "path": "tool/runtime_integration_smoke.dart",
-      "sha256": "534820a3b77ed96fec092b945d71d881d7cc830d007499bfcafad910d6487cd2"
+      "sha256": "cc5e8aa2f5204268771c8c6c31f2ff433d4c8cd5db71daa245be4e4b8112d845"
     },
     {
       "path": "test/terminal_property_fuzz_test.dart",
@@ -111,7 +111,7 @@
     },
     {
       "path": "test/run_tests.dart",
-      "sha256": "7c98e820860430716c294f23cf837d397d449e5e247cab77624be9cff4ac4749"
+      "sha256": "2790ccfa62c14543e2951ec07aab03909dc3491d677f17a7da601a2091905c0d"
     },
     {
       "path": "tool/release_candidate_daily_use.dart",

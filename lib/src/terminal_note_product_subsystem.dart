@@ -255,6 +255,9 @@ final class TerminalNoteProductSubsystem
     TerminalNoteNativeCapabilityInitializer? initializeNativeCapability,
     TerminalNoteNativeSurfaceChannelFactory? surfaceFactory,
     TerminalNoteStoreLocationResolver? locationResolver,
+    TerminalNoteAuthorityStoreFactory? storeFactory,
+    TerminalNoteContextIdGenerator? contextIdGenerator,
+    TerminalNoteIdGenerator? noteIdGenerator,
     TerminalNoteUtcMicrosClock? clock,
     TerminalNoteNativePresentationState presentation =
         const TerminalNoteNativePresentationState(),
@@ -299,14 +302,36 @@ final class TerminalNoteProductSubsystem
 
     final TerminalNoteAuthority authority;
     try {
-      authority = await TerminalNoteAuthority.startWorker(
-        location: location,
-        authorityGeneration: authorityGeneration,
-        restoration: restoration,
-        paneIdsInTraversalOrder: paneIds,
-        ensureQuickTerminalContext: ensureQuickTerminalContext,
-        updatedAtUtcMicros: updatedAtUtcMicros,
-      );
+      final TerminalNoteAuthorityStoreFactory? selectedFactory = storeFactory;
+      if (selectedFactory == null) {
+        authority = await TerminalNoteAuthority.startWorker(
+          location: location,
+          authorityGeneration: authorityGeneration,
+          restoration: restoration,
+          paneIdsInTraversalOrder: paneIds,
+          ensureQuickTerminalContext: ensureQuickTerminalContext,
+          updatedAtUtcMicros: updatedAtUtcMicros,
+          idGenerator: contextIdGenerator,
+          noteIdGenerator: noteIdGenerator,
+        );
+      } else {
+        final TerminalNoteAuthorityStoreStartup startup = await selectedFactory
+            .start(
+              location: location,
+              authorityGeneration: authorityGeneration,
+            );
+        authority = await TerminalNoteAuthority.start(
+          authorityGeneration: authorityGeneration,
+          store: startup.store,
+          loadResult: startup.loadResult,
+          restoration: restoration,
+          paneIdsInTraversalOrder: paneIds,
+          ensureQuickTerminalContext: ensureQuickTerminalContext,
+          updatedAtUtcMicros: updatedAtUtcMicros,
+          idGenerator: contextIdGenerator,
+          noteIdGenerator: noteIdGenerator,
+        );
+      }
     } on Object {
       return TerminalNoteSubsystemStartResult.failure(
         TerminalNoteApplicationCapability.unavailable,
