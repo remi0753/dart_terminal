@@ -495,3 +495,94 @@ suiteの再実行はpassした。
 
 Versioned evidence／全hard gateの個別完了条件を満たした。これによりhard resource/latency budget親項目も完了し、次は順番どおり
 named aggregateとarm64/x86_64/Universal auditを接続する。
+
+## サブタスク3: named aggregateとcross-architecture audit
+
+### 分割、目的、範囲、完了条件
+
+この項目は、先にbundle間の等価性を独立して証明し、その証拠を後段のnamed aggregateが必須入力として束ねる依存関係があるため、
+実装前に次の2項目へ分割する。各項目を個別に検証、ROADMAP更新、commitし、前項目を完了するまで後項目へ進まない。
+
+1. **Versioned cross-architecture Note capability/resource equality audit**
+   - 目的: Freshなhost Developer JIT、arm64／x86_64 thinとUniversal Release AOT bundleで、Notes capability ABI v1、neutral resource
+     bytes、Universal architecture/code inventoryがexactに一致し、audited manifest／neutral resource／evidenceのbody／ID／time／absolute
+     path sentinel 0であることをmachine-checkableにする。
+   - 範囲: 4 bundleのstrict manifest、Notes capability宣言、thin manifest SHA-256 ownership、neutral resource path/bytes/SHA-256、
+     framework/helper Notes dylib architecture、content-free version 1 JSON、positive／negative unit test、fresh cross-build/audit target。
+   - 対象外: Intel host上のnative execution claim、M1 budgetのx86_64への転用、manual UX、R0 stage decision、署名／notarization、
+     `dart_appkit`へのDart Terminal固有code追加。
+   - 依存: Existing runtime builder、Universal assembler、`dart_only_bundle_audit.dart`、Notes manifest ABI v1、直前のbudget evidence。
+   - 完了条件: Developer JIT／arm64／x86_64のneutral resource inventory/hashが同一、Universal `resourceFiles`がそのexact集合、
+     Notes declarationが4 application contractで同一、thin Notes imageは各1 architecture、Universalは2 architecture、全sentinel 0。
+     Mismatch、extra、missing、unknown key、unsafe path、hash driftはfail closedとする。
+   - 検証: Parser/schema positive/negative、fresh thin/Universal build、existing 3 bundle audit、new audit/evidence、format/analyze、root
+     `make test`、隣接`dart_appkit` full test/generic audit、`git diff --check`。
+2. **R0 named aggregateへのfull gate inventory接続**
+   - 目的: Pure/codec/fault/native/product/sanitizer/privacy/source/shell/restoration/budget/runtime/distribution/cross-architectureを
+     一つの明示名targetからfail-fastで実行し、R0 automated qualificationの唯一のentry pointにする。
+   - 範囲: Existing gateの依存接続、fresh checked evidence検証、Developer JIT／Release AOT S1/S2、runtime verify、distribution verify、
+     content-free exact machine summary、aggregate contract test。
+   - 対象外: Manual checklistのpass宣言、R0 promotion decision、R1 option/public surface、重複する実装test logicのコピー。
+   - 完了条件: Named targetが必須gateを省略せず、成功時だけexact summaryを一行出し、既存target／evidenceの失敗を隠さない。
+   - 検証: Aggregate inventory unit test、fresh named target、root `make test`、隣接generic audit、差分review。
+
+### Cross-target helper native-assets mapping阻害と追加分割
+
+最初のfresh 4 bundle targetは、Developer JITとarm64 Release AOTのbuild／既存bundle auditまではpassしたが、x86_64 Release AOTの
+helper snapshot生成前に`Dart helper native asset mapping has no target architecture`で停止した。生成済みhelper bundle内の5 dylibは
+すべて`x86_64`であり、失敗原因はbinary architectureではない。Dart SDKの`dart build cli --target-arch=x64`はtarget imageを正しく
+生成する一方、project rootの`.dart_tool/native_assets.yaml`をhostの`macos_arm64` mappingのまま残す。汎用runtime builderは同fileに
+`macos_x64`が存在することだけを受理していたため、target imageが揃っていてもasset IDからbundle leafへの対応を構成できなかった。
+
+検討した選択肢:
+
+- Root側でmappingを書き換える案は、runtime builder自身が内部で`dart run`と`dart build cli`を実行する間に挿入できるhookがなく、
+  appごとのworkaroundにもなるため不採用。
+- Staleな既存x86_64 bundleをauditする案は、freshnessとcross-build gateを偽るため不採用。
+- Target ABI不在時に複数architecture mappingから推測する案は、asset IDの所有元が曖昧になるため不採用。
+- Target ABI不在かつmappingがexactly one architectureだけの場合、そのmapをarchitecture-independentなasset ID／leaf templateとして
+  読み、実際にtarget buildが生成した`nativeImages`全件とのexact coverageを確認した上で、出力をrequested target ABIに固定する案を
+  採用する。Target dylib architectureの生成／bundle auditは従来どおり独立して検証する。
+
+この阻害はNoteやDart Terminal固有ではなく、native assetを使う任意のDart helperのcross-target buildに生じる汎用runtime問題である。
+したがって現在のequality auditを次の順に追加分割し、前項を完了・commitするまで後項へ進まない。
+
+1. **汎用runtime builderのcross-target helper native-assets mapping修正**
+   - 目的: Host ABIだけを残す現行Dart SDK出力からでも、requested target向けhelper native-assets configurationを安全かつ決定的に生成する。
+   - 背景: Fresh x86_64 buildはtarget dylibを生成済みだが、root mappingにtarget ABI keyがないため停止する。
+   - 範囲: `dart_macos_runtime` builderのgeneric fallback、single-map／exact coverage／canonical target ABI、positive／negative test。
+   - 対象外: Note capability名、Dart Terminal manifest／resource、app固有path、複数mapping間の推測、binary architecture監査の緩和。
+   - 依存: Existing helper native-assets bundling、target-specific Dart SDK、生成済みtarget `nativeImages`。
+   - 完了条件: Exact target mappingは従来どおり優先し、target不在時はsingle source mapだけを受理してtarget imageのexact leaf集合をcoverし、
+     emitted JSONはrequested ABIだけを持つ。Zero／multiple candidate、malformed／missing／extra coverageはfail closedを維持する。
+   - 検証: Focused builder tests、full `dart_appkit` testとgeneric repository audit、app固有語0、既存user変更非接触、fresh x86_64 build。
+2. **Fresh 4 bundle equality auditとversioned evidence完了**
+   - 目的、範囲、対象外、依存、完了条件は直前のcross-architecture audit定義を継承する。
+   - 追加完了条件: Developer JIT、arm64／x86_64 thin、Universalを修正後にすべてfresh生成し、stale bundleを入力にしない。
+   - 検証: 4 bundle target、new evidence checked replay、focused/full root tests、隣接full generic audit、privacy/source/diff review。
+
+### 汎用cross-target helper mapping修正の完了結果
+
+- `dart_macos_runtime`はrequested ABIのmappingを従来どおり最優先する。Target ABI keyが存在しない場合だけ、mapping全体がexactly one
+  entryで、そのkeyが`macos_arm64`または`macos_x64`、valueがasset mapである場合に限ってasset ID／bundle leaf templateとして使う。
+  出力configurationはsource keyを引き継がず、requested ABI keyだけを持つ。
+- Template内の各entryは従来のstrict two-string tuple検査を通し、実際のtarget buildが生成した`nativeImages`のleaf全件をcoverしなければ
+  failする。Target keyのmalformed value、empty map、target不在のzero／multiple／unsupported source mapはfail closedである。
+- Test fakeにsource ABI overrideと追加architectureを導入した。既存x86_64 cross-target testは、実環境と同じくroot mappingを
+  `macos_arm64`だけに残した状態から、emitted configurationが`macos_x64`だけになることを検証する。別testはtarget不在で2 mapある
+  ambiguous入力を`builderSoftwareExitCode`で拒否する。
+- Product名、Note contract、app manifest／resource、app固有pathは`dart_appkit`変更へ追加していない。実装commitは隣接repositoryの
+  `f8d7dfe21c2ed58cded4a7058027d573c9e872c7`（`Support cross-target helper native assets`）。
+
+検証結果:
+
+- `CI=true DART_SUPPRESS_ANALYTICS=true make runtime-dart-test` in `../dart_appkit`: analyze `No issues found!`、builder、Universal、
+  distribution publisherの全test pass。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make release-aot-x86_64-audit`: fresh target helper／application native-assets buildが各5 assetを生成し、
+  `DART_ONLY_BUNDLE_AUDIT_PASS mode=release-aot architecture=x86_64 helpers=1 assets=1 helper_assets=5 capabilities=3`。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test` in `../dart_appkit`: full pass、
+  `GENERIC_REPOSITORY_AUDIT_PASS paths=148 text_files=147`、generic source内のDart Terminal固有語0。
+- `dart format`は0 changes、appkitのstaged diff checkもpass。既存未commit変更3件
+  （`docs/BUILDING_DART_ENGINE.md`、`scripts/bootstrap_dart_engine.sh`、`scripts/build_dart_engine.sh`）は変更もstageもしていない。
+
+汎用mapping修正の個別完了条件を満たした。次はROADMAPを再確認し、fresh 4 bundle equality auditとversioned evidenceを完了する。
