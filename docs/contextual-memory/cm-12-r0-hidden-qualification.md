@@ -367,3 +367,59 @@ TERMINAL_NOTE_R0_DART_BUDGET_PASS version=1 build=release-aot abi=macos_arm64 ha
 
 Native-assets CLI bundleと4-phase hard gate、および親のisolated Release AOT Dart fixtureの完了条件を満たした。次は順番どおり、
 同じ64 card／256 KiB packetをactual AppKit main threadへ適用するnative apply／first-visible fixtureを実装する。
+
+### Actual AppKit native apply／first-visible fixtureの着手条件
+
+- 目的: Dart projection生成時間と分離して、最大page packetをactual AppKit main thread上の実native Note viewへ適用し、
+  projection apply単体とlayout/displayまでのfirst-visible latencyをfrozen Gate 7 thresholdで測定する。
+- 背景: 既存native acceptanceは64 card／256 KiBのatomic apply、32 card materialization、geometry、bitmap、accessibility、owner回収を
+  機能検証するが、warmup後のp95とmain-thread stall countを独立したhard gateにはしていない。
+- 範囲: Product-owned Notes native test source、実`NSWindow`／host／Note view、64 card×4,096 bytes、context total 128、
+  5 warmup＋21 measured sample、apply p95、apply+layout+display first-visible p95、16.67 ms超sample count、snapshot／owner境界、
+  content-free one-line result、host-architecture Make target。
+- 対象外: Dart model/projection timing、durable store、renderer/PTY、raw sample永続化、evidence JSON、cross-architecture実行、manual UX、
+  production telemetry、`dart_appkit`へのDart Terminal固有code追加。
+- 依存: `TerminalNotesPlugin` ABI v1、maximum packet contract、AppKit main-thread surface lifecycle、直前のDart projection p95 output。
+- 完了条件: 固定M1/arm64／16 GiBでapply p95 8 ms以下、first-visible p95 100 ms以下、16.67 ms超のmain-thread sample 0、
+  projected 64／materialized 32／aggregate body 256 KiB、actual layout/display、live surface owner 0を満たす。Root projection p95との
+  合計100 ms gateは次のversioned evidence subtaskでexactに結合する。
+- 検証: Warnings-as-errors native build、fresh benchmark、既存Notes native capability test、root `make test`、隣接`dart_appkit`
+  full test/generic audit、content-free output review、`git diff --check`。違反時はthreshold、sample count、body/card sizeを変えず、
+  native hot pathを現在位置で修正する。
+
+### Actual AppKit native apply／first-visible fixtureの完了結果
+
+- Product-owned `TerminalNotesBudgetBenchmark.mm`を追加し、offscreenだがordered-visibleな実`NSWindow`、host view、
+  `DtnNoteSurfaceView`をAppKit main thread上で構成した。Collapsedをdisplayしてから、事前生成した64 card×4,096-byte packetを
+  applyし、同期layout/display完了までを同一monotonic sampleに含める。5 warmup後に21 sampleを取り、raw sampleは保持／出力しない。
+- Packetはcontext total 128、projected 64、aggregate body 262,144 bytes、materialized 32を毎sample snapshotで検査する。
+  Apply p95 8 ms、first-visible p95 100 ms、16.67 ms超sample 0、surface owner 0をhard failとし、固定M1/arm64／16 GiB以外は
+  content-free `environment_authority`でfail closedにする。Make targetはhost architectureだけを実行可能にする。
+- 初回はapply p95 130,363 us、first-visible p95 200,478 us、stall 21で違反した。32 card viewを毎回破棄／再生成し、
+  4,096-character bodyを全件同期measureしていたことが主因だった。Threshold、64/32 card、256 KiB、sample countは変更していない。
+- Native hot pathは最大32個のcontent-free view shellを再利用し、collapsed時にmodel、body/chip text、intent callbackを消去してhiddenにする。
+  再展開ではhierarchy remove/addを行わない。Card bodyはfull modelをmutation用に保ちながら、visible previewだけをsurrogate-safeな
+  256 UTF-16 code unit／最大8 logical line／ellipsisへboundし、安価で保守的な1〜8 line heightを使う。Appearance/font/titleは
+  実値が変わった時だけAppKit propertyへ反映する。既存card identity、collapsed body 0、accessibility active body countは維持した。
+- 中間runは順に101,847/116,798 us、20,428/35,129 us、8,683/22,424 usまで改善した。Hierarchy shell再利用後の最初の
+  fresh replayはp95 5,256/14,837 usでも1 sampleだけ16.67 msを超えたため未完了とし、unchanged appearance propertyの再設定を
+  除いた。`MIN` macroのGNU extensionとObjective-C `.m`内`nullptr`はwarnings-as-errorsで検出され、portable ternary／`NULL`へ修正した。
+- 最終fresh targetは次のexact content-free lineで合格した。直前の独立fresh process 2回も4,749/13,715 us、
+  4,791/13,850 us、stall 0で合格し、閾値違反を再現しなかった。
+
+```text
+TERMINAL_NOTE_R0_NATIVE_BUDGET_PASS version=1 abi=macos_arm64 hardware=MacBookPro17,1 memory_bytes=17179869184 warmups=5 samples=21 cards=64 materialized=32 body_bytes=262144 apply_p95_us=4570 apply_budget_us=8000 first_visible_p95_us=12812 first_visible_budget_us=100000 stalls=0 stall_threshold_us=16670 owners=0 content_free=true
+```
+
+検証結果:
+
+- Warnings-as-errors build、actual AppKit benchmark、既存Notes native codec/capability suite: pass。Maximum preview bound、view shell
+  identity reuse、collapsed body preview消去、再展開FIFO、bitmap、geometry、accessibility、editor/intentを含む。
+- 最初のroot `make test`はMakefile evidence hashのstale matrixだけで停止した。正規generatorで
+  `compatibility/release_candidate_daily_use_matrix.json`のMakefile SHA-256だけを更新し、再実行はpass。387 Dart files、
+  root analyze、R0 hidden harness、20-run real store acceptance（commit p95 54,346 us、primitive p95 26,475 us）を含む。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test` in `../dart_appkit`: pass。
+  `GENERIC_REPOSITORY_AUDIT_PASS paths=148 text_files=147`、Dart Terminal固有code追加0。既存未commit変更3件は非接触。
+
+Actual AppKit native apply／first-visible fixtureの完了条件を満たした。次はversioned content-free evidenceでDart／native／disabled／
+storeのexact line inventory、root projection＋native first-visible合計100 ms、static timer/source、structural boundを一つに結合する。

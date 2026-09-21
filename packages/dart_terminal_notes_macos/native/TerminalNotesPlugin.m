@@ -96,6 +96,55 @@ static const uint32_t kDtnDarkAccents[6] = {
     0x83c98cffu, 0xe49ab8ffu, 0xb9a2e8ffu,
 };
 
+static const NSUInteger kDtnMaximumPreviewCodeUnits = 256u;
+
+static NSString* DtnBodyPreview(NSString* body) {
+  NSUInteger end = body.length < kDtnMaximumPreviewCodeUnits
+                       ? body.length
+                       : kDtnMaximumPreviewCodeUnits;
+  NSUInteger line_count = 1u;
+  for (NSUInteger index = 0u; index < end; ++index) {
+    if ([body characterAtIndex:index] == '\n' && ++line_count > 8u) {
+      end = index;
+      break;
+    }
+  }
+  if (end < body.length && end > 0u) {
+    const unichar previous = [body characterAtIndex:end - 1u];
+    const unichar next = [body characterAtIndex:end];
+    if (CFStringIsSurrogateHighCharacter(previous) &&
+        CFStringIsSurrogateLowCharacter(next)) {
+      --end;
+    }
+  }
+  if (end == body.length) return body;
+  return [[body substringToIndex:end] stringByAppendingString:@"…"];
+}
+
+static CGFloat DtnEstimatedCardHeight(NSString* preview, CGFloat card_width,
+                                      CGFloat font_points) {
+  const CGFloat available = fmax(1, card_width - 24);
+  CGFloat line_width = 0;
+  NSUInteger lines = 1u;
+  for (NSUInteger index = 0u; index < preview.length && lines < 8u; ++index) {
+    const unichar unit = [preview characterAtIndex:index];
+    if (unit == '\n') {
+      ++lines;
+      line_width = 0;
+      continue;
+    }
+    const CGFloat advance = unit >= 0x2e80u ? font_points
+                                            : font_points * 0.55;
+    if (line_width > 0 && line_width + advance > available) {
+      ++lines;
+      line_width = 0;
+      if (lines >= 8u) break;
+    }
+    line_width += advance;
+  }
+  return fmin(220, fmax(88, ceil(lines * font_points * 1.35) + 52));
+}
+
 static NSColor* DtnColor(uint32_t rgba) {
   return [NSColor colorWithSRGBRed:((rgba >> 24u) & 0xffu) / 255.0
                              green:((rgba >> 16u) & 0xffu) / 255.0
@@ -224,6 +273,7 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
      japaneseLocale:(BOOL)japaneseLocale
      reattachAction:(BOOL)reattachAction
             selected:(BOOL)selected;
+- (void)prepareForReuse;
 @end
 
 @implementation DtnNoteCardView
@@ -314,20 +364,45 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
      japaneseLocale:(BOOL)japaneseLocale
      reattachAction:(BOOL)reattachAction
             selected:(BOOL)selected {
+  self.hidden = NO;
   self.model = model;
-  self.surfaceRgba = DtnSurfaceRgba(model.color, dark);
-  self.accentRgba = DtnAccentRgba(model.color, dark);
-  self.bodyRgba = dark ? 0xf5f5f5ffu : 0x1f1f1fffu;
+  const uint32_t surface_rgba = DtnSurfaceRgba(model.color, dark);
+  const uint32_t accent_rgba = DtnAccentRgba(model.color, dark);
+  const uint32_t body_rgba = dark ? 0xf5f5f5ffu : 0x1f1f1fffu;
+  if (self.surfaceRgba != surface_rgba || self.layer.backgroundColor == NULL) {
+    self.layer.backgroundColor = DtnColor(surface_rgba).CGColor;
+  }
+  if (self.accentRgba != accent_rgba || self.layer.borderColor == NULL) {
+    self.layer.borderColor = DtnColor(accent_rgba).CGColor;
+    self.chipLabel.textColor = DtnColor(accent_rgba);
+  }
+  if (self.bodyRgba != body_rgba || self.bodyLabel.textColor == nil) {
+    self.bodyLabel.textColor = DtnColor(body_rgba);
+  }
+  self.surfaceRgba = surface_rgba;
+  self.accentRgba = accent_rgba;
+  self.bodyRgba = body_rgba;
   self.increaseContrast = increaseContrast;
-  self.layer.backgroundColor = DtnColor(self.surfaceRgba).CGColor;
-  self.layer.borderColor = DtnColor(self.accentRgba).CGColor;
-  self.layer.borderWidth = selected ? 3 : (increaseContrast ? 2 : 1);
-  self.layer.shadowOpacity = increaseContrast ? 0 : 0.16;
-  self.layer.shadowOffset = NSMakeSize(0, 2);
-  self.layer.shadowRadius = increaseContrast ? 0 : 8;
-  self.bodyLabel.stringValue = model.body;
-  self.bodyLabel.font = [NSFont systemFontOfSize:bodyFontPoints];
-  self.bodyLabel.textColor = DtnColor(self.bodyRgba);
+  const CGFloat border_width = selected ? 3 : (increaseContrast ? 2 : 1);
+  if (self.layer.borderWidth != border_width) {
+    self.layer.borderWidth = border_width;
+  }
+  const float shadow_opacity = increaseContrast ? 0 : 0.16;
+  if (self.layer.shadowOpacity != shadow_opacity) {
+    self.layer.shadowOpacity = shadow_opacity;
+  }
+  if (!NSEqualSizes(self.layer.shadowOffset, NSMakeSize(0, 2))) {
+    self.layer.shadowOffset = NSMakeSize(0, 2);
+  }
+  const CGFloat shadow_radius = increaseContrast ? 0 : 8;
+  if (self.layer.shadowRadius != shadow_radius) {
+    self.layer.shadowRadius = shadow_radius;
+  }
+  self.bodyLabel.stringValue = DtnBodyPreview(model.body);
+  if (self.bodyLabel.font == nil ||
+      fabs(self.bodyLabel.font.pointSize - bodyFontPoints) > 0.01) {
+    self.bodyLabel.font = [NSFont systemFontOfSize:bodyFontPoints];
+  }
   NSString* chip = nil;
   if (model.status == 1u) {
     chip = japaneseLocale ? @"✓ 解決済み" : @"✓ Resolved";
@@ -341,13 +416,24 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     chip = japaneseLocale ? @"○ 有効" : @"○ Active";
   }
   self.chipLabel.stringValue = chip;
-  self.chipLabel.textColor = DtnColor(self.accentRgba);
-  self.editButton.title = reattachAction
-                              ? (japaneseLocale ? @"このターミナルへ接続"
-                                                : @"Attach to This Terminal")
-                              : (japaneseLocale ? @"編集" : @"Edit");
-  [self.editButton setAccessibilityLabel:self.editButton.title];
-  [self setNeedsDisplay:YES];
+  NSString* edit_title = reattachAction
+      ? (japaneseLocale ? @"このターミナルへ接続"
+                        : @"Attach to This Terminal")
+      : (japaneseLocale ? @"編集" : @"Edit");
+  if (![self.editButton.title isEqualToString:edit_title] ||
+      self.editButton.accessibilityLabel.length == 0u) {
+    self.editButton.title = edit_title;
+    [self.editButton setAccessibilityLabel:edit_title];
+  }
+}
+
+- (void)prepareForReuse {
+  self.model = nil;
+  self.onSelect = nil;
+  self.onEdit = nil;
+  self.bodyLabel.stringValue = @"";
+  self.chipLabel.stringValue = @"";
+  self.hidden = YES;
 }
 
 - (void)layout {
@@ -792,6 +878,7 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
 @property(nonatomic, assign) DtnSurface* nativeSurface;
 @property(nonatomic, copy) NSArray<DtnCardModel*>* models;
 @property(nonatomic, copy) NSArray<DtnNoteCardView*>* cardViews;
+@property(nonatomic, copy) NSArray<DtnNoteCardView*>* reusableCardViews;
 @property(nonatomic) DtnParsedProjection projection;
 @property(nonatomic) CGFloat requestedRailWidth;
 @property(nonatomic) CGFloat backingScale;
@@ -828,6 +915,7 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
     _requestedRailWidth = 320;
     _models = @[];
     _cardViews = @[];
+    _reusableCardViews = @[];
     _badge = [[DtnNoteBadgeButton alloc] initWithFrame:NSZeroRect];
     [self addSubview:_badge];
     _rail = [[DtnOpaqueRailView alloc] initWithFrame:NSZeroRect];
@@ -1319,22 +1407,29 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   const uint64_t previous_draft = self.editor.draftGeneration;
   self.projection = projection;
   self.models = cards;
-  for (NSView* view in self.cardList.subviews.copy) {
-    [view removeFromSuperview];
-  }
+  NSMutableArray<DtnNoteCardView*>* reusable =
+      [self.reusableCardViews mutableCopy];
   NSMutableArray<DtnNoteCardView*>* card_views =
       [[NSMutableArray alloc] init];
   const NSUInteger materialized =
       cards.count < DTN_MAX_MATERIALIZED_CARDS
           ? cards.count
           : DTN_MAX_MATERIALIZED_CARDS;
+  while (reusable.count < materialized) {
+    DtnNoteCardView* card =
+        [[DtnNoteCardView alloc] initWithFrame:NSZeroRect];
+    [self.cardList addSubview:card];
+    [reusable addObject:card];
+  }
+  for (NSUInteger index = materialized; index < reusable.count; ++index) {
+    [reusable[index] prepareForReuse];
+  }
   const BOOL dark = (projection.projection_flags & (1u << 2)) != 0u;
   const BOOL contrast = (projection.projection_flags & (1u << 3)) != 0u;
   const BOOL japanese = projection.locale == 1u;
   const CGFloat font_points = projection.body_font_millipoints / 1000.0;
   for (NSUInteger index = 0; index < materialized; ++index) {
-    DtnNoteCardView* card =
-        [[DtnNoteCardView alloc] initWithFrame:NSZeroRect];
+    DtnNoteCardView* card = reusable[index];
     [card applyModel:cards[index]
                 dark:dark
        bodyFontPoints:font_points
@@ -1366,9 +1461,9 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
                                            (unsigned long)projection.page_start +
                                                index + 1,
                                            projection.total_count]];
-    [self.cardList addSubview:card];
     [card_views addObject:card];
   }
+  self.reusableCardViews = reusable;
   self.cardViews = card_views;
   self.badge.readyCue = (projection.projection_flags & (1u << 1)) != 0u;
   self.badge.darkAppearance = dark;
@@ -1718,17 +1813,8 @@ static uint32_t DtnAccentRgba(uint32_t color, bool dark) {
   const CGFloat card_width = fmax(0, self.scrollView.bounds.size.width - 12);
   for (DtnNoteCardView* card in self.cardViews) {
     const CGFloat font_points = self.projection.body_font_millipoints / 1000.0;
-    NSDictionary* attributes = @{
-      NSFontAttributeName : [NSFont systemFontOfSize:font_points],
-    };
-    NSRect measured = [card.model.body
-        boundingRectWithSize:NSMakeSize(fmax(1, card_width - 24),
-                                         font_points * 8 * 1.35)
-                    options:NSStringDrawingUsesLineFragmentOrigin |
-                            NSStringDrawingTruncatesLastVisibleLine
-                 attributes:attributes];
-    const CGFloat card_height =
-        fmin(220, fmax(88, ceil(measured.size.height) + 52));
+    const CGFloat card_height = DtnEstimatedCardHeight(
+        card.bodyLabel.stringValue, card_width, font_points);
     card.frame = NSMakeRect(0, card_y, card_width, card_height);
     [card setNeedsLayout:YES];
     card_y += card_height + 12;

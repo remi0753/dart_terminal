@@ -74,6 +74,8 @@ override TERMINAL_NOTES_PLUGIN_LIBRARY := \
 	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/libdart_terminal_notes_macos.dylib
 override TERMINAL_NOTES_TEST_BINARY := \
 	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/terminal_notes_capability_tests
+override TERMINAL_NOTES_R0_BUDGET_BINARY := \
+	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/terminal_notes_r0_budget_benchmark
 override TERMINAL_NOTES_AOT_HOST := \
 	$(PRODUCT_NATIVE_TEST_BUILD_DIR)/terminal_notes_host_acceptance
 
@@ -149,6 +151,7 @@ override PRODUCT_PERFORMANCE_AGGREGATE_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)
 	terminal-app-intents-contract-check terminal-app-intents-native-test \
 	terminal-app-intents-dart-test \
 	terminal-notes-contract-check terminal-notes-native-test \
+	terminal-note-r0-native-budget \
 	terminal-notes-dart-test terminal-notes-host-acceptance \
 	terminal-notes-capability-audit terminal-notes-acceptance contextual-memory-s1-acceptance contextual-memory-s2-acceptance \
 	compatibility-inventory compatibility-inventory-check \
@@ -211,6 +214,7 @@ help:
 	@echo "  make terminal-app-intents-native-test  Test the product App Intents capability"
 	@echo "  make terminal-app-intents-dart-test  Test its Dart facade and metadata"
 	@echo "  make terminal-notes-native-test      Test the product Note projection ABI"
+	@echo "  make terminal-note-r0-native-budget  Measure actual AppKit Note apply and first-visible budgets"
 	@echo "  make terminal-notes-dart-test        Test its strict codec and code asset"
 	@echo "  make terminal-notes-acceptance       Run the complete manifest-independent Note gate"
 	@echo "  make product-parser-corpus        Replay reviewed product parser fixtures"
@@ -570,6 +574,21 @@ terminal-notes-native-test: terminal-notes-contract-check \
 		$(TERMINAL_NOTES_PLUGIN_LIBRARY) $(TERMINAL_RENDERER_PLUGIN_LIBRARY) \
 		$(TERMINAL_NOTES_TEST_BINARY)
 	@$(TERMINAL_NOTES_TEST_BINARY) $(TERMINAL_RENDERER_PLUGIN_LIBRARY)
+
+$(TERMINAL_NOTES_R0_BUDGET_BINARY): $(TERMINAL_NOTES_PLUGIN_LIBRARY) \
+		$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native/test/TerminalNotesBudgetBenchmark.mm
+	@mkdir -p $(PRODUCT_NATIVE_TEST_BUILD_DIR)
+	$(CLANGXX) $(PRODUCT_NATIVE_FLAGS) -std=c++20 -fobjc-arc \
+		-I$(DART_APPKIT_ROOT)/native/bridge/include \
+		-I$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native \
+		$(PROJECT_ROOT)/packages/dart_terminal_notes_macos/native/test/TerminalNotesBudgetBenchmark.mm \
+		$(TERMINAL_NOTES_PLUGIN_LIBRARY) \
+		-framework AppKit -framework Foundation \
+		-Wl,-rpath,$(PRODUCT_NATIVE_TEST_BUILD_DIR) -o $@
+
+terminal-note-r0-native-budget: runtime-architecture-check \
+		$(TERMINAL_NOTES_R0_BUDGET_BINARY)
+	@$(TERMINAL_NOTES_R0_BUDGET_BINARY)
 
 terminal-notes-dart-test:
 	@cd $(PROJECT_ROOT)/packages/dart_terminal_notes_macos && $(DART) pub get

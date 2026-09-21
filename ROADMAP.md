@@ -149,7 +149,7 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
       - [x] hard-cap commit後のduplicate canonical decodeを除去する
       - [x] canonical payload checksumのUTF-8 allocationをbounded化する
       - [x] native-assets CLI bundleと4-phase hard gateを完了する
-    - [ ] actual AppKit native apply/first-visible budget fixtureを実装する
+    - [x] actual AppKit native apply/first-visible budget fixtureを実装する
     - [ ] versioned content-free evidenceと全hard gateを接続する
   - [ ] named aggregateとarm64/x86_64/Universal auditを接続する
   - [ ] manual IME/keyboard/VoiceOver/appearance/TUI checklistとR0 stage decisionを完了する

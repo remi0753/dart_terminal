@@ -180,7 +180,10 @@ bool bitmap_contains(NSView* view, uint32_t rgba) {
 }
 
 NSView* find_view_named(NSView* root, NSString* class_name) {
-  if ([NSStringFromClass(root.class) isEqualToString:class_name]) return root;
+  if (!root.hidden &&
+      [NSStringFromClass(root.class) isEqualToString:class_name]) {
+    return root;
+  }
   for (NSView* child in root.subviews) {
     NSView* match = find_view_named(child, class_name);
     if (match != nil) return match;
@@ -190,7 +193,8 @@ NSView* find_view_named(NSView* root, NSString* class_name) {
 
 void find_views_named(NSView* root, NSString* class_name,
                       NSMutableArray<NSView*>* matches) {
-  if ([NSStringFromClass(root.class) isEqualToString:class_name]) {
+  if (!root.hidden &&
+      [NSStringFromClass(root.class) isEqualToString:class_name]) {
     [matches addObject:root];
   }
   for (NSView* child in root.subviews) {
@@ -440,6 +444,17 @@ int main(int argc, const char* argv[]) {
                        DTN_STATUS_OK &&
                    host.subviews.lastObject == note_view,
                "native child surface attachment and layer order");
+  NSMutableArray<NSView*>* maximum_cards = [[NSMutableArray alloc] init];
+  find_views_named(note_view, @"DtnNoteCardView", maximum_cards);
+  NSString* maximum_preview =
+      maximum_cards.count == 0u
+          ? @""
+          : [(NSTextField*)maximum_cards[0].subviews[0] stringValue];
+  NSView* maximum_first_card = maximum_cards.firstObject;
+  ok &= expect(maximum_cards.count == DTN_MAX_MATERIALIZED_CARDS &&
+                   maximum_preview.length == 257u &&
+                   [maximum_preview hasSuffix:@"…"],
+               "maximum body uses a bounded visible preview");
 
   using RendererInitialize = int32_t (*)(
       const da_native_extension_services_v1*);
@@ -559,6 +574,9 @@ int main(int argc, const char* argv[]) {
   ok &= expect(dtn_surface_apply_projection(surface, narrow.data(),
                                             narrow.size()) == DTN_STATUS_OK,
                "12 point narrow projection");
+  ok &= expect(find_view_named(note_view, @"DtnNoteCardView") ==
+                   maximum_first_card,
+               "card shell is reused across projections");
   DtnLayoutV1 narrow_layout = normal_layout;
   narrow_layout.pane_width = 264;
   narrow_layout.pane_height = 300;
@@ -675,6 +693,10 @@ int main(int argc, const char* argv[]) {
   ok &= expect(dtn_surface_apply_projection(surface, collapsed.data(),
                                             collapsed.size()) == DTN_STATUS_OK,
                "collapsed read-only projection");
+  ok &= expect(maximum_first_card.hidden &&
+                   [(NSTextField*)maximum_first_card.subviews[0] stringValue]
+                           .length == 0u,
+               "collapsed card shell retains no body preview");
   ok &= expect(dtn_surface_update_layout(surface, &normal_layout) ==
                    DTN_STATUS_OK,
                "restore normal layout");
@@ -771,6 +793,7 @@ int main(int argc, const char* argv[]) {
               announcements_before + 1u &&
           presentation.accessibility_body_count == 3u &&
           due_cards.count == 3u &&
+          due_cards[0] == maximum_first_card &&
           [[(NSTextField*)due_cards[0].subviews[0] stringValue]
               isEqualToString:@"first"] &&
           [[(NSTextField*)due_cards[1].subviews[0] stringValue]
