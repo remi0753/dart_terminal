@@ -949,3 +949,65 @@ explicit exportをdurable authorityに接続する。Default-offではentry/surf
 - 次の先頭未完了taskは「S1 restart/fault/close/quit product vectorを実装する」である。2 window/3 tab/5 paneとQuick Terminalを一つの
   deterministic product vectorにし、dirty close/quit、store/native fault、exact restart、default-off、terminal byte/geometry、owner leakを検証する。
 - Developer JIT/Release AOTのnamed targetとsanitizer/bundle/privacy/restoration/shell/diagnostics集約は、その次のサブタスクまで実施しない。
+
+## 2026-09-21: S1 restart/fault/close/quit product vector着手
+
+- ROADMAPを再確認し、先頭未完了がCM-10第4サブタスク内の「S1 restart/fault/close/quit product vectorを実装する」で
+  あることを確認した。次のDeveloper JIT/Release AOT named acceptanceと監査集約には先行しない。
+- Vectorは`dart_terminal` product-owned acceptance moduleに置き、実`TerminalApplicationState`、Note composition/coordinator、
+  実store worker/filesystemを使う。2 window/3 tab/5 standard paneとQuick Terminalをlogical product topologyとして構成する。
+- Native editorをOS automationで座標操作する案は、Miro風surfaceのlayout変更に脆くsemantic contractを検証できないため不採用とする。
+  Production factoryの既存`TerminalNoteNativeSurfaceChannelFactory`注入境界へbounded deterministic channelを渡し、同じ
+  projection/intent/result adapterとauthorityを実行する。Actual AppKit surface自体はCM-08/09 native testと次の両runtime bundleで検証する。
+- Store内部へtest-only crash commandを追加する案はproduction protocolを広げるため不採用とする。実filesystemの同一locationを
+  2つ目のproduct authorityでopenし、exclusive lock競合をfixed `inUseByOtherProcess` capabilityへ縮退させることでstore faultを検証する。
+  Native faultはattach rejectionとaccepted mutation後のresult適用失敗を注入し、surface/interaction ownerのretireを検証する。
+- Dirty close/quitはnative snapshotのdirty/confirmation bitとsole window interaction authorityを通じて検証し、本文をapplicationへmirrorしない。
+  Exact restartはordered shutdownで保存したrestoration bytesとNote bindingを新pane IDの同一traversalへ再読込して判定する。
+- Vectorの結果は固定boolean/countだけを持つcontent-free summaryとし、Note body、ID、path、timestamp、terminal contentをmachine lineや
+  general diagnosticsへ出さない。Terminal byte/geometry/shell/restoration/diagnostics sentinelは呼出側からcontent-free baselineを注入して
+  前後一致を検証できる形にする。
+- 完了条件はS1 durable flow、2/3/5+Quick topology、dirty close/quit block、store/native fault縮退、exact restart、default-off owner 0、
+  terminal byte/geometry delta 0、product/authority/worker/native/interaction owner 0、focused/full gate passとする。
+
+## 2026-09-21: S1 restart/fault/close/quit product vector完了
+
+### 実装と判断
+
+- 再利用可能な`TerminalNoteS1ProductAcceptance`を`dart_terminal`内へ追加した。2 standard window、3 standard tab、
+  5 standard paneとQuick Terminalを実`TerminalApplicationState`で構築し、production Note composition/coordinator、実worker、
+  実filesystemへ接続する。次サブタスクの実app runtimeからも同じvectorを呼べる。
+- Existing production injection seamからbounded semantic native channelを渡し、New/Save/Edit/color/reorder/Resolve/Reopen/Delete、
+  Detached/reattach、explicit copy/exportのproduct pathを実行する。12 durable mutationをcommit-before-projection/resultで通し、
+  coordinate clickやpersistent Note/context IDをacceptance APIへ露出しない。
+- Native snapshotのdirty/confirmation bitだけをcoordinatorへ同期し、sole window interaction authorityを使う
+  `TerminalPaneCloseCoordinator`でpane close、window close、application quitがすべてbusyになることを固定した。
+- Store faultは同じ実locationを別product authorityでopenし、exclusive lock競合が`inUseByOtherProcess`へ縮退してruntime ownerを
+  作らないことを検証する。Native faultはinitial attach rejectionとaccepted result適用失敗の2点を注入し、surface/interactionがretireする。
+- Ordered shutdownは2/3/5 topologyのexact restoration bytesを先に保存し、fresh pane ID 401以降で同じ形を再構成する。
+  再起動後、最初のexact contextだけに3件のdurable Noteが戻り、Quick singletonを含む6 bindingが復元されることを検証する。
+- Default-offはnative initializer、location resolver、surface factoryを一度も呼ばず、composition/product/authority/worker/interaction owner 0を固定した。
+  呼出側probeからterminal output byte、rows/columns、shell event、restoration payload entry、diagnostic content fieldの前後一致を要求する。
+- Result/machine lineはbooleanとcountだけで、本文、ID、path、timestampを含まない。実装は`dart_terminal`だけで、`dart_appkit`を変更していない。
+
+### 検証と試行記録
+
+- Focused format/analyze: acceptance module、test、root runner、public exportでissue 0。Focused vectorは
+  `windows=2 tabs=3 panes=5 quick=1 durable_flows=12 ... native_faults=2 restart=1 default_off=1 protected_state=1 owners=0`でpassした。
+- 初回vectorはQuick作成後にhidden tabのpaneへsurfaceを付けたためwindow interaction authorityが`busy`を返した。対象paneをactive/focusedへ
+  明示同期して修正した。次にreal worker commitをmicrotaskだけで待って結果到着前にdeadline扱いしたため、既存3秒bound内で1 ms yieldする
+  bounded waitへ修正した。Detached sourceも同様にactive/focusedへ同期した。いずれもproductのownership制約を緩めていない。
+- 最初のfull gateは新しいroot testを入力に持つrelease-candidate daily-use matrixのsource hash freshnessだけで停止した。
+  正規`make release-candidate-daily-use-matrix`で`test/run_tests.dart`のhashだけを更新し、program/gate/limitation/release blockerは変更していない。
+- 最終`CI=true DART_SUPPRESS_ANALYTICS=true make test`: 成功。379 Dart filesのformat変更0、root/package analyze issue 0、
+  Notes capability、S1 vector、実filesystem store、security stress、privacy、application、distributionを含む全gateを完走し、
+  `dart_terminal tests passed`を確認した。
+- `make RUNTIME_ARCH=arm64 developer-jit-audit release-aot-audit`: 両方成功。Notesを含む5 native assets、3 capabilities、
+  8 localizationのexact bundleを受理した。`git diff --check`も成功した。
+- 隣接`dart_appkit`の差分は着手前から存在する3 fileだけで、本サブタスクによる追加差分は0。
+
+### 次への引き継ぎ
+
+- 次の先頭未完了taskは「Developer JIT/Release AOT named acceptanceと全監査を完了する」である。新vectorを実appのisolated pathと
+  content-free terminal sentinelへ接続し、runtime smokeの両mode target、sanitizer、bundle/privacy/restoration/shell/diagnostics監査を集約する。
+- Named runtime gateを通すまではCM-10親と第4サブタスク親を完了にしない。S2には進まない。

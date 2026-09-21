@@ -127,7 +127,7 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
     - [x] hidden create/open actionとlocalized menu/palette projectionを接続する
   - [ ] restart、fault、close/quit、両runtime product acceptanceを完了する
     - [x] ordered Note shutdownとexact restoration commit境界をproductへ接続する
-    - [ ] S1 restart/fault/close/quit product vectorを実装する
+    - [x] S1 restart/fault/close/quit product vectorを実装する
     - [ ] Developer JIT/Release AOT named acceptanceと全監査を完了する
 - [ ] CM-11 S2 On Returnをproductへ統合する
 - [ ] CM-12 R0 hidden qualificationを完了する
