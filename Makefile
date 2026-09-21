@@ -141,6 +141,15 @@ override TERMINAL_NOTE_R0_DISABLED_INPUT_LOG := $(TERMINAL_NOTE_R0_EVIDENCE_DIR)
 override TERMINAL_NOTE_R0_STORE_ACCEPTANCE_LOG := $(TERMINAL_NOTE_R0_EVIDENCE_DIR)/store-acceptance.log
 override TERMINAL_NOTE_R0_EVIDENCE := $(PROJECT_ROOT)/benchmark/evidence/terminal-note-r0-budget-macos-arm64-m1.json
 override TERMINAL_NOTE_R0_ARCHITECTURE_EVIDENCE := $(PROJECT_ROOT)/benchmark/evidence/terminal-note-r0-architecture-macos.json
+override TERMINAL_NOTE_R0_QUALIFICATION_GATES := \
+	terminal-note-r0-evidence \
+	terminal-note-r0-architecture-audit \
+	terminal-notes-acceptance \
+	contextual-memory-s1-acceptance \
+	contextual-memory-s2-acceptance \
+	product-sanitizer-fuzz-fault-gate \
+	runtime-verify \
+	release-aot-distribution-verify
 override PRODUCT_PERFORMANCE_BASELINE := $(PROJECT_ROOT)/benchmark/baselines/product-micro-macos-arm64-m1.json
 override PRODUCT_PERFORMANCE_COMPARATOR_EVIDENCE := $(PROJECT_ROOT)/benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json
 override PRODUCT_RELATIVE_PERFORMANCE_EVIDENCE := $(PROJECT_ROOT)/benchmark/evidence/product-relative-performance-macos-arm64-m1.json
@@ -160,7 +169,7 @@ override PRODUCT_PERFORMANCE_AGGREGATE_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)
 	terminal-notes-contract-check terminal-notes-native-test \
 	terminal-note-r0-native-budget \
 	terminal-notes-dart-test terminal-notes-host-acceptance \
-	terminal-notes-capability-audit terminal-notes-acceptance contextual-memory-s1-acceptance contextual-memory-s2-acceptance \
+	terminal-notes-capability-audit terminal-notes-acceptance contextual-memory-s1-acceptance contextual-memory-s2-acceptance contextual-memory-r0-qualification \
 	compatibility-inventory compatibility-inventory-check \
 	compatibility-manifest compatibility-manifest-check terminal-differential-contract-check \
 	terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check \
@@ -239,6 +248,7 @@ help:
 	@echo "  make terminal-note-r0-dart-budget  Measure isolated Release AOT Note resource and latency budgets"
 	@echo "  make terminal-note-r0-evidence  Generate versioned content-free Note R0 budget evidence"
 	@echo "  make terminal-note-r0-architecture-audit  Audit Note capability and resource equality across runtime bundles"
+	@echo "  make contextual-memory-r0-qualification  Run the complete automated Note R0 qualification graph"
 	@echo "  make product-performance-comparator-check  Validate pinned Ghostty relative evidence"
 	@echo "  make product-performance-regression-gate  Run the complete Release AOT performance gate"
 	@echo "  make compatibility-inventory      Regenerate sequence inventory and summary"
@@ -881,6 +891,13 @@ terminal-note-r0-architecture-audit: developer-jit-audit \
 		--release-universal-app=$(UNIVERSAL_RELEASE_AOT_BUNDLE) \
 		--source-root=$(PROJECT_ROOT) \
 		--output=$(TERMINAL_NOTE_R0_ARCHITECTURE_EVIDENCE)
+
+contextual-memory-r0-qualification:
+	@$(MAKE) -j1 RUNTIME_ARCH=$(RUNTIME_ARCH) \
+		$(TERMINAL_NOTE_R0_QUALIFICATION_GATES)
+	@cd $(PROJECT_ROOT) && $(DART) run \
+		tool/terminal_note_r0_qualification.dart \
+		--source-root=$(PROJECT_ROOT)
 
 product-performance-comparator-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run test/product_performance_comparator_test.dart

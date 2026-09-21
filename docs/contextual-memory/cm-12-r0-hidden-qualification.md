@@ -711,3 +711,69 @@ Named aggregateを次の順で追加分割し、前項を個別検証・commit�
   `PRODUCT_NATIVE_SANITIZER_PASS suites=5 artifacts=11 asan_artifacts=11 ubsan_artifacts=9 architecture=arm64`だった。
 - 同じ`product-native-sanitizer`をretry wrapperなしで独立してもう一度実行し、同じsuite／artifact countとexact final lineで再度passした。
   Readiness不足で25〜28 memberを観測していた失敗は2連続のsanitizer runで再発せず、後続検証も連鎖失敗しなかった。
+
+### Fresh named aggregate 1回目の阻害
+
+PTY readiness修正後、`CI=true DART_SUPPRESS_ANALYTICS=true make RUNTIME_ARCH=arm64 contextual-memory-r0-qualification`をretry wrapperなしで
+先頭から実行した。Gate 1から6は順にpassした。
+
+- Budget evidence: combined first-visible p95 18,768 us／budget 100,000 us、content-free。
+- Cross-architecture evidence: 4 bundles、21 resources、1,388,080 bytes、8 Note images、sentinel／absolute path 0。
+- Notes acceptance: Developer JIT／Release AOT、geometry delta 0、terminal bytes 0、native owners 0。
+- S1／S2 acceptance: runtime 2 modes、S2 vectors 4、focus edges 64、TUI true、`dart_appkit=generic`。
+- Sanitizer／fuzz／fault: PTY large pipeline total 33／retained 32／p95 297 usを含み、native suites 5、artifacts 11、fuzz executions
+  1,296、fault boundaries 4、runtime modes 2。
+
+Gate 7 `runtime-verify`の`runtime-source-check`で
+`DART_ONLY_SOURCE_AUDIT_FAIL application source owns a direct FFI boundary: lib/src/terminal_system_entropy.dart`となりexit 2で停止した。
+Gate 8とfinal checkerは未実行で、R0 pass summaryは出ていない。Source auditを省略・緩和せず、当該entropy boundaryのownershipと既存package
+境界を調査する。
+
+### Direct entropy FFI ownership阻害と追加分割
+
+`terminal_system_entropy.dart`はCM-10で、embedded root Dart VMが`Random.secure()`を提供しない環境でもNote IDを生成するため追加された。
+macOS `arc4random_buf`をboundedに呼ぶ挙動自体は必要であり、S1/S2 acceptanceとsystem entropy testはpassしている。一方、既存の
+`dart_only_source_audit.dart`はappの`bin/`／`lib/`が`dart:ffi`または`DynamicLibrary`を直接所有することを禁止し、native boundaryを
+packageへ隔離する契約を持つ。CM-10のfull `make test`はこのruntime-only source auditを実行しなかったため、今回初めて不一致を検出した。
+
+検討した選択肢:
+
+- Source auditから当該fileを除外する案は、app層のdirect FFI禁止を例外化し、将来のboundary driftを隠すため不採用。
+- `dart_appkit`へsecure random APIを追加する案は、Terminal Noteの必要性を隣接汎用UI/runtime libraryへ押し込み、ユーザー指定のgeneric boundaryを
+  不要に拡張するため不採用。
+- 既存のNotes、Durable File、Process Resource packageへ追加する案は、それぞれpresentation／file durability／resource samplingという
+  capability責務と無関係なentropyを混在させるため不採用。
+- `dart_terminal` repository内にproduct-ownedだがapp非依存のsmall macOS entropy packageを設ける案を採用する。Packageはbounded byte sourceと
+  native symbol ownershipだけを持ち、Note ID、Dart Terminal、store、path、UI概念を持たない。App側は既存`TerminalSystemEntropy` facadeから
+  package APIを呼び、Context/Note generatorへの注入形は維持する。
+
+現在のnamed aggregate項目を次の順に追加分割する。Inventory／checker実装は阻害の検出前にfocused検証まで完了していたため、これを
+独立した最初の成果物としてcommitし、boundary修正を後続成果物として分離する。
+
+1. **Exact serial inventoryとfail-closed checker contract**
+   - 範囲: 8 gateのexact ordered inventory、single `-j1` recursive Make invocation、fresh budget／architecture evidence checker、
+     content-free exact summary、positive／negative contract test。
+   - 完了条件: Missing／duplicate／reordered／extra gate、parallel recipe、checker欠落を拒否し、current evidenceを受理する。
+   - 検証: Focused format/analyze/test、direct checker、generated matrix freshness、初回full graphのfail-fast挙動。
+2. **Product-owned generic macOS entropy packageへのdirect FFI boundary分離**
+   - 範囲: Generic package API／standalone test、app facade接続、package ownership source audit、root dependency／test graph。
+   - 対象外: `dart_appkit`変更、Note ID semantics、16-byte production injection、random fallback、audit例外、native asset追加。
+   - 完了条件: App `bin/`／`lib/`のdirect FFIが0、packageが`arc4random_buf`とmaximum requestを所有し、invalid lengthをfail closed、
+     standalone package test／root entropy test／runtime source auditがpassする。
+   - 検証: Package format/analyze/test、focused root format/analyze/test、`runtime-source-check`、generated freshness、root test、隣接generic audit。
+3. **Fresh 8-gate aggregateとfinal evidence checker完走**
+   - 元のserial aggregate完了条件を継承し、boundary修正commit後にretry wrapperなしでgate 1から再実行する。
+
+### Exact serial inventoryとchecker contractの完了結果
+
+- Make inventoryはbudget evidence、cross-architecture audit、Notes acceptance、S1、S2、sanitizer/fuzz/fault、runtime verify、distribution verifyの
+  8 gateをexact order／重複なしで保持し、一つのrecursive `make -j1`へ渡す。Final checkerは全gateが成功した後だけ実行される。
+- CheckerはMakefile declaration／recipeをexact照合し、budget evidenceとarchitecture evidenceを各owner validatorでcurrent sourceへbindする。
+  成功summaryはgate数、runtime mode数、release architecture数、evidence checked、manual／promotion false、content-freeだけを含む。
+- Contract testはpositive、missing、duplicate、reordered、extra、parallel、checker欠落を検証する。最初のparallel negative fixtureが別targetを
+  mutationした問題はR0 target stanzaへscopeし直し、fail-closed条件を弱めず解消した。
+- Focused formatterは3 files／0 changes、analyzerはissue 0、positive／negative suiteはpass。Direct checkerは
+  `TERMINAL_NOTE_R0_QUALIFICATION_PASS version=1 gates=8 runtime_modes=2 release_architectures=3 budget_evidence=checked architecture_evidence=checked manual_claim=false promotion_claim=false content_free=true`
+  を一行出した。
+- 初回fresh graphはgate 1〜6を順にpassし、gate 7 source auditで停止してgate 8／checkerを実行しなかったため、serial／fail-fast contractも
+  実graphで確認した。阻害の修正と全8 gateのpassは後続2成果物で追跡する。
