@@ -1,7 +1,7 @@
 # CM-13 R1 internal S1/S2 opt-in
 
 日付: 2026-09-22<br>
-状態: 第1サブタスク完了。次はdata recovery/export、kill switch、rollback rehearsalとinternal runbook。
+状態: 第2サブタスク完了。次はR1両runtime、64-pane、manual aggregateとstage decision。
 
 ## 目的
 
@@ -168,9 +168,78 @@ data-preserving rollback/recoveryを成立させる。
 - Candidate buildは個人のApplication Support storeを開いていない。実storeを使う手動previewの開始・停止・backup/exportは
   次のinternal runbookで明示し、automationは隔離したabsolute state rootを使用する。
 
-## 未確定事項
+## 着手時の論点（解決済み）
 
 - Internal profileをMake target、versioned descriptor、checkerのどの最小構成で固定すると、手動previewと自動gateの双方が
   同じ引数列を再利用できるか。
 - Recovery-required状態のraw-file保全は既存UIに専用actionがないため、R1 runbookでは安全なmanual copyを正本とするか、
   product actionがR1の必須成果物か。Gate 3とCM-13文言を照合して第2サブタスク着手時に決定する。
+
+### 2026-09-22 — recovery／rollbackサブタスク着手
+
+- 既存transaction engineは、current破損かつbackup正常時のpayload-preserving recovery preview、明示的な
+  `retryRecovery()`、ready／recovery previewからのportable exportをすでに提供する。Store worker protocolにも同じ操作があり、
+  public product UIや新しい永続形式を追加しなくてもR1の復旧手順を構成できる。
+- Recovery-required（current／backup双方が不正）とupgrade-required（未知のnewer version）はdocumentを公開せず、load中に
+  store payloadを変更しない。ここへ自動reset、古いbackupへのfallback、downgradeを足す案はdata lossとforward compatibilityを
+  損なうため不採用とした。
+- R1の運用面は、アプリを完全終了してlockを解放した後だけ使うinternal store admin toolへ限定する。Statusはdurable payloadを保持し、portable
+  exportは本文を含むことへの明示acknowledgement、backup復元はraw-file保全後の明示acknowledgementを要求する。結果はpath、本文、
+  Note／context identity、時刻を含まない固定machine lineとする。
+- 公開UIへRestore actionを増やす案と、production process protocolにR1専用commandを足す案はCM-14以降のsurface変更を先行するため
+  不採用とした。Internal toolは既存の汎用engineをofflineで呼ぶだけとし、`dart_appkit`にはcodeを追加しない。
+- 自動rehearsalは個人のApplication Supportを使わず、隔離したabsolute state rootで実isolate workerと実filesystemを使う。
+  on→off、native missing、lock、current-only corruption、explicit export／restore、corrupt-both、newer、pre-Notes exact／mismatchを
+  同じfixtureで検証し、終了時にtemporary rootを削除する。
+
+### 2026-09-22 — recovery／rollbackサブタスク完了
+
+#### 実装と運用境界
+
+- `tool/terminal_note_internal_store_admin.dart`を追加した。Actionはpayload-preserving status、consented portable export、acknowledged
+  backup restoreの3つだけで、absolute path、exactly-one action、action固有acknowledgementをfail closedで検証する。結果は
+  source state、outcome、durable payload mutation有無だけを持つ固定machine lineで、本文、identity、path、時刻を出さない。
+- Statusはloaded／empty／recovery-preview／recovery-required／upgrade-requiredを分類する。Exportはloaded／empty／
+  recovery-previewだけ、restoreはrecovery-previewだけを許可する。Locked、corrupt-both、newer、unsafeは上書き、reset、古いcopyへの
+  fallbackを行わない。Portable fileだけは明示した外部destinationへ書き、内部ID、timestamp、revision、context bindingを除外する。
+- `tool/terminal_note_r1_rehearsal.dart`はexact typed profileからS1／S2 enabled、S3 disabledを再確認し、隔離した実state rootへ
+  dedicated isolate workerで2 revisionをcommitする。その同じstoreでlive lock拒否、worker stop完了、on→off kill switch、native capability missing、
+  pre-Notes exact reattach／layout mismatch Detachedを検証した。
+- Rehearsalは別fixtureでcurrent-only corruptionをpayload-preserving recovery previewとして開き、portable export、raw payloadのexact copy、
+  acknowledged backup restore、実workerからの再読込を完走する。Corrupt-bothとnewer-current＋valid-old-backupは分類だけ行い、payload byteを
+  変えない。全temporary artifactをfinallyで削除し、composition／authority／worker／product owner差分0を要求する。
+- `contextual-memory-r1-rehearsal`を正式Make入口へ追加し、typed profile checkを依存にした。Root test runnerにもpositive rehearsalと、
+  relative path、ack不足、multiple action、irrelevant acknowledgementを拒否するnegative testを接続した。
+- Internal運用手順は
+  [`cm-13-r1-internal-runbook.md`](cm-13-r1-internal-runbook.md)へ固定した。Standard store location、アプリ完全終了、raw backup先行、
+  sensitive export、明示restore、soft kill switch、再有効化、pre-Notes rollback／re-upgrade、停止条件を含む。Public reference、Settings、
+  telemetry、import、自動resetは追加していない。
+- 新規codeと文書は`dart_terminal`内に限定した。Sibling `dart_appkit`の汎用境界へDart Terminal固有のfeature、path、tool、parameterを
+  追加していない。
+
+#### 検証と試行記録
+
+- Focused formatter: 3 fileをformatし、その後変更0。Focused analyzer: issue 0。
+- `dart run test/terminal_note_r1_rehearsal_test.dart`: pass。実filesystem／isolate worker、lock、recovery、export、restore、rollback、
+  cleanupとCLI validationを完走した。
+- `make contextual-memory-r1-rehearsal`: pass。Profile checkerに続いて
+  `TERMINAL_NOTE_R1_REHEARSAL_PASS version=1 ... wrong_attach=0 unintended_payload_changes=0 privacy=1 owners=0 temp_cleanup=1 content_free=true`
+  を出力した。
+- `make test`: 398 Dart fileのformat変更0、root／package analyze issue 0、native Notes、real filesystem store、R0 harness、privacy、
+  compatibility、distributionを含む全回帰が`dart_terminal tests passed`で完了した。Store acceptanceを含む既存performance checkも
+  現行の許容範囲でpassしたため、性能follow-upを追加していない。
+- 最終diff reviewで、status loadがlock取得とengine-owned pending cleanupを行い得ることを明記し、結果名をstore全体のread-onlyではなく
+  `payload_mutation`へ限定した。Worker stop結果も明示検証へ加えた。この修正後にfocused format変更0、analyze issue 0、focused test、
+  正式Make rehearsalを再実行して全てpassした。
+- 最初のfocused Dart dev commandと最初のMake rehearsalは、sandboxから共有Dart telemetry session fileのmtimeを更新できずtest本体前に停止した。
+  通常のcache環境で同じcommandを再実行してpassしており、product／test failureではない。
+- 正規generatorでrelease-candidate daily-use matrixを更新した。差分は`Makefile`と`test/run_tests.dart`のSHA-256だけで、program、
+  workflow、gate、known limitation、release blockerは変えていない。`git diff --check`もpassした。
+- Sibling `dart_appkit`の着手前3変更はそのままで、本サブタスクによる差分0。
+
+#### 次への引き継ぎ
+
+- 次の先頭未完了はR1両runtime、64-pane、manual aggregateとstage decisionである。Fresh candidateへ今回のexact profileとrehearsalを
+  接続し、R0 hard gateを再利用してから実internal storeでmanual matrixを実施する。
+- `recovery-required`／`upgrade-required`はR1 stageを停止する運用条件のままである。自動resetやpublic recovery UIは次サブタスクへ
+  持ち越さない。
