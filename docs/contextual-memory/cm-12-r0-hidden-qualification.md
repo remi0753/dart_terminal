@@ -586,3 +586,52 @@ helper snapshot生成前に`Dart helper native asset mapping has no target archi
   （`docs/BUILDING_DART_ENGINE.md`、`scripts/bootstrap_dart_engine.sh`、`scripts/build_dart_engine.sh`）は変更もstageもしていない。
 
 汎用mapping修正の個別完了条件を満たした。次はROADMAPを再確認し、fresh 4 bundle equality auditとversioned evidenceを完了する。
+
+### Fresh 4 bundle equality auditの実装・検証経過
+
+- Product-local auditor、positive／negative suite、Make targetを追加した。AuditorはDeveloper JIT arm64、Release AOT arm64／x86_64／
+  Universalの4 bundleを入力に、strict manifest、release application contract、Notes ABI v1 declaration、framework/helperの2 Notes image、
+  thin manifest ownership、neutral resource path／byte／Universal evidence、content／ID／time／absolute-path sentinelをfail closedで照合する。
+- Version 1 evidenceは4 manifest hash、auditor source hash、Notes capability、resource count／aggregate byte／aggregate hash、architecture count、
+  boolean gateだけを保持し、resource path／raw content／build pathは保持しない。Checked validatorはexact schema、source hash、canonical JSONを
+  再検証する。
+- Fresh targetはDeveloper JIT、arm64 thin、x86_64 thin、Universalをすべて再生成し、既存bundle audit 4件とnew auditをpassした。
+  New machine lineは`resources=21 resource_bytes=1388080 note_images=8`、sentinel／absolute path 0、content-free trueだった。
+- 最初のroot `make test`は、変更したMakefileとaggregate test registryをまだ反映していない
+  `compatibility/release_candidate_daily_use_matrix.json`をstaleとして検出して停止した。Product test failureではなく、正規generatorで
+  source hash chainを更新してから同じaggregateを再実行する。Matrixを直接編集せず、受け入れ条件も変更しない。
+
+### Fresh 4 bundle equality auditの完了結果
+
+- `tool/terminal_note_r0_architecture_audit.dart`はthin schema version 1とUniversal schema version 2のtop-level keyをexactに固定し、
+  Release contractはarchitecture固有App Intents target tripleとlibrary byte countだけを正規化してarm64／x86_64／Universalで照合する。
+  Universal top-level contract、sorted code inventory、両thin manifest SHA-256 ownershipも同時に検査する。
+- Notes capabilityは4 contractすべてでpackage／library／ABI version／ABI symbol／initializerをexact照合し、framework imageとhelper imageを
+  各bundleで要求する。`lipo -archs`結果はDeveloper JIT／arm64 thinがarm64、x86_64 thinがx86_64、Universalが両sliceでなければ
+  failする。
+- Bundle全fileをsymlink非追従、case-fold duplicate拒否、file／aggregate size bound付きで列挙し、manifest-declared code imageと署名を除く
+  neutral resource 21 file／1,388,080 bytesを4 bundleでpath・byte exact照合した。Universal `resourceFiles`のsorted path／size／SHA-256も
+  同じinventoryへbindした。
+- Positive／negative suiteはdeterminism、unknown manifest key、Notes capability欠落／ABI drift、Release contract drift、thin ownership、
+  resource byte／extra file／Universal hash drift、thin／Universal image architecture、architecture order、body sentinel、absolute path、
+  checked schema／source hash／gate／canonical JSONをfail closedとして固定した。
+- Checked-in evidenceは
+  `benchmark/evidence/terminal-note-r0-architecture-macos.json`。4 manifestとauditor sourceのSHA-256、Notes ABI、resource aggregate、
+  architecture count、boolean gateだけを保持し、resource path、raw content、build path、timestampは保持しない。
+
+Fresh実測／検証結果:
+
+- `CI=true DART_SUPPRESS_ANALYTICS=true make RUNTIME_ARCH=arm64 terminal-note-r0-architecture-audit`: Developer JIT、arm64／x86_64 thin、
+  Universalをfresh生成し、既存4 bundle auditがすべてpass。New exact summaryは
+  `TERMINAL_NOTE_R0_ARCHITECTURE_PASS version=1 bundles=4 resources=21 resource_bytes=1388080 note_images=8 architectures=arm64,x86_64,universal capability_abi=1 sentinels=0 absolute_paths=0 content_free=true`。
+- Focused `dart analyze`は`No issues found!`。Formatterは3 files／0 changes。Focused positive／negative suiteとchecked evidence replayはpass。
+- 正規`make release-candidate-daily-use-matrix`はMakefileと`test/run_tests.dart`のSHA-256だけを更新した。再実行した
+  `CI=true DART_SUPPRESS_ANALYTICS=true make test`はpass。391 Dart files／0 format changes、root analyze issue 0、new architecture suite、
+  R0 hidden harness、store acceptance（commit p95 45,434 us、primitive p95 14,641 us）、security／distributionを含む。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test` in `../dart_appkit`: full pass、
+  `GENERIC_REPOSITORY_AUDIT_PASS paths=148 text_files=147`。Dart Terminal固有code追加0。既存user変更3件は非接触。
+- `git diff --check`、checked evidenceのcontent／ID／time／absolute-path sentinel scan、debug/TODO scanはpass。Raw build outputは追跡せず、
+  versioned content-free evidenceだけを追加した。
+
+Fresh 4 bundle equality auditと親のversioned cross-architecture auditの完了条件を満たした。次はROADMAPを再確認し、R0 named aggregateへ
+full gate inventoryを接続する。

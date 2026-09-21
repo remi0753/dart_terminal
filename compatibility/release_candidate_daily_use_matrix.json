@@ -43,7 +43,7 @@
   "evidence_sources": [
     {
       "path": "Makefile",
-      "sha256": "1aba7a34541aa8c34117ea034544242c3b4f409718cb27b6e6cdce67a1ba3ed9"
+      "sha256": "47effead4360c6f764aa1be281c94d86b88f87c571731854c4daeb7baf94abec"
     },
     {
       "path": "test/corpus/applications/matrix_v1.json",
@@ -111,7 +111,7 @@
     },
     {
       "path": "test/run_tests.dart",
-      "sha256": "50ccef29d0962e5c0ee7c9b0d6a7d752cbb6f3b940f4ee0502a8933d990685ee"
+      "sha256": "79ec0e2e292b2f7af23fd0500fc2f0c1f92bb30781c2ab4aaea9d97bb68599b7"
     },
     {
       "path": "tool/release_candidate_daily_use.dart",

@@ -1,0 +1,68 @@
+{
+  "format": "dart-terminal-note-r0-architecture-evidence",
+  "version": 1,
+  "status": "pass",
+  "inputs": {
+    "developer_jit_arm64_manifest_sha256": "53f1617013622541aa68a429b7341a25615e937bdfe7b23f1fcfd76189e484d8",
+    "release_arm64_manifest_sha256": "29862309acfe393f8eda6224236f81d79966955d52ad858d6f09274a164884fb",
+    "release_x86_64_manifest_sha256": "a2658ba54584d14d85dea551a1186c96d31dc90ff0f48b7ff5042d766a3544c4",
+    "release_universal_manifest_sha256": "aefe31fcf4de93aaf0a94a5cce9d193d2564da03494e32ed72e1606111ec7547"
+  },
+  "source_integrity": {
+    "architecture_auditor_sha256": "bfe4898ac9301af55500388cfb8d2717856d46698551da8a7a706f48e399528c"
+  },
+  "note_capability": {
+    "id": "dart_terminal_notes_macos",
+    "package": "dart_terminal_notes_macos",
+    "library": "libdart_terminal_notes_macos.dylib",
+    "abiVersion": 1,
+    "abiVersionSymbol": "dtn_abi_version",
+    "initializerSymbol": "dtn_initialize"
+  },
+  "resources": {
+    "files": 21,
+    "bytes": 1388080,
+    "aggregate_sha256": "96fe2fe853ee109679dfea544538c25d1919428998445f545f80aa63ab3bbd35",
+    "inventories_equal": true,
+    "bytes_equal": true,
+    "universal_evidence_equal": true,
+    "paths_retained": false,
+    "raw_content_retained": false
+  },
+  "architecture": {
+    "developer_jit_arm64": [
+      "arm64"
+    ],
+    "release_arm64": [
+      "arm64"
+    ],
+    "release_x86_64": [
+      "x86_64"
+    ],
+    "release_universal": [
+      "arm64",
+      "x86_64"
+    ],
+    "note_images_per_bundle": 2,
+    "note_images": 8,
+    "universal_code_images": 15,
+    "thin_manifest_ownership": true
+  },
+  "privacy": {
+    "content_sentinel_matches": 0,
+    "absolute_path_matches": 0,
+    "manifest_and_neutral_resources_only": true,
+    "content_free": true
+  },
+  "gates": {
+    "strict_manifests": true,
+    "release_contract_equality": true,
+    "note_capability_equality": true,
+    "note_image_architectures": true,
+    "neutral_resource_equality": true,
+    "universal_resource_evidence": true,
+    "thin_manifest_ownership": true,
+    "privacy": true,
+    "passed": true
+  }
+}
