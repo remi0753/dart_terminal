@@ -143,14 +143,14 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
   （[`cm-12-r0-hidden-qualification.md`](docs/contextual-memory/cm-12-r0-hidden-qualification.md)
   を参照して実施する）
   - [x] R0 temporary-store harness、hidden/default-off、rollback contractを固定する
-  - [ ] hard resource/latency budget benchmarkとcontent-free evidenceを実装する
+  - [x] hard resource/latency budget benchmarkとcontent-free evidenceを実装する
     - [x] isolated Release AOT Dart budget fixtureを実装する
       - [x] hard-cap commitのSHA-256 working memoryをbounded化する
       - [x] hard-cap commit後のduplicate canonical decodeを除去する
       - [x] canonical payload checksumのUTF-8 allocationをbounded化する
       - [x] native-assets CLI bundleと4-phase hard gateを完了する
     - [x] actual AppKit native apply/first-visible budget fixtureを実装する
-    - [ ] versioned content-free evidenceと全hard gateを接続する
+    - [x] versioned content-free evidenceと全hard gateを接続する
   - [ ] named aggregateとarm64/x86_64/Universal auditを接続する
   - [ ] manual IME/keyboard/VoiceOver/appearance/TUI checklistとR0 stage decisionを完了する
 - [ ] CM-13 R1 internal S1/S2 opt-inを完了する

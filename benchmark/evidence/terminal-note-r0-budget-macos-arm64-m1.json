@@ -1,0 +1,189 @@
+{
+  "format": "dart-terminal-note-r0-budget-evidence",
+  "version": 1,
+  "status": "pass",
+  "authority": {
+    "os": "macos",
+    "abi": "macos_arm64",
+    "hardware_model": "MacBookPro17,1",
+    "memory_bytes": 17179869184,
+    "dart_sdk": "3.13.2",
+    "build_mode": "release-aot"
+  },
+  "input_integrity": {
+    "dart_budget_sha256": "724d26d93d1fb4325531a1ee26366d79d30d10180257a478db94700d62e9d56b",
+    "native_budget_sha256": "3c7951d075ff798aa3a635cf3e6aac6dce685106eee7bd74c31a75c9370c7a65",
+    "disabled_input_sha256": "3d856bafed4ec3a897fa6cb623c814b24f295faed3f9119af0864ad5fa4f2446",
+    "store_acceptance_sha256": "887d7b8629757d9ea27b6b1e952a605cf1eb1ab282373ce89dd06d6d81297d64"
+  },
+  "source_integrity": {
+    "dart_budget_benchmark_sha256": "69f5648258d830d61fc2c7f2b1dcbe84f470d05296ae3cc773a732dc129f288e",
+    "disabled_input_benchmark_sha256": "5fba1285081adf8a80711f31d26e6695f4980f39b37cea0b168f35d9c1a1939a",
+    "evidence_builder_sha256": "7eca5cb8c57128be5747d64282c066a1f397139a040eb81a9a834f98d61fe7b4",
+    "native_budget_benchmark_sha256": "7731b7187ee7572bf67ed4d4c6e4e475ebbaf3e698a92af370b65c3357a1d7f2",
+    "store_acceptance_sha256": "18a448374d249b536cbaebe20e8ae47e6b1260c6ffe07fcde1c188c58306ab27",
+    "audited_note_sources_sha256": "c0d097238d839dd86a020bfd6db84943500032a291e767a0dae2e039c8e0f63a"
+  },
+  "measurement_policy": {
+    "version": 1,
+    "dart_phase_processes": 4,
+    "native_actual_appkit": true,
+    "raw_samples_retained": false,
+    "content_retained": false,
+    "identities_retained": false,
+    "timestamps_retained": false,
+    "paths_retained": false
+  },
+  "metrics": {
+    "idle": {
+      "panes": 64,
+      "surfaces": 64,
+      "worker": 1,
+      "rss_delta_bytes": 3211264,
+      "rss_budget_bytes": 16777216,
+      "idle_window_ms": 250,
+      "projection_delta": 0,
+      "notification_delta": 0,
+      "layout_delta": 0,
+      "frame_delta": 0,
+      "store_changes": 0,
+      "owners": 0
+    },
+    "model_transition": {
+      "samples": 64,
+      "p95_us": 4,
+      "max_us": 11,
+      "p95_budget_us": 1000,
+      "max_budget_us": 4000,
+      "store_commit_delta": 0,
+      "body_encode": 0,
+      "fsync": 0,
+      "owners": 0
+    },
+    "dart_projection": {
+      "samples": 21,
+      "notes": 128,
+      "cards": 64,
+      "body_bytes": 262144,
+      "p95_us": 4670,
+      "budget_us": 100000,
+      "store_commit_delta": 0,
+      "owners": 0
+    },
+    "native_apply": {
+      "warmups": 5,
+      "samples": 21,
+      "cards": 64,
+      "materialized": 32,
+      "body_bytes": 262144,
+      "apply_p95_us": 5394,
+      "apply_budget_us": 8000,
+      "first_visible_p95_us": 14623,
+      "first_visible_budget_us": 100000,
+      "stalls": 0,
+      "stall_threshold_us": 16670,
+      "owners": 0
+    },
+    "combined_first_visible": {
+      "p95_us": 19293,
+      "budget_us": 100000
+    },
+    "hard_cap": {
+      "notes": 2048,
+      "contexts": 4096,
+      "triggers": 2048,
+      "deliveries": 2048,
+      "body_bytes": 8388608,
+      "file_bytes": 9698603,
+      "steady_delta_bytes": 44892160,
+      "steady_budget_bytes": 67108864,
+      "peak_delta_bytes": 89554944,
+      "peak_budget_bytes": 100663296,
+      "owners": 0
+    },
+    "disabled_input": {
+      "rounds": 21,
+      "events_per_route": 1050000,
+      "factory_calls": 0,
+      "baseline_p95_ns": 286,
+      "disabled_p95_ns": 261,
+      "median_ratio_ppm": 991087,
+      "maximum_ratio_ppm": 1050000
+    },
+    "durable_store": {
+      "runs": 20,
+      "commit_p95_us": 44067,
+      "primitive_p95_us": 15382,
+      "commit_budget_us": 250000,
+      "primitive_budget_us": 1500000
+    }
+  },
+  "structural_bounds": {
+    "model": {
+      "notes": 2048,
+      "notes_per_attached_context": 128,
+      "contexts": 4096,
+      "triggers": 2048,
+      "deliveries": 2048,
+      "body_utf8_bytes": 4096,
+      "body_lines": 64,
+      "aggregate_body_utf8_bytes": 8388608,
+      "prompt_events_per_batch": 32,
+      "coalesced_focus_edges": 2
+    },
+    "authority": {
+      "pending_intents": 32,
+      "pending_body_bytes": 131072,
+      "intent_sources": 64,
+      "live_contexts": 64,
+      "live_sessions": 64,
+      "prompt_events_per_session": 32
+    },
+    "store_worker": {
+      "pending_intents": 32,
+      "pending_body_bytes": 131072
+    },
+    "store_codec": {
+      "file_bytes": 16777216,
+      "restoration_pane_contexts": 64,
+      "deletion_journal_entries": 8192,
+      "json_depth": 16,
+      "json_nodes": 262144
+    },
+    "product_projection": {
+      "cards": 64,
+      "body_bytes": 262144
+    },
+    "native_projection": {
+      "cards": 64,
+      "materialized_cards": 32,
+      "card_body_bytes": 4096,
+      "aggregate_body_bytes": 262144,
+      "context_notes": 128,
+      "detached_notes": 2048
+    }
+  },
+  "static_audit": {
+    "audited_source_files": 21,
+    "periodic_timer_matches": 0,
+    "display_link_matches": 0,
+    "one_shot_timer_matches": 1,
+    "request_timeout_timer_matches": 1
+  },
+  "gates": {
+    "input_contracts": true,
+    "authority_environment": true,
+    "idle": true,
+    "model_transition": true,
+    "dart_projection": true,
+    "native_apply": true,
+    "combined_first_visible": true,
+    "hard_cap": true,
+    "disabled_input": true,
+    "durable_store": true,
+    "structural_bounds": true,
+    "static_source_audit": true,
+    "content_free": true,
+    "passed": true
+  }
+}

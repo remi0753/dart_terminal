@@ -134,6 +134,12 @@ override PRODUCT_PERFORMANCE_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/produc
 override TERMINAL_NOTE_DISABLED_INPUT_BENCHMARK := $(PRODUCT_PARSER_BENCHMARK_DIR)/terminal_note_disabled_input_benchmark
 override TERMINAL_NOTE_R0_DART_BUDGET_BUNDLE := $(PRODUCT_PARSER_BENCHMARK_DIR)/terminal_note_r0_dart_budget
 override TERMINAL_NOTE_R0_DART_BUDGET_BENCHMARK := $(TERMINAL_NOTE_R0_DART_BUDGET_BUNDLE)/bundle/bin/terminal_note_r0_budget_benchmark
+override TERMINAL_NOTE_R0_EVIDENCE_DIR := $(PRODUCT_PARSER_BENCHMARK_DIR)/terminal-note-r0-evidence
+override TERMINAL_NOTE_R0_DART_BUDGET_LOG := $(TERMINAL_NOTE_R0_EVIDENCE_DIR)/dart-budget.log
+override TERMINAL_NOTE_R0_NATIVE_BUDGET_LOG := $(TERMINAL_NOTE_R0_EVIDENCE_DIR)/native-budget.log
+override TERMINAL_NOTE_R0_DISABLED_INPUT_LOG := $(TERMINAL_NOTE_R0_EVIDENCE_DIR)/disabled-input.log
+override TERMINAL_NOTE_R0_STORE_ACCEPTANCE_LOG := $(TERMINAL_NOTE_R0_EVIDENCE_DIR)/store-acceptance.log
+override TERMINAL_NOTE_R0_EVIDENCE := $(PROJECT_ROOT)/benchmark/evidence/terminal-note-r0-budget-macos-arm64-m1.json
 override PRODUCT_PERFORMANCE_BASELINE := $(PROJECT_ROOT)/benchmark/baselines/product-micro-macos-arm64-m1.json
 override PRODUCT_PERFORMANCE_COMPARATOR_EVIDENCE := $(PROJECT_ROOT)/benchmark/evidence/ghostty-performance-comparator-macos-arm64-m1.json
 override PRODUCT_RELATIVE_PERFORMANCE_EVIDENCE := $(PROJECT_ROOT)/benchmark/evidence/product-relative-performance-macos-arm64-m1.json
@@ -176,6 +182,7 @@ override PRODUCT_PERFORMANCE_AGGREGATE_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)
 	product-performance-benchmark-build product-performance-benchmark \
 	terminal-note-disabled-input-benchmark-build terminal-note-disabled-input-benchmark \
 	terminal-note-r0-dart-budget-build terminal-note-r0-dart-budget \
+	terminal-note-r0-evidence \
 	product-performance-comparator-check product-performance-regression-gate \
 	runtime-source-check runtime-architecture-check \
 	developer-jit-build developer-jit-run developer-jit-audit \
@@ -229,6 +236,7 @@ help:
 	@echo "  make product-performance-benchmark  Run product microbenchmarks against the M1 baseline"
 	@echo "  make terminal-note-disabled-input-benchmark  Compare disabled Notes key-to-PTY with the Release AOT baseline"
 	@echo "  make terminal-note-r0-dart-budget  Measure isolated Release AOT Note resource and latency budgets"
+	@echo "  make terminal-note-r0-evidence  Generate versioned content-free Note R0 budget evidence"
 	@echo "  make product-performance-comparator-check  Validate pinned Ghostty relative evidence"
 	@echo "  make product-performance-regression-gate  Run the complete Release AOT performance gate"
 	@echo "  make compatibility-inventory      Regenerate sequence inventory and summary"
@@ -838,6 +846,28 @@ terminal-note-r0-dart-budget-build: dependencies
 
 terminal-note-r0-dart-budget: terminal-note-r0-dart-budget-build
 	@$(TERMINAL_NOTE_R0_DART_BUDGET_BENCHMARK)
+
+terminal-note-r0-evidence: runtime-architecture-check \
+		terminal-note-r0-dart-budget-build \
+		terminal-note-disabled-input-benchmark-build \
+		$(TERMINAL_NOTES_R0_BUDGET_BINARY)
+	@mkdir -p $(TERMINAL_NOTE_R0_EVIDENCE_DIR)
+	@$(TERMINAL_NOTE_R0_DART_BUDGET_BENCHMARK) \
+		> $(TERMINAL_NOTE_R0_DART_BUDGET_LOG)
+	@$(TERMINAL_NOTES_R0_BUDGET_BINARY) \
+		> $(TERMINAL_NOTE_R0_NATIVE_BUDGET_LOG)
+	@$(TERMINAL_NOTE_DISABLED_INPUT_BENCHMARK) \
+		> $(TERMINAL_NOTE_R0_DISABLED_INPUT_LOG)
+	@cd $(PROJECT_ROOT) && $(DART) run \
+		test/terminal_note_store_acceptance_test.dart \
+		> $(TERMINAL_NOTE_R0_STORE_ACCEPTANCE_LOG)
+	@cd $(PROJECT_ROOT) && $(DART) run tool/terminal_note_r0_evidence.dart \
+		--dart-log=$(TERMINAL_NOTE_R0_DART_BUDGET_LOG) \
+		--native-log=$(TERMINAL_NOTE_R0_NATIVE_BUDGET_LOG) \
+		--disabled-log=$(TERMINAL_NOTE_R0_DISABLED_INPUT_LOG) \
+		--store-log=$(TERMINAL_NOTE_R0_STORE_ACCEPTANCE_LOG) \
+		--source-root=$(PROJECT_ROOT) \
+		--output=$(TERMINAL_NOTE_R0_EVIDENCE)
 
 product-performance-comparator-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run test/product_performance_comparator_test.dart

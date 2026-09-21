@@ -423,3 +423,75 @@ TERMINAL_NOTE_R0_NATIVE_BUDGET_PASS version=1 abi=macos_arm64 hardware=MacBookPr
 
 Actual AppKit native apply／first-visible fixtureの完了条件を満たした。次はversioned content-free evidenceでDart／native／disabled／
 storeのexact line inventory、root projection＋native first-visible合計100 ms、static timer/source、structural boundを一つに結合する。
+
+### Versioned content-free evidence／全hard gateの着手条件
+
+- 目的: FreshなDart、actual AppKit native、disabled input、durable storeの4 benchmark logを一つのversion 1 evidenceへ結合し、
+  Gate 7のresource／latency／structural／privacy条件をmachine-checkableな一成果物として固定する。
+- 背景: 各benchmarkは独立してhard failするが、root projection p95＋native first-visible p95の合計、4 logのexact inventory、
+  Note sourceのidle timer/display-link不在、全bound/provenanceを同時に判定するownerがまだない。
+- 範囲: 4 input log（Dartはexact 5行、他は各1行）のstrict parser、combined 100 ms gate、全frozen threshold、structural constants、
+  Note関連source全体のperiodic timer/display-link audit、store request timeoutだけのone-shot timer allowlist、input/source SHA-256、
+  deterministic JSON schema、positive/negative parser tests、fresh generation Make target。
+- 対象外: Raw latency/RSS sample、本文、Note/context ID、timestamp、color、trigger instance、absolute/temporary path、telemetry、
+  cross-architecture/runtime aggregate、manual checklist、`dart_appkit`への製品固有code追加。
+- 依存: 直前のisolated Dart 4-phase fixture、actual AppKit fixture、Release AOT disabled benchmark、real filesystem store acceptance、
+  frozen model/authority/store/projection/native limit constants。
+- 完了条件: Extra/missing/reordered/malformed line、unknown key、threshold/bound/environment mismatchをすべてfail closedにし、fresh 4 inputで
+  combined first-visible 100 ms以下を含む全gateがpassする。Evidenceはaggregate値とSHA-256だけを保持し、同じinputからdeterministicに
+  生成される。Static auditはperiodic timer/display-link 0、store request-timeout one-shot 1だけを許可する。
+- 検証: Parser/schema positive/negative unit test、fresh evidence target、checked JSON validation、focused format/analyze、root `make test`、
+  隣接`dart_appkit` full test/generic audit、privacy/source review、`git diff --check`。違反時はparserやthresholdを緩めず原因を修正する。
+
+### Versioned content-free evidence／全hard gateの実装結果
+
+- `terminal_note_r0_evidence.dart`を追加し、Dart budgetはexact 5行、actual AppKit／disabled input／real storeは各exact 1行として、
+  行順、key順、single trailing LF、CR／空行／追加行0までstrictにparseする。各summaryが`PASS`を名乗るだけでは受理せず、固定M1／
+  arm64／16 GiB／Dart 3.13.2／Release AOT、sample／fixture数、frozen threshold、owner 0、content-free claimを再評価する。
+- Dart projection p95とnative first-visible p95は別processのまま合算し、100,000 us以下をhard gateにした。Disabled inputは両p95を
+  strict 2 ms未満、median ratioを1.05以下、storeは20-run worker commit 250 ms以下／16 MiB primitive 1.5 s以下として再検証する。
+- Model、authority、worker、codec、product projection、native projectionの実constantをfrozen literalと照合し、queue／body／file／
+  context／Note／trigger／delivery boundの変更をevidence生成失敗にする。
+- Rootの`terminal_note_*.dart`、Notes packageのDart、Objective-C／Objective-C++／header計21 sourceを自動inventoryし、
+  `Timer.periodic` 0、CV/CADisplayLink 0、one-shot `Timer` 1、store request-timeout allowlist 1を要求する。Source追加時はaggregate
+  hashへ自動的に含まれる。
+- Version 1 JSONは集約metric、frozen bound、boolean gate、4 input SHA-256、5 benchmark/builder sourceとaudited source aggregateの
+  SHA-256だけを保持する。Raw sample、本文、Note/context ID、timestamp、color、trigger instance、absolute/temporary pathは保持しない。
+  Checked evidence validatorはexact schema、deterministic pretty JSON、current source hashを再検証する。
+- `terminal-note-r0-evidence` targetはnative-assets CLI bundle、actual AppKit binary、disabled Release AOT、real filesystem storeをfreshに
+  実行してprivate build logへ分離し、`benchmark/evidence/terminal-note-r0-budget-macos-arm64-m1.json`をatomicに生成する。
+- Positive／negative testは、追加／欠落／順序変更／未知key／CR／末尾LF欠落、threshold／environment mismatch、combined budget超過、
+  privacy-bearing field、raw sample、source hash偽装、noncanonical JSON、periodic timer／display-link追加、allowlisted timeout欠落を
+  fail-closedとして固定した。
+
+Fresh固定authority実測:
+
+- Idle RSS delta 3,211,264 / 16,777,216 bytes、activity／store change／owner 0。
+- Model p95 4 / 1,000 us、max 11 / 4,000 us。Dart projection p95 4,670 us。
+- Native apply p95 5,394 / 8,000 us、first-visible p95 14,623 us、16.67 ms超stall 0。合算first-visibleは
+  19,293 / 100,000 us。
+- Hard-cap steady 44,892,160 / 67,108,864 bytes、peak 89,554,944 / 100,663,296 bytes、canonical file 9,698,603 /
+  16,777,216 bytes、owner 0。
+- Disabled input baseline p95 286 ns、disabled p95 261 ns、median ratio 0.991087 / 1.05、factory 0。Store commit p95
+  44,067 / 250,000 us、primitive p95 15,382 / 1,500,000 us。
+
+実装中、最初のfocused testはevidenceに許可されたpolicy key `raw_samples_retained=false`を、禁止するraw sample payload keyと
+substringで誤認して停止した。Privacy条件は緩めず、禁止対象をexact JSON key `"raw_samples":`へ修正した。同じpositive／negative
+suiteの再実行はpassした。
+
+検証結果:
+
+- `dart analyze tool/terminal_note_r0_evidence.dart test/terminal_note_r0_evidence_test.dart test/run_tests.dart`: `No issues found!`。
+  Focused positive／negative suiteとchecked JSON replayはpassした。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make RUNTIME_ARCH=arm64 terminal-note-r0-evidence`: pass。上記fresh値からversion 1 evidenceを
+  atomic生成し、machine summaryは`combined_first_visible_us=19293`、periodic timer／display-link 0、request timeout 1を報告した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: pass。389 Dart filesはformat済み、root analyzeは`No issues found!`、新しい
+  evidence schema／negative test、R0 hidden harness、20-run real store acceptance（commit p95 48,495 us、primitive p95 21,012 us）、
+  release-candidate daily-use matrixを含む。Matrix再生成差分はMakefileと`test/run_tests.dart`のSHA-256だけである。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test` in `../dart_appkit`: pass。
+  `GENERIC_REPOSITORY_AUDIT_PASS paths=148 text_files=147`、Dart Terminal固有code追加0。既存未commit変更3件
+  （`docs/BUILDING_DART_ENGINE.md`、`scripts/bootstrap_dart_engine.sh`、`scripts/build_dart_engine.sh`）は変更もstageもしていない。
+- `git diff --check`: pass。Build配下の4 raw logはcheck-inせず、versioned content-free aggregateだけを追跡する。
+
+Versioned evidence／全hard gateの個別完了条件を満たした。これによりhard resource/latency budget親項目も完了し、次は順番どおり
+named aggregateとarm64/x86_64/Universal auditを接続する。
