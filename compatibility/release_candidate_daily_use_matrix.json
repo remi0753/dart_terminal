@@ -55,7 +55,7 @@
     },
     {
       "path": "compatibility/ghostty_p0_p1_gap_inventory.json",
-      "sha256": "1e19c101e22a279a802ce9041bd27767f1e43d26e305d544f6ce1be9340872ae"
+      "sha256": "149416002bbebda99170657c7806c54a5ffceaddf40d0cf1b32bd91f37efbd4a"
     },
     {
       "path": "benchmark/evidence/product-performance-regression-macos-arm64-m1.json",
@@ -103,7 +103,7 @@
     },
     {
       "path": "tool/runtime_integration_smoke.dart",
-      "sha256": "25abf7b469e061f0f96eed563ab95179b34f64e65d932775c5ccb33c2b8e1d9f"
+      "sha256": "54c72e2c38b1aa8dbdf068f70e840f25fda44d3b9e20d07d82cadcd0c76a03a4"
     },
     {
       "path": "test/terminal_property_fuzz_test.dart",

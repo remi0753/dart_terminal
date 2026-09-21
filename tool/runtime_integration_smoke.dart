@@ -5,7 +5,7 @@ import 'dart:io';
 import 'package:dart_appkit/dart_appkit.dart'
     show dartAppKitCurrentEventProtocolVersion;
 import 'package:dart_terminal/dart_terminal.dart'
-    show TerminalActionId, TerminalActionMenu;
+    show TerminalActionCatalog, TerminalActionMenu;
 
 import 'runtime_product_performance_result.dart';
 
@@ -1005,6 +1005,8 @@ bool _containsOrderedValues(List<String> actual, List<String> expected) {
 }
 
 Future<void> _runSmoke(_Options options, _Invocation invocation) async {
+  final int expectedStandardActionCount =
+      TerminalActionCatalog.standard().actions.length;
   final _ProcessObservation observation = await _launch(
     options,
     invocation,
@@ -1109,8 +1111,7 @@ Future<void> _runSmoke(_Options options, _Invocation invocation) async {
     RegExp(
           '^NATIVE_ACTION_MENU installed=true '
           'sections=${TerminalActionMenu.values.length} '
-          r'actions='
-          '${TerminalActionId.values.length}'
+          'actions=$expectedStandardActionCount'
           r'$',
           multiLine: true,
         ).allMatches(observation.stdoutText).length ==

@@ -161,6 +161,8 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
         - [x] exact serial inventoryとfail-closed checker contractを実装する
         - [x] product-owned generic macOS entropy packageへdirect FFI boundaryを分離する
         - [ ] fresh 8-gate aggregateとfinal evidence checkerを完走する
+          - [x] default-off Note action catalogのruntime smoke count driftを修正する
+          - [ ] 修正後のfresh 8-gate aggregateを先頭から完走する
   - [ ] manual IME/keyboard/VoiceOver/appearance/TUI checklistとR0 stage decisionを完了する
 - [ ] CM-13 R1 internal S1/S2 opt-inを完了する
 - [ ] CM-14 R2 public S1/S2 opt-inを完了する

@@ -805,3 +805,63 @@ packageへ隔離する契約を持つ。CM-10のfull `make test`はこのruntime
   `GENERIC_REPOSITORY_AUDIT_PASS paths=148 text_files=147`。Runtime builder／Universal／publisher／AppKit API／launcher／exampleもpassした。
   既存user変更3件（`docs/BUILDING_DART_ENGINE.md`、`scripts/bootstrap_dart_engine.sh`、`scripts/build_dart_engine.sh`）は変更もstageもしていない。
 - `git diff --check`はpass。`dart_appkit`へ新API、製品名、Note型、random policyは追加していない。
+
+### Fresh named aggregate 2回目の阻害
+
+Entropy boundary修正commit後、fresh 8-gate aggregateをretry wrapperなしで先頭から再実行した。Gate 1〜6はpassし、gate 7の
+`runtime-source-check`もapplication direct FFI 0／system-entropy package 1でpassした。その後、Developer JIT smokeが
+`RUNTIME_INTEGRATION_FAIL mode=developer-jit missing or duplicate standard action-menu projection observation`で停止した。
+Gate 8とfinal checkerは未実行で、final R0 summaryは出ていない。
+
+このrunのfresh evidence／主要結果:
+
+- Budget combined first-visible p95 19,124 us／100,000 us、content-free。
+- Cross-architecture: 4 bundles、21 resources、1,388,080 bytes、8 Note images、sentinel／absolute path 0。
+- Notes、S1、S2 acceptance pass。Sanitizer/fuzz/faultはnative suites 5、artifacts 11、fuzz executions 1,296、fault boundaries 4、
+  runtime modes 2でpass。
+- Root suiteは393 files／format 0／analyze issue 0／`dart_terminal tests passed`。PTY large pipelineはtotal 33／retained 32／p95 264 us。
+
+Source auditの省略やruntime integrationのretryで成功扱いにはせず、standard action-menu observationのproducer、collector、cardinality、
+前段runから残り得る外部状態を調査する。
+
+### Default-off action-menu runtime smoke阻害と追加分割
+
+Isolated `make RUNTIME_ARCH=arm64 developer-jit-integration`でも同じfailureを再現したため、前段gateの外部状態やaggregate固有の順序依存ではない。
+Smokeと同じDeveloper JIT app invocationを直接実行すると、producerはexactly one
+`NATIVE_ACTION_MENU installed=true sections=6 actions=48`を出力し、他のcommand-palette／menu action／lifecycle observationも正常だった。
+
+現在のstable action enumは51件である。CM-10でNote action 3件を追加した際、`TerminalActionCatalog.standard()`はR0 hidden/default-offで
+その3件をcatalog／menu／paletteへ一切出さず48件とし、`includeNotes: true`だけが51件すべてを含む契約になった。Unit testはenabled catalogが
+enum全件、hidden catalogがenum minus 3かつ各Note action absentであることを固定している。Application producerは実際にinstallした
+`actionCatalog.actions.length`を出力する一方、runtime smoke checkerだけが古い`TerminalActionId.values.length` 51件を期待し続けていた。
+
+検討した選択肢:
+
+- Producerをenum全51件と報告させる案は、実際にinstallした48件と異なる虚偽のobservationになるため不採用。
+- Checkerで`enum length - 3`を期待する案は、Note actionの増減や別のfeature gateに追随できないhard-codeになるため不採用。
+- R0でもNote action 3件を常時catalogへ入れてdisabled表示する案は、hidden/default-off時にUI resource 0という契約を壊すため不採用。
+- Checkerが`TerminalActionCatalog.standard()`のdefault-off action countを期待し、enabled／hidden exact membershipは既存unit testへ委ねる案を採用する。
+  Producerとcheckerは別processで同じpublic semantic contractを構成し、runtime observationが実際のdefault-off projectionと一致することを検証する。
+
+Fresh aggregate子タスクを次の順に分割する。
+
+1. **Default-off Note action catalogのruntime smoke count drift修正**
+   - 範囲: Runtime smokeのexpected standard catalog count、focused catalog test、Developer JIT／Release AOT smoke、関連generated freshness。
+   - 対象外: Action enum、producer、Note visibility/config、R0 rollout、retry、`dart_appkit`。
+   - 完了条件: Default-off 48件をexactly one observationとして受理し、enabled 51／hidden 48 membership contractを維持する。
+2. **修正後のfresh 8-gate aggregate完走**
+   - 元のaggregate完了条件を継承し、smoke修正commit後にgate 1からretry wrapperなしで再実行する。
+
+### Default-off action-menu runtime smoke contractの完了結果
+
+- Runtime smokeは`TerminalActionCatalog.standard()`を別process側のexpected contractとして構成し、そのdefault-off action countを使って
+  `NATIVE_ACTION_MENU`のexactly one observationを検査する。Stable enumやproducer、Note visibility/configには変更を加えていない。
+- Formatterは1 file／0 changes、focused analyzerはissue 0。Existing action catalog unit suiteは、enabled catalog 51件／hidden catalog 48件と
+  Note action 3件のdefault absenceを含めてpassした。
+- `make RUNTIME_ARCH=arm64 developer-jit-integration`は
+  `RUNTIME_INTEGRATION_PASS mode=developer-jit launch_architecture=native elapsed_ms=2868`、Release AOTは
+  `RUNTIME_INTEGRATION_PASS mode=release-aot launch_architecture=native elapsed_ms=2037`でpassした。
+- 正規generatorでPhase 7 acceptance、Ghostty P0/P1 gap inventory、release-candidate matrixを再生成した。実差分はruntime smoke source hashを
+  所有するGhostty inventoryと、それらをbindするrelease-candidate matrixだけで、Phase 7 corpus内容は変更不要だった。
+- 最終root `make test`は393 Dart files／0 format changes、analyze issue 0、package/native/generated/privacy/distribution/root suiteを完走し、
+  `dart_terminal tests passed`。`git diff --check`もpassした。
