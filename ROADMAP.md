@@ -140,6 +140,12 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
     - [x] commit/ack crash境界とfalse-consume vectorを固定する
   - [x] S2両runtime product acceptanceと全監査を完了する
 - [ ] CM-12 R0 hidden qualificationを完了する
+  （[`cm-12-r0-hidden-qualification.md`](docs/contextual-memory/cm-12-r0-hidden-qualification.md)
+  を参照して実施する）
+  - [x] R0 temporary-store harness、hidden/default-off、rollback contractを固定する
+  - [ ] hard resource/latency budget benchmarkとcontent-free evidenceを実装する
+  - [ ] named aggregateとarm64/x86_64/Universal auditを接続する
+  - [ ] manual IME/keyboard/VoiceOver/appearance/TUI checklistとR0 stage decisionを完了する
 - [ ] CM-13 R1 internal S1/S2 opt-inを完了する
 - [ ] CM-14 R2 public S1/S2 opt-inを完了する
 - [ ] CM-15 R3 S1/S2 default-on promotionを完了する

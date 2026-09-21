@@ -97,6 +97,8 @@ import 'terminal_note_composition_test.dart';
 import 'terminal_note_model_test.dart';
 import 'terminal_note_native_adapter_test.dart';
 import 'terminal_note_product_subsystem_test.dart';
+import 'terminal_note_r0_hidden_qualification_test.dart'
+    as terminal_note_r0_hidden_qualification_test;
 import 'terminal_note_s1_product_acceptance_test.dart'
     as terminal_note_s1_product_acceptance_test;
 import 'terminal_note_s2_product_acceptance_test.dart'
@@ -228,6 +230,7 @@ Future<void> main() async {
   await runTerminalNoteApplicationCoordinatorTests();
   await runTerminalNoteNativeAdapterTests();
   await runTerminalNoteProductSubsystemTests();
+  await terminal_note_r0_hidden_qualification_test.main();
   await terminal_note_s1_product_acceptance_test.main();
   await terminal_note_s2_product_acceptance_test.main();
   await runTerminalNoteCompositionTests();
