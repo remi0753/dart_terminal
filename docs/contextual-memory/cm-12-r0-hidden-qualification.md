@@ -931,3 +931,74 @@ Fresh aggregate子タスクを次の順に追加分割する。
 - 最終root `make test`は393 Dart files／0 format changes、root／package analyze issue 0、全package/native/generated/privacy/
   distribution/root suiteを完走し、`dart_terminal tests passed`。PTY large pipelineもtotal 33／retained 32／p95 261 usでpassした。
 - `dart_appkit`のAPI／source／testには変更を加えておらず、修正はproduct-owned display acceptance fixtureのreadinessに限定した。
+
+### Fresh named aggregate 4回目の阻害
+
+Prompt readiness修正commit後、fresh 8-gate aggregateをretry wrapperなしでgate 1から再実行した。Gate 1〜6はpassし、gate 7はsource audit、
+standard smoke、terminal display、native hierarchy、bounded reliabilityまで両runtimeでpassした。その次のDeveloper JIT user-actions
+integrationで、最後のlogical windowを閉じてwindowless applicationを維持した後の`window.new` native menu actionが
+`user action window.new is unavailable or has wrong shortcut`となりstatus 70で停止した。Gate 8とfinal checkerは未実行で、final R0 summaryは
+出ていない。
+
+このrunのfresh evidence／主要結果:
+
+- Budget combined first-visible p95 19,066 us／100,000 us、content-free。
+- Cross-architecture: 4 bundles、21 resources、1,388,080 bytes、8 Note images、sentinel／absolute path 0。
+- Notes、S1、S2 acceptance pass。Sanitizer/fuzz/faultはnative suites 5、artifacts 11、fuzz executions 1,296、fault boundaries 4、
+  runtime modes 2でpass。
+- Gate 7のstandard smokeとterminal displayは両runtimeでpass。Native hierarchyはDeveloper JIT 59,977 ms／Release AOT 65,183 ms、
+  bounded reliabilityはDeveloper JIT 7,290 ms／Release AOT 6,457 msでpassした。
+- Developer JIT user-actionsはpane/window close transactionとwindowless application retentionまではpassし、その直後のnative New Window item
+  検査で停止した。
+
+### Windowless New Window action admissionと追加分割
+
+`TerminalProductHierarchyActionCoordinator._canCreateWindow`は、coordinatorがliveでwindow／pane hard cap未満ならactive windowが0でもtrueにできる。
+`_createWindow`もnullableなfocused pane sourceをconfiguration factoryへ渡す設計で、generic unit harnessは`configuration(null)`からinitial windowを
+作れる。一方、product compositionが注入する`canMutate`だけが、resource disposal／close／quit transaction拒否に加えて
+`state.activeWindow != null`を必須にしている。最後のwindow removal callbackがmenuをrefreshすると、このpredicateによりNew Window itemがdisabledに
+なる。Runtime fixtureはwindowless applicationがterminateせずCommand-Nで再openできることを明示的に要求しており、coordinator契約とproduct
+injectionが不一致である。
+
+検討した選択肢:
+
+- User-actions integrationまたはaggregateをretryする案は、windowless時のpredicateが決定的にfalseなので不採用。
+- Fixtureがnative menuを迂回してdispatcher／stateを直接呼ぶ案は、Command-N menu projectionとshared dispatcherの結線を検証しなくなるため不採用。
+- New Window menu itemを常時enabledにする、または`isEnabled` assertionを外す案は、close／quit transaction、resource disposal、dirty Note owner中の
+  mutation拒否を壊すため不採用。
+- Generic hierarchy coordinatorを変更する案は、coordinatorはすでにnullable inheritance sourceとwindowless creationを正しく表現しており、
+  dart_terminal固有のinteraction authorityを汎用層へ持ち込むため不採用。
+- Product注入predicateを、共通のdisposal／close／quit拒否後、active windowがあればそのinteraction authorityを確認し、active windowがなければ
+  `windowCount == 0`の場合だけ許可する形へ変更する案を採用する。New Tab／split／focus等はcoordinator自身がactive window/tabを要求するため、
+  windowless時に追加で有効化されるのはNew Windowだけである。
+
+Fresh aggregate子タスクを次の順に追加分割する。
+
+1. **Windowless状態のNew Window action admission修正**
+   - 範囲: dart_terminal product compositionのhierarchy mutation admission、windowless generic coordinator unit coverage、Developer JIT／Release AOT
+     user-actions integration、関連generated freshness。
+   - 対象外: `dart_appkit`、native menu API、shortcut definition、generic coordinator API、close／quit／Note ownership policy、retry。
+   - 完了条件: Windowless applicationでNew Windowだけが有効になり、Command-Nがshared dispatcher経由で1 window／1 paneを再作成する。Active
+     windowのinteraction authorityと全transaction拒否は維持する。
+2. **New Window admission修正後のfresh 8-gate aggregate完走**
+   - 元のaggregate完了条件を継承し、admission修正commit後にgate 1からretry wrapperなしで再実行する。
+
+### Windowless New Window action admissionの完了結果
+
+- Product compositionのhierarchy mutation admissionは、resource disposal、pane/window removal、application quit中を従来どおり拒否する。その後、
+  active windowがある場合は同じwindowのinteraction authorityを要求し、active windowがない場合はlogical window countも0である正規のwindowless
+  状態だけを許可する。Generic coordinator、action catalog、shortcut、native menu APIは変更していない。
+- Generic coordinator unit coverageを追加し、windowlessではNew Windowだけがenabled、New Tab／split／zoom／focus／tab selectionはdisabled、外部
+  mutation gate中はNew Windowもdisabledであることを固定した。Gate解除後のdispatchはinheritance source `null`から1 window／1 paneを作り、
+  session start、reconcile、change notificationを各1回だけ行う。
+- Focused formatterは2 files／0 changes、focused analyzerはissue 0。Hierarchy action、menu projection、action registryのunit suitesはpassした。
+- Native menuを通るuser-actions integrationはDeveloper JITで
+  `RUNTIME_USER_ACTIONS_INTEGRATION_PASS mode=developer-jit launch_architecture=native windows=2 tabs=3 panes=4 elapsed_ms=3489`、
+  Release AOTで
+  `RUNTIME_USER_ACTIONS_INTEGRATION_PASS mode=release-aot launch_architecture=native windows=2 tabs=3 panes=4 elapsed_ms=2114`となった。
+  最後のwindow close、empty app retention、Command-N shared dispatch、reopen、quitを両modeで完走した。
+- 正規generatorでPhase 7 acceptance、Ghostty P0/P1 gap inventory、release-candidate matrixを更新した。差分はapplication source／追加unit testの
+  hashと、それらをbindするhashだけで、criteria／row／gate countは変わっていない。
+- 最終root `make test`は393 Dart files／0 format changes、root／package analyze issue 0、全package/native/generated/privacy/
+  distribution/root suiteを完走し、`dart_terminal tests passed`。PTY large pipelineはtotal 33／retained 32／p95 267 usでpassした。
+- `dart_appkit`にはコード、API、test、製品固有概念を追加していない。

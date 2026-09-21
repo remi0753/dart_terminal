@@ -6,10 +6,45 @@ import 'package:dart_terminal/dart_terminal.dart';
 Future<void> main() => runTerminalProductHierarchyActionTests();
 
 Future<void> runTerminalProductHierarchyActionTests() async {
+  await _testWindowlessCreationAndMutationAdmission();
   await _testCreationAndExistingMutations();
   await _testExplicitWorkingDirectoryCreation();
   await _testSerializationFailureAndDisposal();
   await _testAggregatePaneAvailabilityBound();
+}
+
+Future<void> _testWindowlessCreationAndMutationAdmission() async {
+  final _Harness harness = _Harness();
+  final TerminalActionDispatcher dispatcher = harness.dispatcher();
+
+  _expectEnabled(dispatcher, TerminalActionId.newWindow, true);
+  for (final TerminalActionId id in const <TerminalActionId>[
+    TerminalActionId.newTab,
+    TerminalActionId.splitPaneRight,
+    TerminalActionId.splitPaneDown,
+    TerminalActionId.togglePaneZoom,
+    TerminalActionId.focusNextPane,
+    TerminalActionId.selectNextTab,
+  ]) {
+    _expectEnabled(dispatcher, id, false);
+  }
+  harness.mutationAllowed = false;
+  _expectEnabled(dispatcher, TerminalActionId.newWindow, false);
+  harness.mutationAllowed = true;
+
+  await _expectExecuted(dispatcher, TerminalActionId.newWindow);
+  final TerminalWindowState window = harness.state.activeWindow!;
+  _expect(
+    harness.state.windowCount == 1 &&
+        harness.state.paneCount == 1 &&
+        harness.configurationSources.length == 1 &&
+        harness.configurationSources.single == null &&
+        harness.sessions[window.selectedTab.focusedPaneId]!.live &&
+        harness.reconcileCount == 1 &&
+        harness.changedCount == 1,
+    'windowless creation uses no inheritance source and projects once',
+  );
+  await harness.state.shutdown();
 }
 
 Future<void> _testExplicitWorkingDirectoryCreation() async {

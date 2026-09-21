@@ -5652,14 +5652,19 @@ final class TerminalApplication {
             moveDivider: createdHierarchy.moveFocusedDivider,
             canFocusPane: createdHierarchy.canFocusPane,
             focusPane: createdHierarchy.focusPane,
-            canMutate: () =>
-                productResourceDisposalFuture == null &&
-                !createdPaneCloseCoordinator.removalInProgress &&
-                !createdPaneCloseCoordinator.applicationQuitInProgress &&
-                state.activeWindow != null &&
-                createdInteractionAuthority.permitsHierarchyMutation(
-                  state.activeWindow!.id,
-                ),
+            canMutate: () {
+              if (productResourceDisposalFuture != null ||
+                  createdPaneCloseCoordinator.removalInProgress ||
+                  createdPaneCloseCoordinator.applicationQuitInProgress) {
+                return false;
+              }
+              final TerminalWindowState? activeWindow = state.activeWindow;
+              return activeWindow == null
+                  ? state.windowCount == 0
+                  : createdInteractionAuthority.permitsHierarchyMutation(
+                      activeWindow.id,
+                    );
+            },
             onChanged: () {
               final TerminalAppKitMenuProjection? menu = menuProjection;
               if (menu != null && !menu.isDisposed) menu.refresh();
