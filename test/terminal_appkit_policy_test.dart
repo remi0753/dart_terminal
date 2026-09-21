@@ -26,6 +26,26 @@ void runTerminalAppKitPolicyTests() {
     'manifest fixes Dart Terminal Runner lifecycle and message-pump policy',
   );
 
+  final String runtimeIntegrationSource = File(
+    'tool/runtime_integration_smoke.dart',
+  ).readAsStringSync();
+  final int userActionsStart = runtimeIntegrationSource.indexOf(
+    'Future<void> _runUserActions(',
+  );
+  final int userActionsEnd = runtimeIntegrationSource.indexOf(
+    'Future<void> _runDiagnostics(',
+    userActionsStart,
+  );
+  _expect(
+    userActionsStart >= 0 &&
+        userActionsEnd > userActionsStart &&
+        runtimeIntegrationSource
+            .substring(userActionsStart, userActionsEnd)
+            .contains('throughLaunchServices: true,'),
+    'foreground-dependent user actions require an exact-bundle Launch '
+    'Services launch',
+  );
+
   _expect(
     terminalWindowConfiguration == const WindowConfiguration() &&
         terminalBaseViewConfiguration == const ViewConfiguration() &&

@@ -1002,3 +1002,108 @@ Fresh aggregate子タスクを次の順に追加分割する。
 - 最終root `make test`は393 Dart files／0 format changes、root／package analyze issue 0、全package/native/generated/privacy/
   distribution/root suiteを完走し、`dart_terminal tests passed`。PTY large pipelineはtotal 33／retained 32／p95 267 usでpassした。
 - `dart_appkit`にはコード、API、test、製品固有概念を追加していない。
+
+### Fresh named aggregate 5回目の阻害
+
+Windowless New Window admission修正commit後、fresh 8-gate aggregateをretry wrapperなしでgate 1から再実行した。Gate 1〜6はpassし、gate 7は
+source audit、standard smoke、terminal display、native hierarchy、bounded reliabilityまで両runtimeでpassした。その次のDeveloper JIT
+user-actions integrationが、初期prompt到着後の`initial terminal pane did not become the sole active surface`でstatus 70となり停止した。失敗時の
+Secure Keyboard Entry observationは`application_active=false`であり、Gate 8とfinal checkerは未実行、final R0 summaryは出ていない。
+
+このrunのfresh evidence／主要結果:
+
+- Budget combined first-visible p95 18,804 us／100,000 us、content-free。
+- Cross-architecture: 4 bundles、21 resources、1,388,080 bytes、8 Note images、sentinel／absolute path 0。
+- Notes、S1、S2 acceptance pass。Sanitizer/fuzz/faultはnative suites 5、artifacts 11、fuzz executions 1,296、fault boundaries 4、
+  runtime modes 2でpass。
+- Root suiteは393 files／format 0／analyze issue 0／`dart_terminal tests passed`。PTY large pipelineはtotal 33／retained 32／p95 293 us。
+- Gate 7のsource audit、standard smoke、terminal displayは両runtimeでpass。Native hierarchyはDeveloper JIT 60,113 ms／Release AOT
+  64,905 ms、bounded reliabilityはDeveloper JIT 7,223 ms／Release AOT 6,295 msでpassした。
+- Developer JIT user-actionsはinitial window／pane resource、PTY、menuの構築とprompt到着までは完了したが、10秒以内にapplication activeかつ
+  focused windowというforeground条件を満たさず停止した。
+
+### User-actions foreground activation readinessと追加分割
+
+Productのpane surfaceはinactiveで生成され、`synchronizePaneFocusPresentation`が`application.isActive`、live／visible／focused native window、logical
+active windowをすべて満たす一つのpaneだけをactiveにする。この契約はbackground appでactive cursorを描画しないために必要で、今回のfailureは
+logical selectionやMetal publicationではなくapplication activationがfalseのままというlaunch readiness境界にある。
+
+Manifestとgeneric runnerはregular applicationをlaunch時に一度activateする。一方、runtime integration driverのuser-actions fixtureはdirect executable
+launch後のその一度だけに依存する。既存のwindow-interaction／Secure Keyboard Entry fixtureは、foreground focusを受け入れ条件に含むため、runtime
+diagnostic PIDの出現をboundedに待ってからLaunch Servicesで同じbundle identifierをactivateする`activateAfterLaunch`契約をすでに使っている。
+User-actionsもnative menu、system overlay、application/window/tab/pane focusを検証するが、この明示契約だけが欠けている。Isolated両runtime runは直前の
+subtaskでpassした一方、長いserial gateではinitial activationが保持されない観測となり、fixtureの前提が環境順序に依存している。
+
+検討した選択肢:
+
+- User-actionsまたはaggregateをそのままretryする案は、foreground readinessがlaunch順序に依存する状態を残し、fresh一発完走を証明しないため不採用。
+- 10秒timeout延長、固定sleep、前後gate間のsleepを追加する案は、再activationを発生させず待ち時間だけを増やすため不採用。
+- `application.isActive`をpane activity条件から外す、またはsole-active assertionを弱める案は、background appでactive cursorを描かない製品契約と
+  application focus acceptanceを壊すため不採用。
+- Test-only raw application-active eventを注入する案は、Dart stateだけをactiveにして実AppKit／Launch Services stateと乖離し、native user-action
+  acceptanceとして虚偽になるため不採用。
+- Generic `dart_appkit` runnerへ追加activationやdart_terminal固有の待機を入れる案は、runnerはmanifestのgeneric activate-on-launch契約をすでに実装済みで、
+  一つのproduct fixtureのforeground前提を汎用libraryへ持ち込むため不採用。
+- User-actionsの`_launch`へ既存のbounded `activateAfterLaunch: true`を指定する案を最初の候補として採用した。製品挙動やAppKit APIを変えず、
+  foreground-dependent fixtureと同じ起動契約に揃える意図だったが、下記のfocused runで対象の一意性が不足すると判明した。
+
+調査中、Developer JIT reliability→user-actionsの連続再現を試みた一回は、最初のreliability applicationがDart root起動前の`host-starting`で
+SIGABRTした。macOS crash reportはmain threadの`_RegisterApplication`からのabortで、product stdout／stderrは0、今回のpane focus条件へ到達していない。
+このrunはactivation仮説の合否証拠に使わず、実装後のfocused両runtime acceptanceと次のfresh aggregateを正本にする。
+
+Fresh aggregate子タスクを次の順に追加分割する。
+
+1. **User-actions fixtureのforeground activation readiness固定**
+   - 範囲: Product-owned runtime integration driverのuser-actions exact-bundle launch option、focused source contract、Developer JIT／Release AOT
+     user-actions、関連generated freshness。
+   - 対象外: Product pane activity semantics、native focus event、timeout、`dart_appkit`、generic runner、aggregate retry。
+   - 完了条件: User-actionsが検証対象bundle絶対pathのbounded Launch Services launchを明示し、両runtimeでinitial sole-active paneから全native
+     action／focus／close／windowless reopen／quit sequenceを一回で完走する。
+2. **Foreground activation修正後のfresh 8-gate aggregate完走**
+   - 元のaggregate完了条件を継承し、activation修正commit後にgate 1からretry wrapperなしで再実行する。
+
+### Bundle-ID activation案のfocused failureとlaunch方針の修正
+
+最初の実装ではuser-actions `_launch`へ`activateAfterLaunch: true`を追加し、source contract test、formatter、analyzerをpassした。しかし実AppKitの
+Developer JIT user-actionsはinitial sole-active paneを通過した後、Update windowのdismiss時に
+`terminal focus restoration did not reactivate exactly one pane`で停止した。Initial failure位置が前進したためpost-launch activation自体は届いたが、
+system surface close後まで対象applicationのforeground ownershipを一意に維持できなかった。Release AOTはJIT failure後なので未実行である。
+
+既存のPhase 7 native-content調査には、Developer JIT／Release AOTが同じ`dev.dart-terminal` bundle identifierを持つため、`open -b`による
+activationは別buildまたは既存applicationを選び得るという同じ制約が記録されている。そのtaskは、検証対象bundleの絶対pathを`open -W -n -F`で
+起動する既存`throughLaunchServices: true`経路へ移行して解決している。この経路もbounded timeout、environment injection、stdout／stderr capture、
+runtime diagnostics、timeout cleanupを共通`_launch`内で維持する。
+
+したがってbundle-ID activation案は不採用へ変更し、user-actionsもexact target bundleをLaunch Servicesからfresh instanceとして起動する。Direct
+executable launch、generic runner、product focus restoration、system surface presenter、assertion、timeoutは変更しない。Focused policy testも単なる
+activation helperではなく、user-actions function自身が`throughLaunchServices: true`を保持することを固定する。
+
+検証途中のsandbox failureも区別して記録する。Focused testの初回はDart telemetry session、次の二回はMetal build hookのClang module cacheが
+workspace外へ書けず停止した。Formatter 2 files／0 changesとanalyzer issue 0は完了しており、同じfocused testを必要なbuild cache権限で再実行すると
+passした。いずれもtest assertionまたはproduct failureではない。
+
+### Exact-bundle foreground launchの途中検証
+
+- User-actions launchを`throughLaunchServices: true`へ変更し、source contract testは対象function範囲だけを切り出してexact-bundle launch指定を固定した。
+  Formatterは2 files／0 changes、focused analyzerはissue 0、AppKit policy testはpassした。
+- `make RUNTIME_ARCH=arm64 runtime-user-actions-integration`はDeveloper JITで
+  `RUNTIME_USER_ACTIONS_INTEGRATION_PASS mode=developer-jit launch_architecture=native windows=2 tabs=3 panes=4 elapsed_ms=3771`、
+  Release AOTで
+  `RUNTIME_USER_ACTIONS_INTEGRATION_PASS mode=release-aot launch_architecture=native windows=2 tabs=3 panes=4 elapsed_ms=2533`となった。
+  Initial sole-active pane、Update window dismiss後のresponder復帰、split／tab／window、全pane focus、whole-window close、windowless Command-N reopen、
+  quit／全owner cleanupを両modeで一回のrunにより完走した。
+- 正規generatorでPhase 7 AppKit acceptance、Ghostty P0/P1 gap inventory、release-candidate daily-use matrixを更新した。Phase 7 corpusに意味差分はなく、
+  tracked差分はruntime driver hashとそれをbindするrelease-candidate hashだけである。`git diff --check`はpassした。
+
+### User-actions foreground activation readinessの完了結果
+
+- 最終実装はuser-actionsだけを検証対象bundle絶対pathのLaunch Services `open -W -n -F`経路で起動する。Bundle-IDによる再activation、固定sleep、
+  synthetic active event、product focus semantics変更は残していない。共通driverのbounded timeout、environment、output capture、diagnostics、cleanupを再利用する。
+- Focused policy test、両runtime user-actions、正規generated freshnessはすべてpassした。Initial active paneとUpdate window dismiss後の復帰を含め、
+  foreground-dependent全sequenceがDeveloper JIT 3,771 ms／Release AOT 2,533 msで完走した。
+- 最終root `make test`は全package／native／generated／privacy／distribution／root suiteを完走した。Rootは393 files／format 0 changes、analyze
+  issue 0、`dart_terminal tests passed`。PTY large pipelineはtotal 33／retained 32／p95 252 us、Note store acceptanceは20 runs／commit p95
+  45,406 us／primitive p95 16,798 usだった。
+- `git diff --check`はpass。Sibling `dart_appkit`にはcode、API、test、dart_terminal固有概念を追加していない。同repositoryの既存user変更3件
+  （`docs/BUILDING_DART_ENGINE.md`、`scripts/bootstrap_dart_engine.sh`、`scripts/build_dart_engine.sh`）は変更もstageもしていない。
+- Fresh aggregateが生成したbudget evidenceはこのsubtaskの変更ではないため、subtask commitから除外し、次のaggregate子タスクでgate 1から再生成・判定する。

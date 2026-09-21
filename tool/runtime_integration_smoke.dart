@@ -1952,6 +1952,7 @@ Future<void> _runUserActions(_Options options, _Invocation invocation) async {
     const <String>['--runtime-user-actions-test'],
     environment: const <String, String>{'DT_RUNTIME_USER_ACTIONS_TEST': '1'},
     timeout: const Duration(seconds: 45),
+    throughLaunchServices: true,
   );
   _expect(
     observation.status == 0,

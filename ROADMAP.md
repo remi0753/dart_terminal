@@ -167,6 +167,8 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
             - [ ] prompt readiness修正後のfresh 8-gate aggregateを先頭から完走する
               - [x] windowless状態のNew Window action admissionを修正する
               - [ ] New Window admission修正後のfresh 8-gate aggregateを先頭から完走する
+                - [x] user-actions fixtureのforeground activation readinessを固定する
+                - [ ] foreground activation修正後のfresh 8-gate aggregateを先頭から完走する
   - [ ] manual IME/keyboard/VoiceOver/appearance/TUI checklistとR0 stage decisionを完了する
 - [ ] CM-13 R1 internal S1/S2 opt-inを完了する
 - [ ] CM-14 R2 public S1/S2 opt-inを完了する
