@@ -82,8 +82,8 @@ String _failureCode(Object error) {
       'model fixture teardown leaked an owner': 'model_teardown',
       'projection product startup failed': 'projection_startup',
       'projection collapsed fixture is invalid': 'projection_inventory',
-      'projection transition failed': 'projection_transition',
-      'projection visibility is invalid': 'projection_visibility',
+      'projection toggle failed': 'projection_transition',
+      'projection toggle visibility mismatch': 'projection_visibility',
       'projection measured page is invalid': 'projection_page',
       'projection first-visible budget failed': 'projection_budget',
       'projection fixture teardown leaked an owner': 'projection_teardown',
@@ -128,11 +128,15 @@ Future<void> _runParent(_BenchmarkEnvironment environment) async {
     final String output = child.stdout is String
         ? (child.stdout! as String).trim()
         : '';
+    final String diagnostic = child.stderr is String
+        ? (child.stderr! as String).trim()
+        : '';
     final List<String> lines = const LineSplitter()
         .convert(output)
         .where((String line) => line.isNotEmpty)
         .toList(growable: false);
     if (child.exitCode != 0 ||
+        diagnostic.isNotEmpty ||
         lines.length != 1 ||
         !lines.single.startsWith(prefixes[phase]!)) {
       throw StateError('R0 Note budget child failed');

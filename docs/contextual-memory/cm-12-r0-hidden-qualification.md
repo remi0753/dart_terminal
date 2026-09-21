@@ -317,3 +317,53 @@ Duplicate decode除去の個別完了条件を満たした。Isolated Dart fixtu
   `GENERIC_REPOSITORY_AUDIT_PASS paths=148 text_files=147`、Dart Terminal固有code追加0。既存未commit変更3件は非接触。
 
 UTF-8 allocation bounded化の個別完了条件を満たした。次にnative-assets CLI bundleの全4 phaseをfresh aggregateで確定する。
+
+### Native-assets CLI bundle／4-phase hard gateの着手条件
+
+- 目的: Supportedな`dart build cli`で全native assetを同梱したRelease AOT bundleを正本とし、idle、model、projection、
+  hard-capを相互に汚染しない4 child processでfresh実行して、全Dart-side hard gateを同時に満たす。
+- 背景: 個別phaseはnative-assets bundle上で実行済みだが、hard-cap peak違反を解消する3件のresource修正後にparent aggregateを
+  完走した証拠はまだない。`dart compile exe`やJITへのfallbackはnative assetを欠くため認めない。
+- 範囲: CLI bundle build/run target、4 phaseのexact one-line受理、content-free failure code、success時stderr 0、固定authority環境、
+  frozen threshold、全phase teardown owner 0、fresh aggregate実測。
+- 対象外: Actual AppKit viewへのnative apply／layout／display、evidence JSON生成、disabled/store log統合、cross-architecture bundle、
+  manual checklist、`dart_appkit`への製品固有code追加。
+- 依存: 直前3サブタスクのbounded SHA-256、validated commit state保持、direct UTF-8 checksum/envelope encode、および
+  `TerminalCurrentProcessResourceSampler`、product subsystem、実durable-file worker。
+- 完了条件: 固定M1/arm64 Release AOT authorityでidle RSS 16 MiB以下、model p95 1 ms／max 4 ms以下、projection p95 100 ms以下、
+  hard-cap steady 64 MiB／peak 96 MiB／file 16 MiB以下を満たし、4 phase各1行とversion 1 aggregate 1行以外を出力せず、
+  commit delta 0／idle activity delta 0／全owner 0を確認する。
+- 検証: Focused format/analyze、fresh native-assets aggregate、root `make test`、隣接`dart_appkit` full test/generic audit、
+  `git diff --check`。違反時はthresholdやfixture sizeを変えず、原因を現在位置の追加taskとして追跡する。
+
+### Native-assets CLI bundle／4-phase hard gateの完了結果
+
+- `dart build cli`はbundleへdurable-file、PTY、AppleScript、Notes、rendererの5 native assetをcopyし、生成した
+  `bundle/bin/terminal_note_r0_budget_benchmark`だけをRelease AOT authorityとして実行した。JITまたは単体
+  `dart compile exe`へのfallbackはない。
+- Parentは各childのstdoutをexactly one PASS lineとして受理し、success時のstderrもemptyでなければfail closedにした。
+  Projection helperの実際のStateError文言とcontent-free failure code tableの不一致も修正した。Invalid phaseはexit 1と
+  `phase=invalid reason=format_error content_free=true`だけを返す。
+- Fresh aggregateは次の5行で合格した。Build logとtemporary pathはevidence lineに含めず、本文、Note/context ID、time、color、
+  trigger、store path、raw latency/RSS sampleを出力していない。
+
+```text
+TERMINAL_NOTE_R0_IDLE_PASS panes=64 surfaces=64 worker=1 rss_delta_bytes=3293184 rss_budget_bytes=16777216 idle_window_ms=250 projection_delta=0 notification_delta=0 layout_delta=0 frame_delta=0 store_changes=0 owners=0
+TERMINAL_NOTE_R0_MODEL_PASS samples=64 p95_us=4 max_us=11 p95_budget_us=1000 max_budget_us=4000 store_commit_delta=0 body_encode=0 fsync=0 owners=0
+TERMINAL_NOTE_R0_PROJECTION_PASS samples=21 notes=128 cards=64 body_bytes=262144 p95_us=4553 budget_us=100000 store_commit_delta=0 owners=0
+TERMINAL_NOTE_R0_HARD_CAP_PASS notes=2048 contexts=4096 triggers=2048 deliveries=2048 body_bytes=8388608 file_bytes=9698603 steady_delta_bytes=44892160 steady_budget_bytes=67108864 peak_delta_bytes=90144768 peak_budget_bytes=100663296 owners=0
+TERMINAL_NOTE_R0_DART_BUDGET_PASS version=1 build=release-aot abi=macos_arm64 hardware=MacBookPro17,1 memory_bytes=17179869184 dart=3.13.2 phases=4 content_free=true
+```
+
+検証結果:
+
+- Focused formatは0 changes、`dart analyze tool/terminal_note_r0_budget_benchmark.dart`は`No issues found!`。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make RUNTIME_ARCH=arm64 terminal-note-r0-dart-budget`: pass。Frozen threshold、
+  fixture count/body size、authority environmentを変更していない。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test`: pass。387 Dart files、root analyze、R0 hidden harness、20-run real store
+  acceptance（commit p95 47,729 us、primitive p95 18,342 us）を含む。
+- `CI=true DART_SUPPRESS_ANALYTICS=true make test` in `../dart_appkit`: pass。
+  `GENERIC_REPOSITORY_AUDIT_PASS paths=148 text_files=147`、Dart Terminal固有code追加0。既存未commit変更3件は非接触。
+
+Native-assets CLI bundleと4-phase hard gate、および親のisolated Release AOT Dart fixtureの完了条件を満たした。次は順番どおり、
+同じ64 card／256 KiB packetをactual AppKit main threadへ適用するnative apply／first-visible fixtureを実装する。
