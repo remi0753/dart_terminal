@@ -7,7 +7,9 @@ import 'package:dart_appkit/dart_appkit.dart'
 import 'package:dart_terminal/dart_terminal.dart'
     show TerminalActionCatalog, TerminalActionMenu;
 
+import 'runtime_candidate_launch.dart';
 import 'runtime_product_performance_result.dart';
+import 'runtime_stderr_filter.dart';
 import 'terminal_note_r1_internal_profile.dart'
     show terminalNoteR1InternalArguments;
 
@@ -93,6 +95,7 @@ final class _Options {
 
 final class _Invocation {
   const _Invocation({
+    required this.bundlePath,
     required this.executable,
     required this.applicationArgumentPrefix,
     required this.architecture,
@@ -101,6 +104,7 @@ final class _Invocation {
     required this.dartSdkRevision,
   });
 
+  final String bundlePath;
   final String executable;
   final List<String> applicationArgumentPrefix;
   final String architecture;
@@ -303,8 +307,19 @@ Map<String, Object?> _applicationBuildContract(
 }
 
 Future<_Invocation> _loadInvocation(_Options options) async {
-  final Directory bundle = Directory(options.bundlePath).absolute;
-  _expect(await bundle.exists(), 'bundle does not exist: ${bundle.path}');
+  final Directory requestedBundle = Directory(options.bundlePath).absolute;
+  _expect(
+    await requestedBundle.exists(),
+    'bundle does not exist: ${requestedBundle.path}',
+  );
+  final String canonicalBuildRoot = await Directory('build/runtime').absolute
+      .resolveSymbolicLinks();
+  final Directory bundle = Directory(
+    requireRuntimeBuildCandidatePath(
+      canonicalBundlePath: await requestedBundle.resolveSymbolicLinks(),
+      canonicalBuildRoot: canonicalBuildRoot,
+    ),
+  );
   final String contentsPath = '${bundle.path}/Contents';
   final String plistPath = '$contentsPath/Info.plist';
   _expect(await File(plistPath).exists(), 'missing Info.plist: $plistPath');
@@ -431,6 +446,7 @@ Future<_Invocation> _loadInvocation(_Options options) async {
 
   if (options.mode == _RuntimeMode.releaseAot) {
     return _Invocation(
+      bundlePath: bundle.path,
       executable: executablePath,
       applicationArgumentPrefix: const <String>[],
       architecture: architecture,
@@ -442,6 +458,7 @@ Future<_Invocation> _loadInvocation(_Options options) async {
   final String sdkVersion = buildManifest['dartSdkVersion']! as String;
   final String sdkRevision = buildManifest['dartSdkRevision']! as String;
   return _Invocation(
+    bundlePath: bundle.path,
     executable: executablePath,
     applicationArgumentPrefix: <String>[
       '--kernel',
@@ -481,7 +498,6 @@ Future<_ProcessObservation> _launch(
   String expectedDiagnosticPhase = 'root-stopped',
   Duration timeout = const Duration(seconds: 12),
   bool throughLaunchServices = false,
-  bool activateAfterLaunch = false,
   Set<String> milestonePrefixes = const <String>{},
 }) async {
   final List<String> invocationArguments = invocation.arguments(<String>[
@@ -522,27 +538,14 @@ Future<_ProcessObservation> _launch(
       capturedStdoutPath = '${captureDirectory.path}/stdout.txt';
       capturedStderrPath = '${captureDirectory.path}/stderr.txt';
       processExecutable = '/usr/bin/open';
-      processArguments = <String>[
-        '-W',
-        '-n',
-        '-F',
-        if (options.launchArchitecture != null) ...<String>[
-          '--arch',
-          options.launchArchitecture!,
-        ],
-        '-o',
-        capturedStdoutPath,
-        '--stderr',
-        capturedStderrPath,
-        for (final MapEntry<String, String> value
-            in launchEnvironment.entries) ...<String>[
-          '--env',
-          '${value.key}=${value.value}',
-        ],
-        options.bundlePath,
-        '--args',
-        ...invocationArguments,
-      ];
+      processArguments = runtimeCandidateOpenArguments(
+        bundlePath: invocation.bundlePath,
+        stdoutPath: capturedStdoutPath,
+        stderrPath: capturedStderrPath,
+        environment: launchEnvironment,
+        applicationArguments: invocationArguments,
+        architecture: options.launchArchitecture,
+      );
     } else {
       processExecutable = options.launchArchitecture == null
           ? invocation.executable
@@ -595,12 +598,6 @@ Future<_ProcessObservation> _launch(
     final Future<String> launcherStderr = process.stderr
         .transform(utf8.decoder)
         .join();
-    final Future<bool>? applicationActivation = activateAfterLaunch
-        ? _activateApplicationWithLaunchServices(
-            invocation.bundleIdentifier,
-            diagnosticsDirectory,
-          )
-        : null;
     Future<String> completedOutput(
       String launcher,
       String? capturedPath,
@@ -638,7 +635,6 @@ Future<_ProcessObservation> _launch(
         await launcherStderr,
         capturedStderrPath,
       );
-      if (applicationActivation != null) await applicationActivation;
       throw _SmokeException(
         '${options.mode.name} application did not exit within '
         '${timeout.inSeconds} seconds; '
@@ -656,13 +652,6 @@ Future<_ProcessObservation> _launch(
       await launcherStderr,
       capturedStderrPath,
     );
-    if (applicationActivation != null) {
-      _expect(
-        await applicationActivation,
-        'bounded Launch Services activation failed; '
-        'stdout=${completedStdout.trim()} stderr=${completedStderr.trim()}',
-      );
-    }
     final int processId = throughLaunchServices
         ? await _runtimeDiagnosticProcessId(diagnosticsDirectory) ?? process.pid
         : process.pid;
@@ -703,7 +692,7 @@ Future<_ProcessObservation> _launch(
       processId: processId,
       status: status,
       stdoutText: completedStdout,
-      stderrText: completedStderr,
+      stderrText: unexpectedRuntimeStderrText(completedStderr),
       elapsed: stopwatch.elapsed,
       workerProcesses: workerProcesses,
       milestones: Map<String, Duration>.unmodifiable(milestones),
@@ -716,52 +705,6 @@ Future<_ProcessObservation> _launch(
       await diagnosticsDirectory.delete(recursive: true);
     }
   }
-}
-
-Future<bool> _activateApplicationWithLaunchServices(
-  String bundleIdentifier,
-  Directory diagnosticsDirectory,
-) async {
-  final DateTime deadline = DateTime.now().add(const Duration(seconds: 3));
-  int? processIdentifier;
-  while (processIdentifier == null && DateTime.now().isBefore(deadline)) {
-    processIdentifier = await _runtimeDiagnosticProcessId(diagnosticsDirectory);
-    if (processIdentifier == null) {
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-    }
-  }
-  if (processIdentifier == null) return false;
-  await Future<void>.delayed(const Duration(milliseconds: 500));
-  final Process process;
-  try {
-    process = await Process.start('/usr/bin/open', <String>[
-      '-b',
-      bundleIdentifier,
-    ]);
-  } on ProcessException {
-    return false;
-  }
-  final Future<void> stdoutDone = process.stdout.drain<void>();
-  final Future<void> stderrDone = process.stderr.drain<void>();
-  late final int status;
-  try {
-    status = await process.exitCode.timeout(const Duration(seconds: 5));
-  } on TimeoutException {
-    process.kill(ProcessSignal.sigkill);
-    try {
-      await process.exitCode.timeout(const Duration(seconds: 1));
-    } on TimeoutException {
-      return false;
-    }
-    return false;
-  }
-  try {
-    await Future.wait<void>(<Future<void>>[stdoutDone, stderrDone])
-        .timeout(const Duration(seconds: 2));
-  } on Object {
-    return false;
-  }
-  return status == 0;
 }
 
 Future<int?> _runtimeDiagnosticProcessId(Directory directory) async {
@@ -2617,7 +2560,6 @@ Future<void> _runWindowInteraction(
       'DT_RUNTIME_WINDOW_INTERACTION_TEST': '1',
     },
     timeout: const Duration(seconds: 60),
-    activateAfterLaunch: true,
   );
   _expect(
     observation.status == 0,

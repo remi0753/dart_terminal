@@ -123,13 +123,29 @@ make RUNTIME_ARCH=arm64 \
 ## Pre-Notes binary rollbackとre-upgrade
 
 1. R1 candidateを終了し、Store directoryのraw backupを取得する。
-2. Pre-Notes binaryを通常どおり起動する。Note storeは削除、移動、編集しない。
-3. 必要なterminal作業を行い、pre-Notes binaryを通常終了する。
-4. R1 candidateをexact profileで再起動する。
+2. 既存release tag `0.1.0`など、通常GUIがrestoration v1を更新しない旧binaryへ戻す前に、
+   R1 candidateと同じ`XDG_STATE_HOME`／`HOME`で次を実行し、`trust_invalidated=true`を確認する。
 
-Restoration bytesがexact matchなら元contextへreattachする。Rollback中にwindow／tab／split layoutが変わりhashが一致しなければ、Noteは
-誤ったpaneへ付けずDetachedへ移る。Detached collectionから内容を確認し、明示的にreattachする。Re-upgradeだけを理由にstoreを
-downgrade、reset、または古いbackupへ戻さない。
+   ```shell
+   dart run tool/terminal_restoration_rollback_guard.dart \
+     --prepare-pre-notes-rollback \
+     --acknowledge-app-closed-and-store-backed-up
+   ```
+
+3. Pre-Notes binaryを通常どおり起動する。Note storeは削除、移動、編集しない。
+4. 必要なterminal作業を行い、pre-Notes binaryを通常終了する。
+5. R1 candidateをexact profileで再起動する。
+
+`0.1.0`は通常GUIでrestoration v1を読み書きしないため、layoutを変更しても旧snapshotのhashは変わらない。
+Guardはrestoration v1 fileとNote storeを保持し、exact復元の信頼印だけを無効化する。したがってこの旧binaryからの再upgradeでは、
+layoutが同じに見えてもNoteを自動reattachせずDetachedに置く。内容を確認して明示的にreattachする。Guardを通さずに旧binaryを
+起動した場合は安全なexact判定を保証できないため、R1 candidateを起動する前にguardを実行する。旧binary自体が通常GUIで
+restoration v1を維持することを確認できる版では、restoration bytesとbindingのexact matchだけreattachを許す。
+Re-upgradeだけを理由にstoreをdowngrade、reset、または古いbackupへ戻さない。
+
+Guardが作るuntrusted sentinelはNotes off／native unavailableの起動後も残る。Terminalのv1 topologyは次の正常終了から
+引き続き保存・復元できるが、古いNote bindingは自動reattachされない。Notesを再有効化して正常なrestoration-first／
+Note-second commitが完了した後だけ、新しいexact bindingへ信頼を戻す。途中で異常終了した場合はDetachedを維持する。
 
 ## 停止条件
 

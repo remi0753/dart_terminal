@@ -14,6 +14,7 @@ import 'terminal_window_interaction.dart';
 
 typedef TerminalNoteApplicationClock = int Function();
 typedef TerminalNoteTerminalFocusHandler = bool Function();
+typedef TerminalNotePaneActivationHandler = bool Function();
 typedef TerminalNoteApplicationErrorHandler = void Function(
   Object error,
   StackTrace stackTrace,
@@ -279,10 +280,16 @@ final class TerminalNoteApplicationCoordinator {
               ? TerminalNoteProductActionKind.newNote
               : TerminalNoteProductActionKind.toggleNotes,
         );
+    if (_stopping || surface.interaction.isDisposed) return _unavailable;
     if (!result.isAccepted) return result;
     final TerminalNoteProductInteractionSnapshot? snapshot = runtime
         .interactionSnapshotForPane(paneId);
-    if (snapshot == null || !_synchronizeInteraction(surface, snapshot)) {
+    if (snapshot == null ||
+        !_synchronizeInteraction(
+          surface,
+          snapshot,
+          activatePaneOnIntent: true,
+        )) {
       return _busy;
     }
     return result;
@@ -357,7 +364,12 @@ final class TerminalNoteApplicationCoordinator {
       final TerminalNoteProductInteractionSnapshot? snapshot = runtime
           .interactionSnapshotForPane(paneId);
       if (snapshot == null ||
-          !_synchronizeInteraction(surface, snapshot, forceNoteFocus: true)) {
+          !_synchronizeInteraction(
+            surface,
+            snapshot,
+            forceNoteFocus: true,
+            activatePaneOnIntent: true,
+          )) {
         return true;
       }
       final TerminalWindowConsumedGestureResult gesture = surface.interaction
@@ -452,6 +464,7 @@ final class TerminalNoteApplicationCoordinator {
     required TerminalWindowInteractionAuthority interactionAuthority,
     required TerminalWindowInteractionRouter interactionRouter,
     required TerminalNoteTerminalFocusHandler focusTerminal,
+    TerminalNotePaneActivationHandler? activatePane,
   }) => _serialize(() async {
     final TerminalNoteProductTopologyPort? runtime = _runtime;
     if (runtime == null || _stopping) return _unavailable;
@@ -461,6 +474,10 @@ final class TerminalNoteApplicationCoordinator {
     if (surface == null) {
       final TerminalNoteProductTopologyResult result = await runtime
           .attachSurface(paneId: paneId, configuration: configuration);
+      if (_stopping) {
+        if (result.isAccepted) await runtime.detachSurface(paneId);
+        return _unavailable;
+      }
       final int? generation = result.surfaceGeneration;
       if (!result.isAccepted || generation == null) return result;
       try {
@@ -475,6 +492,7 @@ final class TerminalNoteApplicationCoordinator {
             surfaceGeneration: generation,
           ),
           focusTerminal: focusTerminal,
+          activatePane: activatePane,
         );
       } on Object {
         await runtime.detachSurface(paneId);
@@ -510,8 +528,10 @@ final class TerminalNoteApplicationCoordinator {
       _debugLiveInteractionAdapterCount++;
     }
     surface.focusTerminal = focusTerminal;
+    surface.activatePane = activatePane;
     final TerminalNoteProductTopologyResult result = await runtime
         .updateSurface(paneId: paneId, configuration: configuration);
+    if (_stopping || surface.interaction.isDisposed) return _unavailable;
     if (!result.isAccepted &&
         runtime.surfaceGenerationForPane(paneId) == null) {
       _retireSurface(paneId);
@@ -690,6 +710,7 @@ final class TerminalNoteApplicationCoordinator {
     if (runtime == null || surface == null || _stopping) return;
     final TerminalNoteProductTopologyResult result = await runtime
         .pumpSurfaceIntent(paneId);
+    if (_stopping || surface.interaction.isDisposed) return;
     if (result.disposition ==
             TerminalNoteProductTopologyDisposition.nativeUnavailable ||
         runtime.surfaceGenerationForPane(paneId) == null) {
@@ -698,18 +719,31 @@ final class TerminalNoteApplicationCoordinator {
     }
     final TerminalNoteProductInteractionSnapshot? snapshot = runtime
         .interactionSnapshotForPane(paneId);
-    if (snapshot == null || !_synchronizeInteraction(surface, snapshot)) {
+    if (snapshot == null) {
       throw StateError('Note surface interaction reconciliation failed');
     }
+    // Focus denial is recoverable (for example a foreground pane changed
+    // during a native event). The adapter cancels its pending transfer.
+    _synchronizeInteraction(surface, snapshot, activatePaneOnIntent: true);
   }
 
   bool _synchronizeInteraction(
     _TerminalNoteApplicationSurface surface,
     TerminalNoteProductInteractionSnapshot snapshot, {
     bool forceNoteFocus = false,
+    bool activatePaneOnIntent = false,
   }) {
     final TerminalWindowNoteInteractionAdapter interaction =
         surface.interaction;
+    if (_stopping || interaction.isDisposed) return false;
+    if (activatePaneOnIntent &&
+        !snapshot.automaticPresentation &&
+        !(surface.activatePane?.call() ?? true)) {
+      return false;
+    }
+    if (activatePaneOnIntent && !snapshot.automaticPresentation) {
+      interaction.authority.synchronize();
+    }
     final TerminalWindowInteractionSnapshot? owner = interaction.authority
         .snapshotForWindow(surface.windowId);
     if (owner?.owner.kind == TerminalWindowInteractionOwnerKind.noteEditor &&
@@ -866,12 +900,14 @@ final class _TerminalNoteApplicationSurface {
     required this.windowId,
     required this.interaction,
     required this.focusTerminal,
+    required this.activatePane,
   });
 
   final PaneId paneId;
   TerminalWindowId windowId;
   TerminalWindowNoteInteractionAdapter interaction;
   TerminalNoteTerminalFocusHandler focusTerminal;
+  TerminalNotePaneActivationHandler? activatePane;
   TerminalWindowConsumedGestureIdentity? pointerGesture;
   bool? pointerSequenceConsumed;
 }

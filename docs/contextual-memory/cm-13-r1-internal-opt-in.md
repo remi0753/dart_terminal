@@ -1,7 +1,7 @@
 # CM-13 R1 internal S1/S2 opt-in
 
 日付: 2026-09-22<br>
-状態: R1 automated subtask完了。次はpersistent store manual checklistとR1 stage decision。manual／stageへは未着手。
+状態: R1 automatedと通常GUIのexact restoration subtask完了。AOT idle CPU hard gateは既知の未達として保持。次はmanual checklist／R1 stage判定。
 
 ## 目的
 
@@ -347,3 +347,71 @@ data-preserving rollback/recoveryを成立させる。
   owner 0を確認した。R0側のarchitecture／privacy／sanitizer／fault／distribution／全runtime matrixもpassした。
 - Quick Lookの修正はtest fixtureのshell完了同期だけで、menu、dispatcher、stale-cell判定、OS Secure Inputの受け入れ条件を
   変更していない。`dart_appkit`には変更を加えていない。Manual store matrixは未実施であり、stage promotionは主張しない。
+
+### 2026-09-22 — persistent-store manual／stageサブタスク着手
+
+- **目的:** R1 exact internal profileを実AppKitで使い、同じproduction durable storeをDeveloper JITからRelease AOTへ引き継いだ時の
+  Note保存、S2 On Return、IME／keyboard／accessibility／appearance／TUI、soft kill switch、full resource回収を直接確認し、
+  R1のpass／failをcontent-freeに明示する。
+- **背景:** Fresh named automated aggregateは64 paneと両runtimeのproduct vectorをpassしたが、実system入力・assistive UI・持続storeを
+  同一testerが操作するmanual claimは行っていない。R0 checklistはtemporary storeに対する前stageの証拠であり、R1の代用にしない。
+- **範囲:** exact 3-argument internal profile、隔離したcanonical `XDG_STATE_HOME`の実store、JIT→AOT restart、selected Note
+  persistence、On Return、実GUI入力・表示、off→on restart、offline status、正常終了後owner／lock回収、明示stage decision。
+- **対象外:** 個人の既定Application Support store、既存個人Note、public settings/docs、S3、telemetry、store破損を実manual dataへ注入すること、
+  `dart_appkit`変更。Corrupt／newer／lock／pre-Notesの破壊的edgeは直前subtaskの隔離automated rehearsal evidenceを再利用する。
+- **依存:** 完了済みのprofile・runbook・rehearsal、commit `3d533f3`のfresh aggregate、R0 manual baseline、Gate 7 R1停止条件。
+- **完了条件:** 両runtimeのmanual matrixがpass、同じdurable payloadの保存・再表示とOn Returnが成立、off pathでstore mutation 0、
+  app終了後lock／native owner 0、wrong attach／data loss／privacy leak／unintended PTY byte／geometry change／false delivery 0。
+  適用できない物理環境は`not available`と記録し、必須項目ならstageを未達とする。結果表、restoreしたsystem設定、明示decisionを残す。
+- **検証方針:** [`cm-13-r1-manual-checklist.md`](cm-13-r1-manual-checklist.md)のcase順でGUIとoffline statusを確認する。
+  System preferenceを触る場合は開始値を読み、明示的な承認後に操作して復元する。本文、ID、実path、timestampは結果へ書かない。
+  完了時にROADMAP親子状態、diff、`git status`を確認し、独立した完了commitを作る。
+- 手動候補用にcanonical `/private/tmp`直下の専用state rootをmode間で共有する形で作成した。最初のJIT起動試行は
+  `make`の依存解決時にsandbox外のDart telemetry session fileへ書けず、application起動前に停止した。Product／storeに
+  変更はなく、CI modeと明示cache rootを使って再試行する。
+- CI／隔離cache rootを指定した2回目はfresh bundleのbuild・signまで通ったが、`developer-jit-run`の直接起動が
+  exit 250で終了し、候補GUIは出現しなかった。`--run`はbuilderからbundle executableを直接spawnするのに対し、
+  自動受け入れはLaunchServices経由で実AppKit起動に成功している。原因はまだ未確定であり、同じbundle／引数を
+  許可済みの通常GUI実行環境で再試行する。Store statusと手動caseはまだ未観測。
+
+### 2026-09-22 — 実GUI確認とstage阻害要因
+
+- 許可済みGUI環境の`make developer-jit-run`でexact profileが起動し、JIT→AOT→JITの共有隔離storeで2件のsynthetic
+  Noteが保存・編集・再表示された。Off launchではNotes UI 0、durable payload SHA-256不変、再有効化でAOT編集が残った。
+  両runtimeの通常Quitは最終的にexit 0、worker／PTY clean、終了後offline statusはloadedであった。Vim alternate screen中の
+  badge／railとkeyboard-only shortcut／Tab／Escapeも両runtimeで部分確認した。詳細なpass／pending表は
+  [`cm-13-r1-manual-checklist.md`](cm-13-r1-manual-checklist.md)に逐次記録した。
+- 最初のJIT通常Quitは、進行中`updateSurface`がadapter teardown後にrefocusしてexit 70となった。
+  `TerminalNoteApplicationCoordinator`でawait後の停止／disposed guardと決定的な競合回帰テストを追加した。
+  別のlate menu dispatchがshutdown中unavailableを例外化したため、product disposal開始後だけ無害化した。
+  通常稼働中のunavailableは従来どおりfailureとする。修正後のJIT／AOT Quitはclean。
+- 修正後のfresh `make RUNTIME_ARCH=arm64 contextual-memory-r1-automated-qualification`はexit 0で完走。
+  400 file format変更0、root/package analyzer issue 0、全root test、R0 8 gate、R1 JIT/AOT S1/S2、64 pane／surface、
+  owner 0を再確認した。Phase 7／Ghostty／daily-useのsource hashと正規R0 budget evidenceだけを再生成し、
+  perf閾値は変更していない。`dart_appkit`には変更していない。
+- Stage上の未解決設計: 通常interactive hostはstartupで`restoration: null`を渡し、quitでは`notes.shutdown()`を呼ぶ。
+  正しいordered restorationを使う既存S1/S2受け入れvectorとは異なり、実GUIではclean quit後も保存NoteがDetachedへ移る。
+  内容消失やwrong attachは0だが、同文脈へのexact自動reattachとS2 restart-first deliveryを通常GUIでは証明できない。
+  案Aは通常terminal restoration v1のload／traversal／ordered quitを正式統合するが、session復元とpre-Notes rollbackを含む
+  大きなapp lifecycle変更になる。案BはR1 internalを「再起動後は常にDetached、明示reattach必須」の安全制限previewと
+  するがGate 7／CM-13の現行受け入れ条件を明示変更する必要がある。cwd／pane index等から推測attachする案は
+  wrong-context riskのため不採用。案A／Bの製品判断なしにstage passへはせず、CM-14へ進まない。
+- Release tag `0.1.0`の`lib/src/terminal_application.dart`もordinary interactive hostはrestoration lifecycleを使わず、
+  同機能はacceptance pathだけだった。したがって案Aを現在版へ足すだけでは旧binaryがrollback中のlayout変更を同じ
+  restoration fileに反映できず、re-upgrade時のexact hashを信頼するとwrong-context attachになり得る。既存runbookの
+  「pre-Notes appがrestoration v1を通常どおり読む」という前提とは一致しない。現行条件のまま実装を続けると安全境界を
+  逸脱するため、R1 stageを停止して仕様判断を求める。
+- 実system IME／VoiceOver／appearance設定の変更は未実施。実施にはaction-timeの利用者承認と開始値への復元が必要。
+
+### 2026-09-22 — 通常GUI restorationをCM-13内の先行成果物へ分割
+
+- 利用者の「先に進めてください」を、Gate 7のexact自動復元をR1でも維持する指示として扱った。Detached-onlyへ仕様を弱めず、
+  [`cm-13-ordinary-restoration.md`](cm-13-ordinary-restoration.md)をtask memoとして起こし、ROADMAPのmanual checklistの直前に
+  独立したsubtaskを追加した。個別bug修正行は増やしていない。
+- Release tag `0.1.0`の通常GUIはrestoration v1を更新しないため、その旧binary経由をhashだけで識別する案は不採用。
+  明示rollback guardと持続するuntrusted sentinelで旧Note bindingを信頼しない。旧binary自体の変更や
+  `dart_appkit`への個別アプリcode追加はしない。
+- 通常GUIのJIT→AOT→JITでexact Current、AOT編集、2-pane構造と元paneへの再接続を実GUIで観測した。
+  別paneがfocus中のNote badgeで初回fatal focus拒否を発見し、明示操作時のpane activateとrecoverable拒否へ修正した。
+  同GUI再試行ではNotes表示と正常Quitを確認した。旧版guard後はNote本文を保ったままDetachedへ移った。
+  詳細な試行、未完了検証、再活性化リスクの検討は先行task memoへ記録した。

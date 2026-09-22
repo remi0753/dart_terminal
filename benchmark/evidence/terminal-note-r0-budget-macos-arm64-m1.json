@@ -11,18 +11,18 @@
     "build_mode": "release-aot"
   },
   "input_integrity": {
-    "dart_budget_sha256": "324f59a1d6d95f1b7f74b884e225dfb54ce7604274f801b2db4912d518cda130",
-    "native_budget_sha256": "a3133d4d076e6a33a12307e3d32cae5e9d1751ae8f51cb6593dda26e00c5ca7b",
-    "disabled_input_sha256": "0cecf35a33f5cc163ca21e8c8128c78ccb226334dafcf12c0eb50ce6b60b0ebb",
-    "store_acceptance_sha256": "5998112e4d9937d36bd0ccf5df0135c3458f356b2c4583262e13c95fc84ed117"
+    "dart_budget_sha256": "120b575d5210b5d324f44523e70d0679082e6c79e56b75344d99d8fca8ca6c72",
+    "native_budget_sha256": "f55bc1fdb0a63e36b1169ea0dc6f0419ecf40045bd07684055246021e04db829",
+    "disabled_input_sha256": "5f5aae8766f22a305dd7023b047ff7a190a14b89d877adc61dcd08d4dd604f8d",
+    "store_acceptance_sha256": "8dc85d08d2392ece23bcf9d9c78b632fe2cd50fb9fec2c161b98533bd0fc2914"
   },
   "source_integrity": {
     "dart_budget_benchmark_sha256": "69f5648258d830d61fc2c7f2b1dcbe84f470d05296ae3cc773a732dc129f288e",
     "disabled_input_benchmark_sha256": "5fba1285081adf8a80711f31d26e6695f4980f39b37cea0b168f35d9c1a1939a",
-    "evidence_builder_sha256": "7eca5cb8c57128be5747d64282c066a1f397139a040eb81a9a834f98d61fe7b4",
-    "native_budget_benchmark_sha256": "7731b7187ee7572bf67ed4d4c6e4e475ebbaf3e698a92af370b65c3357a1d7f2",
+    "evidence_builder_sha256": "5f5a76ca47af95b34fb2fb78f70360e5907e7cfa65afa645a8134fee10b66aa1",
+    "native_budget_benchmark_sha256": "9b2735489bb5d110d553f35e17c876652de9ff575fe50e1aba27e140cfd0f84e",
     "store_acceptance_sha256": "18a448374d249b536cbaebe20e8ae47e6b1260c6ffe07fcde1c188c58306ab27",
-    "audited_note_sources_sha256": "7657d26ef7d13e8913cb9c7b225001d4327acbbcf695857ede47792638b91f2a"
+    "audited_note_sources_sha256": "7c5c5784e4bf08ae856231ec36fe8b1d597195bf38e44ea478c5f4c5814092d9"
   },
   "measurement_policy": {
     "version": 1,
@@ -39,7 +39,7 @@
       "panes": 64,
       "surfaces": 64,
       "worker": 1,
-      "rss_delta_bytes": 3211264,
+      "rss_delta_bytes": 3227648,
       "rss_budget_bytes": 16777216,
       "idle_window_ms": 250,
       "projection_delta": 0,
@@ -52,7 +52,7 @@
     "model_transition": {
       "samples": 64,
       "p95_us": 4,
-      "max_us": 11,
+      "max_us": 13,
       "p95_budget_us": 1000,
       "max_budget_us": 4000,
       "store_commit_delta": 0,
@@ -65,7 +65,7 @@
       "notes": 128,
       "cards": 64,
       "body_bytes": 262144,
-      "p95_us": 4879,
+      "p95_us": 4413,
       "budget_us": 100000,
       "store_commit_delta": 0,
       "owners": 0
@@ -76,16 +76,16 @@
       "cards": 64,
       "materialized": 32,
       "body_bytes": 262144,
-      "apply_p95_us": 5447,
+      "apply_p95_us": 4532,
       "apply_budget_us": 8000,
-      "first_visible_p95_us": 15149,
+      "first_visible_p95_us": 11998,
       "first_visible_budget_us": 100000,
       "stalls": 0,
-      "stall_threshold_us": 16670,
+      "stall_threshold_us": 33340,
       "owners": 0
     },
     "combined_first_visible": {
-      "p95_us": 20028,
+      "p95_us": 16411,
       "budget_us": 100000
     },
     "hard_cap": {
@@ -95,9 +95,9 @@
       "deliveries": 2048,
       "body_bytes": 8388608,
       "file_bytes": 9698603,
-      "steady_delta_bytes": 43778048,
+      "steady_delta_bytes": 43810816,
       "steady_budget_bytes": 67108864,
-      "peak_delta_bytes": 93192192,
+      "peak_delta_bytes": 93208576,
       "peak_budget_bytes": 100663296,
       "owners": 0
     },
@@ -105,15 +105,15 @@
       "rounds": 21,
       "events_per_route": 1050000,
       "factory_calls": 0,
-      "baseline_p95_ns": 270,
-      "disabled_p95_ns": 277,
-      "median_ratio_ppm": 1014429,
+      "baseline_p95_ns": 272,
+      "disabled_p95_ns": 253,
+      "median_ratio_ppm": 999111,
       "maximum_ratio_ppm": 1050000
     },
     "durable_store": {
       "runs": 20,
-      "commit_p95_us": 44317,
-      "primitive_p95_us": 15151,
+      "commit_p95_us": 39937,
+      "primitive_p95_us": 14852,
       "commit_budget_us": 250000,
       "primitive_budget_us": 1500000
     }

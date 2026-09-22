@@ -128,35 +128,56 @@ void _testRuntimeProductPerformanceResult() {
     ),
     'ordinary-product result recomputes its CPU proxy ratio',
   );
-  final String cpuBoundary = validResource
+  final String doubledCpuBoundary = validResource
       .replaceFirst(
         'idle_cpu_us=1000 idle_cpu_basis_points=5',
-        'idle_cpu_us=10000 idle_cpu_basis_points=50',
+        'idle_cpu_us=20000 idle_cpu_basis_points=100',
       )
       .replaceFirst(
         'occluded_cpu_us=1000 occluded_cpu_basis_points=5',
-        'occluded_cpu_us=10000 occluded_cpu_basis_points=50',
+        'occluded_cpu_us=20000 occluded_cpu_basis_points=100',
       )
       .replaceFirst(
         'aggregate_cpu_basis_points=5',
-        'aggregate_cpu_basis_points=50',
+        'aggregate_cpu_basis_points=100',
+      );
+  _expect(
+    RuntimeProductPerformanceResult.parse(
+          '$valid\n$doubledCpuBoundary',
+          startupElapsed: const Duration(milliseconds: 800),
+        ).aggregateCpuBasisPoints ==
+        100,
+    'Release authority accepts CPU at the user-approved doubled boundary',
+  );
+  final String aboveDoubledCpuBoundary = doubledCpuBoundary
+      .replaceFirst(
+        'idle_cpu_us=20000 idle_cpu_basis_points=100',
+        'idle_cpu_us=20200 idle_cpu_basis_points=101',
+      )
+      .replaceFirst(
+        'occluded_cpu_us=20000 occluded_cpu_basis_points=100',
+        'occluded_cpu_us=20200 occluded_cpu_basis_points=101',
+      )
+      .replaceFirst(
+        'aggregate_cpu_basis_points=100',
+        'aggregate_cpu_basis_points=101',
       )
       .replaceFirst('cpu_bound=true', 'cpu_bound=false');
   _expect(
     RuntimeProductPerformanceResult.parse(
-          '$valid\n$cpuBoundary',
+          '$valid\n$aboveDoubledCpuBoundary',
           startupElapsed: const Duration(milliseconds: 800),
           enforceLatencyBudgets: false,
         ).aggregateCpuBasisPoints ==
-        50,
+        101,
     'Developer JIT accepts a truthful non-authoritative CPU gate result',
   );
   _expectThrows(
     () => RuntimeProductPerformanceResult.parse(
-      '$valid\n$cpuBoundary',
+      '$valid\n$aboveDoubledCpuBoundary',
       startupElapsed: const Duration(milliseconds: 800),
     ),
-    'Release authority rejects CPU at the strict 0.5 percent boundary',
+    'Release authority rejects CPU above the doubled 1 percent boundary',
   );
   final String memoryBoundary = validResource
       .replaceFirst('workload_rss_bytes=120', 'workload_rss_bytes=536870913')

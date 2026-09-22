@@ -216,7 +216,7 @@ final class RuntimeProductPerformanceResult {
         occludedResidentBytes <= residentMemoryBudgetBytes &&
         peakResidentBytes <= residentMemoryBudgetBytes;
     final bool idleCpuBound =
-        totalCpuMicroseconds * 200 < totalWindowMicroseconds;
+        totalCpuMicroseconds * 100 <= totalWindowMicroseconds;
     if (claimedResidentMemoryBound != residentMemoryBound ||
         claimedIdleCpuBound != idleCpuBound) {
       throw const FormatException('product resource gate claim is malformed');
@@ -238,7 +238,7 @@ final class RuntimeProductPerformanceResult {
       throw const FormatException('product resident memory exceeded its cap');
     }
     if (!idleCpuBound) {
-      throw const FormatException('product idle CPU exceeded 0.5 percent');
+      throw const FormatException('product idle CPU exceeded 1 percent');
     }
   }
 }

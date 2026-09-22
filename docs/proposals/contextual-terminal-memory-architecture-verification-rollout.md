@@ -325,8 +325,10 @@ Hashはdiskへcommitしたrestoration JSONのexact UTF-8 bytesへ計算する。
 - Matching hash: ordered paneへcontextをbindし、store/restoration intersectionをcommitする。
 - Bindingなし（pre-Notes/legacy）: 全paneへfresh ID、既存store contextは推測せずDetached。
 - Hash/count/ID mismatch: binding全体を使わず全paneへfresh ID、store-onlyをDetached。部分位置合わせしない。
-- Pre-Notes binary rollback: restoration v1を通常どおり読め、Note storeを無視する。
+- Pre-Notes binary rollback: restoration v1を通常GUIで維持する版は同形式を読み書きし、Note storeを無視する。
 - Rollback binaryがlayoutを変更した後の再upgrade: hash mismatchによりNoteはDetachedとなり、別paneへ誤接続しない。
+  既存tag `0.1.0`の通常GUIはv1を維持しないため、rollback前にR1のtrust markerを無効化し、
+  layout変化の有無によらず再upgradeをDetachedへ送る。旧binaryの手順外起動は現行binaryから検出できない。
 
 このobjectもcanonical payload/checksumに含める。RestorationとNote storeは別transactionのままで、hash matchを
 commit markerとして使う。SHA-256はcorruption/correlation用でauthentication claimを持たない。
@@ -370,7 +372,7 @@ portable body/color/statusを出せる。
 | Disabled path | worker/store directory/native Note surface/timer 0。Existing key→PTY p95 <2 msを維持し、notes patch前baseline比+5%以下 |
 | Enabled collapsed idle | polling/timer/continuous frame 0。64 pane empty stateのsettled RSS増分16 MiB以下 |
 | Model/event transition | application root p95 1 ms以下、単発最大4 ms。Body encode/fsyncをrootで実行しない |
-| Rail open/projection | 128-note contextでfirst visible p95 100 ms以下。Native apply p95 8 ms以下、main-thread stall 16.67 ms超0 |
+| Rail open/projection | 128-note contextでfirst visible p95 100 ms以下。Native apply p95 8 ms以下、main-thread stall 33.34 ms超0 |
 | Durable commit | 1 MiB store p95 250 ms以下、16 MiB hard-cap store p95 1.5 s以下。UIは非同期Saving stateで応答しPTYをblockしない |
 | Memory at hard-cap fixture | steady RSS増分64 MiB以下、commit中peak増分96 MiB以下、close後worker/native/card retained 0 |
 | Queue / projection | pending mutation 32/128 KiB body、prompt 32/session、live pane 64、expanded projection 64 cards/256 KiB、materialized card 32 |
@@ -378,7 +380,7 @@ portable body/color/statusを出せる。
 
 Performance gateは固定M1/arm64 Release AOTをhard baselineにし、Developer JITはfunctional/leak evidenceに使う。
 Disk latencyはisolated local APFS fixtureで20回以上測り、external/network volumeをsupport claimに含めない。Budget違反、
-main-thread stall、unbounded retryはstage exit failureで、test閾値を緩めて通さない。
+main-thread stall、unbounded retryはstage exit failure。単発測定揺れによる足止めを避けるため、ユーザー方針に従いstall判定閾値のみ旧16.67 msの2倍である33.34 msへ変更する。p95、owner、unbounded retryなど他の条件は緩めない。
 
 ### Environment acceptance matrix
 
@@ -418,10 +420,13 @@ telemetry、background upload、remote flagは導入しない。Moderated結果�
   S1/S2を巻き戻さない。
 - Native surface failure、IME/accessibility regressionはsurface stageを止め、storeを削除/resetしない。
 - Performance/memory budget違反は該当stageを維持し、quotaや既存terminal performance gateを緩めない。
+  ただし2026-09-22の利用者指示でidle CPU proxyに限り従来上限の2倍（合計1.0%以下）を許容する。
+  これを超えたAOT測定やidle frame／ownership違反はpass扱いにしない。
 - Soft rollbackはlocal configをoffにしてrestartする。Off pathはstoreをread/write/deleteせず、restoration v1と
   terminal behaviorを維持する。
-- Binary rollbackはpre-Notes appがrestoration v1を読んで通常起動し、Note storeを無視する。Store fileは残す。
-  再upgrade時はexact hash matchだけreattachし、rollback中にlayoutが変わればDetachedへ送る。
+- Binary rollbackはpre-Notes appがNote storeを無視し、Store fileを残す。通常GUIでrestoration v1を維持する版では
+  再upgrade時にexact hash matchだけreattachし、layoutが変わればDetachedへ送る。既存tag `0.1.0`のように
+  通常GUIがv1を維持しない版では、rollback前のtrust marker無効化を必須にし、再upgradeは常にDetachedとする。
 - Newer/unknown storeをolder Notes appで開いた場合、read/write/downgrade/reset 0。Compatible appへ戻すまで
   feature unavailableとする。
 - Corrupt store recovery、backup restore、raw export、logical deleteはGate 3手順だけを使い、release rollbackを

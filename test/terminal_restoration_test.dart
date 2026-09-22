@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:dart_terminal/dart_terminal.dart';
 import 'package:dart_terminal/src/terminal_sha256.dart';
 
+import '../tool/terminal_restoration_rollback_guard.dart';
+
 Future<void> main() => runTerminalRestorationTests();
 
 Future<void> runTerminalRestorationTests() async {
@@ -16,10 +18,130 @@ Future<void> runTerminalRestorationTests() async {
   _testWindowPlacementPolicy();
   _testStrictCodecRejection();
   await _testBoundedFileStore();
+  await _testInteractiveRestorationTrust();
   await _testQuickTerminalRestorationExclusion();
   await _testHierarchyRoundTripAndFreshOwnership();
   await _testMaximumPaneTraversal();
   await _testRestoreFailureIsAtomic();
+}
+
+Future<void> _testInteractiveRestorationTrust() async {
+  final Directory temporary = await Directory.systemTemp.createTemp(
+    'dart-terminal-interactive-restoration-',
+  );
+  final Directory root = Directory(await temporary.resolveSymbolicLinks());
+  try {
+    final String path = TerminalInteractiveRestorationLocation.fromEnvironment(
+      <String, String>{'XDG_STATE_HOME': root.path},
+    ).path;
+    _expect(
+      path == '${root.path}/dart-terminal/restoration.json' &&
+          TerminalInteractiveRestorationLocation.fromEnvironment(
+                <String, String>{'HOME': root.path},
+              ).path ==
+              '${root.path}/Library/Application Support/Dart Terminal/restoration.json',
+      'ordinary restoration uses one safe product state location',
+    );
+    final TerminalInteractiveRestorationPersistence persistence =
+        TerminalInteractiveRestorationPersistence(path);
+    _expect(
+      (await persistence.loadAndConsumeTrusted()).disposition ==
+          TerminalInteractiveRestorationLoadDisposition.missing,
+      'first ordinary launch has no trusted restoration',
+    );
+    const String exact =
+        '{"version":1,"activeWindow":0,"windows":[{"placement":'
+        '{"windowedFrame":[100.0,90.0,920.0,580.0],"screen":null,'
+        '"fullscreen":false},"selectedTab":0,"tabs":[{"focusedPane":0,'
+        '"zoomedPane":null,"title":null,"color":null,"tree":'
+        '{"kind":"pane","cwd":"/private/tmp"}}]}]}';
+    _expect(await persistence.saveTrusted(exact), 'trusted save succeeds');
+    _expect(
+      await persistence.clearUntrustedAfterNoteCommit(),
+      'the first ordered Note commit establishes a trusted binding',
+    );
+    final TerminalInteractiveRestorationLoad loaded = await persistence
+        .loadAndConsumeTrusted();
+    _expect(
+      loaded.disposition ==
+              TerminalInteractiveRestorationLoadDisposition.restored &&
+          loaded.exactEncoded == exact &&
+          loaded.snapshot!.paneCount == 1 &&
+          (await persistence.loadAndConsumeTrusted()).disposition ==
+              TerminalInteractiveRestorationLoadDisposition.untrusted,
+      'ordinary launch receives exact v1 bytes and topology',
+    );
+    _expect(await persistence.saveTrusted(exact), 'off save after claim');
+    final TerminalInteractiveRestorationLoad offLoaded = await persistence
+        .loadAndConsumeTrusted();
+    _expect(
+      offLoaded.disposition ==
+              TerminalInteractiveRestorationLoadDisposition.untrusted &&
+          offLoaded.snapshot?.paneCount == 1 &&
+          offLoaded.exactEncoded == exact,
+      'off launch restores terminal topology but cannot reactivate the old Note binding',
+    );
+    _expect(await persistence.saveTrusted(exact), 'ordered save after off');
+    _expect(
+      await persistence.clearUntrustedAfterNoteCommit(),
+      'ordered Note commit clears the untrusted sentinel',
+    );
+    await File(path).writeAsString('\n$exact\n', flush: true);
+    _expect(
+      (await persistence.loadAndConsumeTrusted()).disposition ==
+          TerminalInteractiveRestorationLoadDisposition.untrusted,
+      'valid v1 bytes with a different exact hash do not attach Notes',
+    );
+    _expect(await persistence.saveTrusted(exact), 'trusted save repairs pair');
+    _expect(await persistence.invalidateTrust(), 'rollback guard succeeds');
+    _expect(
+      await File(path).readAsString() == exact &&
+          (await persistence.loadAndConsumeTrusted()).disposition ==
+              TerminalInteractiveRestorationLoadDisposition.untrusted,
+      'pre-Notes rollback invalidates trust without deleting v1 data',
+    );
+    parseTerminalRestorationRollbackGuardArguments(const <String>[
+      '--prepare-pre-notes-rollback',
+      '--acknowledge-app-closed-and-store-backed-up',
+    ]);
+    _expectThrows<FormatException>(
+      () => parseTerminalRestorationRollbackGuardArguments(const <String>[
+        '--prepare-pre-notes-rollback',
+      ]),
+      'rollback tool rejects a missing safety acknowledgement',
+    );
+    _expect(
+      await prepareTerminalRestorationPreNotesRollback(<String, String>{
+        'XDG_STATE_HOME': root.path,
+      }),
+      'rollback tool derives the same ordinary restoration location',
+    );
+    _expect(await persistence.saveTrusted(exact), 'off save after rollback');
+    final TerminalInteractiveRestorationLoad rollbackOffLoaded =
+        await persistence.loadAndConsumeTrusted();
+    _expect(
+      rollbackOffLoaded.disposition ==
+              TerminalInteractiveRestorationLoadDisposition.untrusted &&
+          rollbackOffLoaded.snapshot?.paneCount == 1,
+      'rollback guard survives a later off launch with identical bytes while retaining terminal topology',
+    );
+    _expect(
+      await persistence.saveTrusted(exact),
+      'ordered save after rollback',
+    );
+    _expect(
+      await persistence.clearUntrustedAfterNoteCommit(),
+      'new Note binding can establish fresh trust',
+    );
+    await File('$path.trusted').writeAsString('invalid\n', flush: true);
+    _expect(
+      (await persistence.loadAndConsumeTrusted()).disposition ==
+          TerminalInteractiveRestorationLoadDisposition.untrusted,
+      'malformed trust marker fails closed',
+    );
+  } finally {
+    await root.delete(recursive: true);
+  }
 }
 
 void _testSecureContextIdentity() {

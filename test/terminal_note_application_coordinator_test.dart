@@ -10,6 +10,112 @@ Future<void> runTerminalNoteApplicationCoordinatorTests() async {
   await _testDisabledCompositionOwnsNoRuntime();
   await _testAutomaticRailPreservesTerminalOwner();
   await _testTopologySurfaceInteractionAndShutdown();
+  await _testUnfocusedSplitFocusRejectionIsNotFatal();
+  await _testInFlightSurfaceUpdateDoesNotRefocusAfterShutdown();
+}
+
+Future<void> _testUnfocusedSplitFocusRejectionIsNotFatal() async {
+  final List<_CoordinatorFakeSession> sessions = <_CoordinatorFakeSession>[];
+  final TerminalApplicationState state = TerminalApplicationState();
+  final TerminalWindowState window = await state.createWindow(
+    _configuration(sessions),
+  );
+  final PaneId original = window.selectedTab.focusedPaneId;
+  final TerminalPane second = await state.splitPane(
+    original,
+    _configuration(sessions),
+    axis: TerminalSplitAxis.horizontal,
+    fraction: 0.5,
+  );
+  state.focusPane(window.selectedTab.id, second.id);
+  final _FakeNoteTopologyRuntime runtime = _FakeNoteTopologyRuntime(<PaneId>{
+    original,
+    second.id,
+  })..focusAccepted = false;
+  final List<Object> errors = <Object>[];
+  final TerminalNoteApplicationCoordinator coordinator =
+      await TerminalNoteApplicationCoordinator.start(
+        launchConfiguration: const TerminalNoteFeatureConfiguration(
+          notes: true,
+          notesOnReturn: true,
+          notesNextPrompt: false,
+          fontSize: 15,
+        ),
+        initialBindings: <TerminalNoteApplicationPaneBinding>[
+          TerminalNoteApplicationPaneBinding(
+            paneId: original,
+            windowId: window.id,
+          ),
+          TerminalNoteApplicationPaneBinding(
+            paneId: second.id,
+            windowId: window.id,
+          ),
+        ],
+        factory: (_) => TerminalNoteSubsystemStartResult.available(runtime),
+        onError: (Object error, StackTrace _) => errors.add(error),
+      );
+  final TerminalWindowInteractionAuthority authority =
+      TerminalWindowInteractionAuthority(state);
+  final TerminalWindowInteractionRouter router =
+      TerminalWindowInteractionRouter(authority);
+  await coordinator.synchronizeSurface(
+    paneId: original,
+    windowId: window.id,
+    configuration: _surfaceConfiguration(75),
+    interactionAuthority: authority,
+    interactionRouter: router,
+    focusTerminal: () => true,
+    activatePane: () {
+      state.focusPane(window.selectedTab.id, original);
+      return true;
+    },
+  );
+  runtime.notify(
+    original,
+    TerminalNoteProductInteractionSnapshot(
+      surfaceGeneration: runtime.surfaces[original]!,
+      visibility: TerminalNoteSurfaceVisibility.expanded,
+      editorMode: TerminalNoteEditorMode.inactive,
+      draftGeneration: 0,
+      editorDirty: false,
+      confirmingDiscard: false,
+    ),
+  );
+  await _drainSurfaceEvents();
+  _expect(
+    errors.isEmpty &&
+        coordinator.notesVisibleForPane(original) &&
+        runtime.focusRequests.single ==
+            (original, TerminalNoteProductFocusTarget.rail) &&
+        window.selectedTab.focusedPaneId == original &&
+        authority.snapshotForWindow(window.id)?.owner.kind ==
+            TerminalWindowInteractionOwnerKind.terminal,
+    'rejected focus in an unfocused split leaves the Note visible without '
+    'fatal error or terminal ownership transfer',
+  );
+  runtime.focusAccepted = true;
+  runtime.notify(
+    original,
+    TerminalNoteProductInteractionSnapshot(
+      surfaceGeneration: runtime.surfaces[original]!,
+      visibility: TerminalNoteSurfaceVisibility.expanded,
+      editorMode: TerminalNoteEditorMode.inactive,
+      draftGeneration: 0,
+      editorDirty: false,
+      confirmingDiscard: false,
+    ),
+  );
+  await _drainSurfaceEvents();
+  _expect(
+    errors.isEmpty &&
+        authority.snapshotForWindow(window.id)?.owner.kind ==
+            TerminalWindowInteractionOwnerKind.noteRail,
+    'next explicit Note event can complete the previously rejected focus',
+  );
+  await coordinator.shutdown();
+  router.dispose();
+  authority.dispose();
+  await state.shutdown();
 }
 
 Future<void> _testDisabledCompositionOwnsNoRuntime() async {
@@ -606,6 +712,91 @@ Future<void> _testTopologySurfaceInteractionAndShutdown() async {
   await state.shutdown();
 }
 
+Future<void> _testInFlightSurfaceUpdateDoesNotRefocusAfterShutdown() async {
+  final int interactionBaseline =
+      TerminalNoteApplicationCoordinator.debugLiveInteractionAdapterCount;
+  final List<_CoordinatorFakeSession> sessions = <_CoordinatorFakeSession>[];
+  final TerminalApplicationState state = TerminalApplicationState();
+  final TerminalWindowState window = await state.createWindow(
+    _configuration(sessions),
+  );
+  final PaneId paneId = window.selectedTab.focusedPaneId;
+  final _FakeNoteTopologyRuntime runtime = _FakeNoteTopologyRuntime(<PaneId>{
+    paneId,
+  });
+  final TerminalNoteApplicationCoordinator coordinator =
+      await TerminalNoteApplicationCoordinator.start(
+        launchConfiguration: const TerminalNoteFeatureConfiguration(
+          notes: true,
+          notesOnReturn: true,
+          notesNextPrompt: false,
+          fontSize: 15,
+        ),
+        initialBindings: <TerminalNoteApplicationPaneBinding>[
+          TerminalNoteApplicationPaneBinding(
+            paneId: paneId,
+            windowId: window.id,
+          ),
+        ],
+        factory: (_) => TerminalNoteSubsystemStartResult.available(runtime),
+      );
+  final TerminalWindowInteractionAuthority authority =
+      TerminalWindowInteractionAuthority(state);
+  final TerminalWindowInteractionRouter router =
+      TerminalWindowInteractionRouter(authority);
+  await coordinator.synchronizeSurface(
+    paneId: paneId,
+    windowId: window.id,
+    configuration: _surfaceConfiguration(19),
+    interactionAuthority: authority,
+    interactionRouter: router,
+    focusTerminal: () => true,
+  );
+  final int generation = runtime.surfaces[paneId]!;
+  runtime.interactions[paneId] = TerminalNoteProductInteractionSnapshot(
+    surfaceGeneration: generation,
+    visibility: TerminalNoteSurfaceVisibility.expanded,
+    editorMode: TerminalNoteEditorMode.inactive,
+    draftGeneration: 0,
+    editorDirty: false,
+    confirmingDiscard: false,
+  );
+  final Completer<void> updateStarted = Completer<void>();
+  final Completer<void> updateGate = Completer<void>();
+  runtime
+    ..updateStarted = updateStarted
+    ..updateGate = updateGate;
+  final Future<TerminalNoteProductTopologyResult> inFlight = coordinator
+      .synchronizeSurface(
+        paneId: paneId,
+        windowId: window.id,
+        configuration: _surfaceConfiguration(19),
+        interactionAuthority: authority,
+        interactionRouter: router,
+        focusTerminal: () => true,
+      );
+  await updateStarted.future;
+  final Future<TerminalNoteCompositionShutdownDisposition> stopping =
+      coordinator.shutdown();
+  _expect(
+    coordinator.interactionForPane(paneId)?.isDisposed == true,
+    'shutdown releases native interaction before an in-flight update resumes',
+  );
+  updateGate.complete();
+  final TerminalNoteProductTopologyResult result = await inFlight;
+  await stopping;
+  _expect(
+    result.disposition == TerminalNoteProductTopologyDisposition.unavailable &&
+        coordinator.liveSurfaceCount == 0 &&
+        TerminalNoteApplicationCoordinator.debugLiveInteractionAdapterCount ==
+            interactionBaseline,
+    'in-flight update cannot refocus a disposed Note adapter during quit',
+  );
+  router.dispose();
+  authority.dispose();
+  await state.shutdown();
+}
+
 TerminalNoteProductSurfaceConfiguration _surfaceConfiguration(int identity) =>
     TerminalNoteProductSurfaceConfiguration(
       rendererIdentity: TerminalMetalRendererCompositionIdentity(
@@ -654,6 +845,9 @@ final class _FakeNoteTopologyRuntime
   int applicationShutdownCount = 0;
   var _nextSurfaceGeneration = 10;
   var _stopped = false;
+  Completer<void>? updateStarted;
+  Completer<void>? updateGate;
+  bool focusAccepted = true;
 
   @override
   bool get isStopped => _stopped;
@@ -726,10 +920,15 @@ final class _FakeNoteTopologyRuntime
   Future<TerminalNoteProductTopologyResult> updateSurface({
     required PaneId paneId,
     required TerminalNoteProductSurfaceConfiguration configuration,
-  }) async => TerminalNoteProductTopologyResult(
-    TerminalNoteProductTopologyDisposition.applied,
-    surfaceGeneration: surfaces[paneId],
-  );
+  }) async {
+    updateStarted?.complete();
+    final Completer<void>? gate = updateGate;
+    if (gate != null) await gate.future;
+    return TerminalNoteProductTopologyResult(
+      TerminalNoteProductTopologyDisposition.applied,
+      surfaceGeneration: surfaces[paneId],
+    );
+  }
 
   @override
   Future<TerminalNoteProductTopologyResult> detachSurface(PaneId paneId) async {
@@ -807,7 +1006,7 @@ final class _FakeNoteTopologyRuntime
   bool focusSurface(PaneId paneId, TerminalNoteProductFocusTarget target) {
     if (!surfaces.containsKey(paneId)) return false;
     focusRequests.add((paneId, target));
-    return true;
+    return focusAccepted;
   }
 
   @override

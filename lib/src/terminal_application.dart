@@ -65,6 +65,7 @@ import 'terminal_input/terminal_scroll_router.dart';
 import 'terminal_input/terminal_selection_autoscroll.dart';
 import 'terminal_input/terminal_selection_gesture.dart';
 import 'terminal_input/terminal_text_input_event_router.dart';
+import 'terminal_interactive_restoration.dart';
 import 'terminal_localization.dart';
 import 'terminal_memory_pressure.dart';
 import 'terminal_native_content.dart';
@@ -98,6 +99,7 @@ import 'terminal_renderer/terminal_live_metal_surface.dart';
 import 'terminal_renderer/terminal_overlay.dart';
 import 'terminal_restoration.dart';
 import 'terminal_restoration_lifecycle.dart';
+import 'terminal_runtime_test_activation.dart';
 import 'terminal_secure_keyboard_entry.dart';
 import 'terminal_session.dart';
 import 'terminal_settings_document.dart';
@@ -1412,6 +1414,7 @@ final class TerminalApplication {
         osc52Clipboard: options.runtimeOsc52Test
             ? _MemoryTerminalOsc52Clipboard()
             : null,
+        useOrdinaryRestoration: _usesInteractiveProductHierarchy(options),
       );
       return;
     }
@@ -2957,6 +2960,7 @@ final class TerminalApplication {
     bool runNoteS2Acceptance = false,
     String? noteS2Directory,
     TerminalOsc52ClipboardPort? osc52Clipboard,
+    bool useOrdinaryRestoration = false,
   }) async {
     const String acceptancePrompt = '__DT_USER_ACTIONS_PROMPT__ ';
     final bool r1InternalProfileAcceptance =
@@ -2978,10 +2982,15 @@ final class TerminalApplication {
       productConfiguration.windowWidth,
       productConfiguration.windowHeight,
     );
-    final TerminalApplicationState state = TerminalApplicationState();
+    TerminalApplicationState state = TerminalApplicationState();
     final Map<PaneId, TerminalSession> sessions = <PaneId, TerminalSession>{};
     final List<TerminalSession> allSessions = <TerminalSession>[];
     final Map<PaneId, String?> launchWorkingDirectories = <PaneId, String?>{};
+    TerminalInteractiveRestorationPersistence? ordinaryRestoration;
+    final Map<TerminalWindowId, TerminalWindowPlacement>
+    restoredWindowPlacements = <TerminalWindowId, TerminalWindowPlacement>{};
+    TerminalNoteRestorationArtifact? loadedRestoration;
+    List<PaneId> initialPaneTraversal = const <PaneId>[];
     final Map<PaneId, TerminalProductConfiguration> paneConfigurations =
         <PaneId, TerminalProductConfiguration>{};
     final Map<PaneId, _TerminalHierarchyProductPane> owners =
@@ -3559,6 +3568,40 @@ final class TerminalApplication {
                 }
                 currentWindow.makeFirstResponder(resources.view);
                 return true;
+              },
+              activatePane: () {
+                final TerminalPaneLocation? current = state.locationForPane(
+                  paneId,
+                );
+                final TerminalWindowState? logicalWindow = current == null
+                    ? null
+                    : state.windowForId(current.windowId);
+                if (current == null || logicalWindow == null) return false;
+                if (state.activeWindowId == current.windowId &&
+                    logicalWindow.selectedTabId == current.tabId &&
+                    logicalWindow.selectedTab.focusedPaneId == paneId) {
+                  return true;
+                }
+                if (!interactionAuthority.permitsHierarchyMutation(
+                  current.windowId,
+                )) {
+                  return false;
+                }
+                try {
+                  if (logicalWindow.selectedTabId != current.tabId) {
+                    state.selectTab(current.windowId, current.tabId);
+                  }
+                  if (logicalWindow.selectedTab.focusedPaneId != paneId) {
+                    state.focusPane(current.tabId, paneId);
+                  }
+                  if (state.activeWindowId != current.windowId) {
+                    state.activateWindow(current.windowId);
+                  }
+                  reconcileRequest?.call();
+                  return true;
+                } on Object {
+                  return false;
+                }
               },
             )
             .then<void>((_) {}, onError: recordAsynchronousError),
@@ -4827,7 +4870,80 @@ final class TerminalApplication {
       final TerminalNoteApplicationCoordinator? notes =
           noteApplicationCoordinator;
       noteApplicationCoordinator = null;
-      if (notes != null) {
+      final TerminalInteractiveRestorationPersistence? restorationStore =
+          ordinaryRestoration;
+      final TerminalNativeHierarchyAdapter? captureHierarchy = hierarchy;
+      var applicationShutdownAttempted = false;
+      if (useOrdinaryRestoration && restorationStore != null) {
+        TerminalNoteRestorationCaptureArtifact? capture;
+        if (captureHierarchy != null && !captureHierarchy.isDisposed) {
+          try {
+            capture = TerminalNoteRestorationCaptureArtifact.capture(
+              state,
+              placementForWindow: captureHierarchy.placementForWindow,
+              workingDirectoryForPane: (PaneId paneId) =>
+                  presentationResolver.inheritedWorkingDirectoryForPane(
+                    paneId,
+                  ) ??
+                  launchWorkingDirectories[paneId],
+            );
+          } on Object {
+            // An empty/invalid topology must not leave a trusted old snapshot.
+          }
+        }
+        if (capture == null) {
+          await restorationStore.invalidateTrust();
+          stdout.writeln(
+            'TERMINAL_INTERACTIVE_RESTORATION shutdown=untrusted '
+            'content_free=true',
+          );
+        } else {
+          try {
+            applicationShutdownAttempted = notes != null;
+            final TerminalNoteApplicationShutdownResult? result = notes == null
+                ? null
+                : await notes.shutdownApplication(
+                    capture: capture,
+                    updatedAtUtcMicros: DateTime.now()
+                        .toUtc()
+                        .microsecondsSinceEpoch,
+                    commitRestoration: (
+                      TerminalNoteRestorationArtifact artifact,
+                    ) => restorationStore.saveTrusted(artifact.exactEncoded),
+                  );
+            if (result?.authorityResult == null) {
+              final bool saved = await restorationStore.saveTrusted(
+                capture.restoration.exactEncoded,
+              );
+              stdout.writeln(
+                'TERMINAL_INTERACTIVE_RESTORATION '
+                'shutdown=${saved ? 'saved' : 'unavailable'} '
+                'content_free=true',
+              );
+            } else if (result!.authorityResult!.disposition ==
+                TerminalNoteAuthorityShutdownDisposition.committed) {
+              final bool trusted = await restorationStore
+                  .clearUntrustedAfterNoteCommit();
+              stdout.writeln(
+                'TERMINAL_INTERACTIVE_RESTORATION '
+                'shutdown=${trusted ? 'ordered' : 'untrusted'} '
+                'content_free=true',
+              );
+            } else {
+              await restorationStore.invalidateTrust();
+              stdout.writeln(
+                'TERMINAL_INTERACTIVE_RESTORATION shutdown=untrusted '
+                'content_free=true',
+              );
+            }
+          } on Object catch (error, stackTrace) {
+            await restorationStore.invalidateTrust();
+            disposalError ??= error;
+            disposalStackTrace ??= stackTrace;
+          }
+        }
+      }
+      if (notes != null && !applicationShutdownAttempted) {
         try {
           await notes.shutdown();
         } on Object catch (error, stackTrace) {
@@ -5164,12 +5280,103 @@ final class TerminalApplication {
         stdout.writeln('TERMINAL_USER_ACTIONS_STAGE stage=worker-ready');
       }
 
-      final TerminalWindowState initialWindow = await state.createWindow(
-        configuration(null),
-      );
+      if (useOrdinaryRestoration) {
+        try {
+          ordinaryRestoration = TerminalInteractiveRestorationPersistence(
+            TerminalInteractiveRestorationLocation.fromEnvironment(
+              Platform.environment,
+            ).path,
+          );
+          final TerminalInteractiveRestorationLoad loaded =
+              await ordinaryRestoration.loadAndConsumeTrusted();
+          stdout.writeln(
+            'TERMINAL_INTERACTIVE_RESTORATION load=${loaded.disposition.name} '
+            'content_free=true',
+          );
+          if (loaded.disposition ==
+              TerminalInteractiveRestorationLoadDisposition.unavailable) {
+            ordinaryRestoration = null;
+          }
+          if (loaded.snapshot != null && loaded.exactEncoded != null) {
+            try {
+              final TerminalRestorationResult restored =
+                  await TerminalApplicationRestorer.restore(
+                    loaded.snapshot!,
+                    into: state,
+                    configurationForPane: (TerminalRestorablePane pane) =>
+                        configuration(
+                          null,
+                          workingDirectoryOverride: pane.workingDirectory,
+                        ),
+                  );
+              final TerminalScreenPlacement mainScreen =
+                  _terminalScreenPlacement(
+                    application
+                        .resolveScreen(AppKitScreenSelection.main)
+                        .screen,
+                  );
+              for (final MapEntry<TerminalWindowId, TerminalWindowPlacement>
+                  entry
+                  in restored.placements.entries) {
+                restoredWindowPlacements[entry.key] =
+                    TerminalWindowPlacementPolicy.resolveForAvailableScreens(
+                      entry.value,
+                      <TerminalScreenPlacement>[mainScreen],
+                      fallbackDisplayId: mainScreen.displayId,
+                    );
+              }
+              initialPaneTraversal = restored.paneIdsInTraversalOrder;
+              if (loaded.disposition ==
+                  TerminalInteractiveRestorationLoadDisposition.restored) {
+                loadedRestoration =
+                    TerminalNoteRestorationArtifact.fromExactEncoded(
+                      loaded.exactEncoded!,
+                    );
+              }
+            } on Object {
+              // The restorer shuts down its partial state. A failed topology
+              // must never be paired with the old exact Note binding.
+              if (!state.isDisposed) {
+                try {
+                  await state.shutdown();
+                } on Object {
+                  // Fresh default startup still takes priority.
+                }
+              }
+              for (final PaneId paneId in sessions.keys) {
+                applicationThemeProjection.removePane(paneId);
+              }
+              sessions.clear();
+              allSessions.clear();
+              launchWorkingDirectories.clear();
+              paneConfigurations.clear();
+              restoredWindowPlacements.clear();
+              initialPaneTraversal = const <PaneId>[];
+              loadedRestoration = null;
+              state = TerminalApplicationState();
+              stdout.writeln(
+                'TERMINAL_INTERACTIVE_RESTORATION load=restoreFailed '
+                'content_free=true',
+              );
+            }
+          }
+        } on Object {
+          ordinaryRestoration = null;
+          stdout.writeln(
+            'TERMINAL_INTERACTIVE_RESTORATION load=unavailable '
+            'content_free=true',
+          );
+        }
+      }
+      final TerminalWindowState initialWindow = state.windows.isEmpty
+          ? await state.createWindow(configuration(null))
+          : state.windows.first;
       final TerminalPane initialPane = state.paneForId(
         initialWindow.selectedTab.focusedPaneId,
       )!;
+      if (initialPaneTraversal.isEmpty) {
+        initialPaneTraversal = <PaneId>[initialPane.id];
+      }
       final TerminalWindowInteractionAuthority createdInteractionAuthority =
           TerminalWindowInteractionAuthority(state);
       windowInteractionAuthority = createdInteractionAuthority;
@@ -5184,12 +5391,13 @@ final class TerminalApplication {
             launchConfiguration: configurationAuthority.noteConfiguration,
             environment: Platform.environment,
             authorityGeneration: createdLifecycle.generation,
-            restoration: null,
+            restoration: loadedRestoration,
             initialBindings: <TerminalNoteApplicationPaneBinding>[
-              TerminalNoteApplicationPaneBinding(
-                paneId: initialPane.id,
-                windowId: initialWindow.id,
-              ),
+              for (final PaneId paneId in initialPaneTraversal)
+                TerminalNoteApplicationPaneBinding(
+                  paneId: paneId,
+                  windowId: state.locationForPane(paneId)!.windowId,
+                ),
             ],
             ensureQuickTerminalContext: true,
             copyEffect: (String body) {
@@ -5464,6 +5672,7 @@ final class TerminalApplication {
               height: 16 + productConfiguration.windowPaddingVertical * 2,
             ),
             dividerThickness: 1,
+            windowPlacements: restoredWindowPlacements,
             defersCloseRequests: true,
             tabLayoutSizeResolver:
                 createdDockPresenter.resolveTerminalLayoutSize,
@@ -5545,7 +5754,9 @@ final class TerminalApplication {
       if (runUserActionAcceptance) {
         stdout.writeln('TERMINAL_USER_ACTIONS_STAGE stage=hierarchy-projected');
       }
-      await initialPane.start();
+      for (final PaneId paneId in initialPaneTraversal) {
+        await state.paneForId(paneId)!.start();
+      }
       if (runUserActionAcceptance) {
         stdout.writeln('TERMINAL_USER_ACTIONS_STAGE stage=pane-started');
       }
@@ -6334,6 +6545,9 @@ final class TerminalApplication {
         final TerminalNoteProductTopologyResult result =
             await createdNoteCoordinator.performAction(paneId, action);
         if (!result.isAccepted) {
+          // Menu enablement is a snapshot. A queued click may finish after
+          // termination has already released the Note interaction adapter.
+          if (productResourceDisposalFuture != null || state.isDisposed) return;
           throw StateError('Note action unavailable');
         }
       }
@@ -7863,7 +8077,7 @@ final class TerminalApplication {
         occludedResources.maximumResidentBytes <= residentMemoryBudgetBytes &&
         peakResidentBytes <= residentMemoryBudgetBytes;
     final bool idleCpuBound =
-        aggregateCpuMicroseconds * 200 < aggregateWindowMicroseconds;
+        aggregateCpuMicroseconds * 100 <= aggregateWindowMicroseconds;
 
     final bool pendingBound = occludedAfter.pendingFrameCount <= 1;
     stdout.writeln(
@@ -9697,8 +9911,8 @@ final class TerminalApplication {
     await ordinaryOwner.pane.submit();
     await _waitForAsciiMarker(ordinarySession, focusReady);
     await _waitForAsciiMarker(ordinarySession, prompt);
-    _expectLifecycle(
-      ordinarySession.terminalScreenSet.focusReportingMode,
+    await waitFor(
+      () => ordinarySession.terminalScreenSet.focusReportingMode,
       'DEC 1004 focus reporting was not enabled by the real PTY fixture',
     );
 
@@ -11920,6 +12134,10 @@ final class TerminalApplication {
                 focusRoundTripWriteBaseline,
         'focus round trip did not restore terminal input with zero PTY writes',
       );
+      _expectLifecycle(
+        await activateCurrentRuntimeCandidateForTesting(),
+        'native content candidate did not acquire real macOS foreground',
+      );
       await dispatch(TerminalActionId.toggleSecureKeyboardEntry);
       reconcile();
       contextDockProcess.synchronize();
@@ -12251,11 +12469,26 @@ final class TerminalApplication {
         failureDetails: () {
           final TerminalContextDockDirectorySnapshot? directory =
               contextDockDirectory.snapshotForWindow(initialWindow.id);
+          final TerminalPaneProcessSnapshot process = splitPane
+              .processSnapshot();
+          final TerminalContextDockContentSnapshot? content = contextDockProcess
+              .snapshotForWindow(initialWindow.id);
+          final TerminalSecureKeyboardEntryStatus secure =
+              secureKeyboardEntry.status;
           return 'focused=${initialTab.focusedPaneId == splitPaneId} '
+              'app_active=${application.isActive} '
+              'window_focused=${contextDockWindow.isFocused} '
               'pane=${directory?.paneId == splitPaneId} '
               'root_match=${directory?.workingDirectory == fixtureRootPath} '
               'status=${directory?.status.name ?? 'absent'} '
-              'operations=${contextDockDirectory.activeOperationCount}';
+              'operations=${contextDockDirectory.activeOperationCount} '
+              'process=${process.disposition.name} '
+              'echo=${process.terminalEchoEnabled} '
+              'content=${content?.mode.name ?? 'absent'} '
+              'can_observe=${contextDockProcess.canObserveDirectoryPane(splitPaneId)} '
+              'secure_manual=${secure.manualRequested} '
+              'secure_target=${secure.targetIdentity == splitPaneId} '
+              'secure_owned=${secure.ownedEnabled}';
         },
       );
       await dispatch(TerminalActionId.focusPaneLeft);

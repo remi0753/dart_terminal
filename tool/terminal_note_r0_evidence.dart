@@ -491,7 +491,7 @@ Map<String, int> _decodeNative(String line) {
       value['first_visible_p95_us']! > value['first_visible_budget_us']! ||
       value['first_visible_p95_us']! < value['apply_p95_us']! ||
       value['stalls'] != 0 ||
-      value['stall_threshold_us'] != 16670 ||
+      value['stall_threshold_us'] != 33340 ||
       value['owners'] != 0) {
     throw const FormatException('native apply gate failed');
   }
@@ -974,7 +974,7 @@ void _validateDocument(
       (native['first_visible_p95_us']! as int) <
           (native['apply_p95_us']! as int) ||
       native['stalls'] != 0 ||
-      native['stall_threshold_us'] != 16670 ||
+      native['stall_threshold_us'] != 33340 ||
       native['owners'] != 0 ||
       combined['budget_us'] != 100000 ||
       combined['p95_us'] !=

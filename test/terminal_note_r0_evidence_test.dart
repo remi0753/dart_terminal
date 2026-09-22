@@ -358,7 +358,7 @@ const String _nativeLog =
     'hardware=MacBookPro17,1 memory_bytes=17179869184 warmups=5 samples=21 '
     'cards=64 materialized=32 body_bytes=262144 apply_p95_us=4500 '
     'apply_budget_us=8000 first_visible_p95_us=12000 '
-    'first_visible_budget_us=100000 stalls=0 stall_threshold_us=16670 '
+    'first_visible_budget_us=100000 stalls=0 stall_threshold_us=33340 '
     'owners=0 content_free=true\n';
 
 const String _disabledLog =

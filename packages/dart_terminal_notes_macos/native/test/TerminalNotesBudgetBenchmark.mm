@@ -19,7 +19,7 @@ constexpr uint32_t kSampleCount = 21u;
 constexpr uint32_t kContextNoteCount = 128u;
 constexpr uint64_t kApplyBudgetNanoseconds = 8'000'000u;
 constexpr uint64_t kFirstVisibleBudgetNanoseconds = 100'000'000u;
-constexpr uint64_t kStallThresholdNanoseconds = 16'670'000u;
+constexpr uint64_t kStallThresholdNanoseconds = 33'340'000u;
 constexpr char kRequiredHardware[] = "MacBookPro17,1";
 constexpr uint64_t kRequiredMemoryBytes = 16ull * 1024ull * 1024ull * 1024ull;
 
