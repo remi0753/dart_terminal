@@ -150,6 +150,11 @@ override TERMINAL_NOTE_R0_QUALIFICATION_GATES := \
 	product-sanitizer-fuzz-fault-gate \
 	runtime-verify \
 	release-aot-distribution-verify
+override TERMINAL_NOTE_R1_AUTOMATED_GATES := \
+	contextual-memory-r1-internal-profile-check \
+	contextual-memory-r1-rehearsal \
+	contextual-memory-r0-qualification \
+	runtime-note-r1-integration
 override TERMINAL_NOTE_R1_INTERNAL_ARGUMENTS := \
 	--notes=true \
 	--notes-on-return=true \
@@ -174,7 +179,7 @@ override PRODUCT_PERFORMANCE_AGGREGATE_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)
 	terminal-note-r0-native-budget \
 	terminal-notes-dart-test terminal-notes-host-acceptance \
 	terminal-notes-capability-audit terminal-notes-acceptance contextual-memory-s1-acceptance contextual-memory-s2-acceptance contextual-memory-r0-qualification \
-	contextual-memory-r1-internal-profile-check contextual-memory-r1-internal-candidate-build contextual-memory-r1-rehearsal \
+	contextual-memory-r1-internal-profile-check contextual-memory-r1-internal-candidate-build contextual-memory-r1-rehearsal contextual-memory-r1-automated-qualification \
 	compatibility-inventory compatibility-inventory-check \
 	compatibility-manifest compatibility-manifest-check terminal-differential-contract-check \
 	terminal-differential-adapters-check terminal-differential-corpus-check terminal-differential-evidence-check \
@@ -201,7 +206,7 @@ override PRODUCT_PERFORMANCE_AGGREGATE_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)
 	product-performance-comparator-check product-performance-regression-gate \
 	runtime-source-check runtime-architecture-check \
 	developer-jit-build developer-jit-run developer-jit-audit \
-	developer-jit-integration developer-jit-display developer-jit-hierarchy developer-jit-performance developer-jit-reliability developer-jit-actions developer-jit-applescript developer-jit-system-automation developer-jit-native-content developer-jit-window-interaction developer-jit-quick-terminal developer-jit-secure-keyboard-entry developer-jit-diagnostics developer-jit-configuration developer-jit-theme developer-jit-shell-integration developer-jit-desktop-signals developer-jit-osc52 developer-jit-restoration developer-jit-note-s1 developer-jit-note-s2 developer-jit-clipboard developer-jit-lifecycle developer-jit-traffic \
+	developer-jit-integration developer-jit-display developer-jit-hierarchy developer-jit-performance developer-jit-reliability developer-jit-actions developer-jit-applescript developer-jit-system-automation developer-jit-native-content developer-jit-window-interaction developer-jit-quick-terminal developer-jit-secure-keyboard-entry developer-jit-diagnostics developer-jit-configuration developer-jit-theme developer-jit-shell-integration developer-jit-desktop-signals developer-jit-osc52 developer-jit-restoration developer-jit-note-s1 developer-jit-note-s2 developer-jit-note-r1 developer-jit-clipboard developer-jit-lifecycle developer-jit-traffic \
 	developer-jit-resource developer-jit-shutdown-fault \
 	release-aot-build release-aot-run release-aot-audit \
 	release-aot-arm64-build release-aot-x86_64-build release-aot-thin-builds \
@@ -216,9 +221,9 @@ override PRODUCT_PERFORMANCE_AGGREGATE_RESULT := $(PRODUCT_PARSER_BENCHMARK_DIR)
 	terminal-update-feed-test terminal-update-transaction-test terminal-update-controller-test terminal-release-symbols-test terminal-incident-service-test release-update-feed-credentials-check \
 	release-update-feed \
 	release-aot-symbols \
-	release-aot-integration release-aot-display release-aot-hierarchy release-aot-performance release-aot-reliability release-aot-actions release-aot-applescript release-aot-system-automation release-aot-native-content release-aot-window-interaction release-aot-quick-terminal release-aot-secure-keyboard-entry release-aot-diagnostics release-aot-configuration release-aot-theme release-aot-shell-integration release-aot-desktop-signals release-aot-osc52 release-aot-restoration release-aot-note-s1 release-aot-note-s2 release-aot-clipboard release-aot-lifecycle release-aot-traffic \
+	release-aot-integration release-aot-display release-aot-hierarchy release-aot-performance release-aot-reliability release-aot-actions release-aot-applescript release-aot-system-automation release-aot-native-content release-aot-window-interaction release-aot-quick-terminal release-aot-secure-keyboard-entry release-aot-diagnostics release-aot-configuration release-aot-theme release-aot-shell-integration release-aot-desktop-signals release-aot-osc52 release-aot-restoration release-aot-note-s1 release-aot-note-s2 release-aot-note-r1 release-aot-clipboard release-aot-lifecycle release-aot-traffic \
 	release-aot-resource release-aot-shutdown-fault runtime-bundle-audit \
-	runtime-integration runtime-terminal-display-integration runtime-native-hierarchy-integration runtime-product-performance-integration runtime-bounded-reliability-integration runtime-user-actions-integration runtime-applescript-integration runtime-system-automation-integration runtime-native-content-integration runtime-window-interaction-integration runtime-quick-terminal-integration runtime-secure-keyboard-entry-integration runtime-diagnostics-integration runtime-configuration-integration runtime-theme-integration runtime-shell-integration runtime-desktop-signals-integration runtime-osc52-integration runtime-restoration-integration runtime-note-s1-integration runtime-note-s2-integration runtime-clipboard-integration runtime-lifecycle-integration \
+	runtime-integration runtime-terminal-display-integration runtime-native-hierarchy-integration runtime-product-performance-integration runtime-bounded-reliability-integration runtime-user-actions-integration runtime-applescript-integration runtime-system-automation-integration runtime-native-content-integration runtime-window-interaction-integration runtime-quick-terminal-integration runtime-secure-keyboard-entry-integration runtime-diagnostics-integration runtime-configuration-integration runtime-theme-integration runtime-shell-integration runtime-desktop-signals-integration runtime-osc52-integration runtime-restoration-integration runtime-note-s1-integration runtime-note-s2-integration runtime-note-r1-integration runtime-clipboard-integration runtime-lifecycle-integration \
 	runtime-traffic-integration runtime-resource-integration \
 	runtime-shutdown-fault-integration runtime-verify clean
 
@@ -258,6 +263,7 @@ help:
 	@echo "  make contextual-memory-r1-internal-profile-check  Validate the typed internal Notes launch profile"
 	@echo "  make contextual-memory-r1-internal-candidate-build  Build and audit both internal Notes runtime candidates"
 	@echo "  make contextual-memory-r1-rehearsal  Rehearse internal Notes recovery and rollback boundaries"
+	@echo "  make contextual-memory-r1-automated-qualification  Run the complete automated internal Notes qualification graph"
 	@echo "  make product-performance-comparator-check  Validate pinned Ghostty relative evidence"
 	@echo "  make product-performance-regression-gate  Run the complete Release AOT performance gate"
 	@echo "  make compatibility-inventory      Regenerate sequence inventory and summary"
@@ -333,6 +339,7 @@ help:
 	@echo "  make contextual-memory-s1-acceptance  Run Note S1 runtime and safety/privacy audits"
 	@echo "  make runtime-note-s2-integration  Verify the complete Note S2 product vector in both modes"
 	@echo "  make contextual-memory-s2-acceptance  Run Note S2 runtime and safety/privacy audits"
+	@echo "  make runtime-note-r1-integration  Verify the exact internal Notes profile in both modes"
 	@echo "  make runtime-clipboard-integration  Verify bounded Copy/Paste in both modes"
 	@echo "  make runtime-verify                Audit and integration-test both modes"
 
@@ -931,6 +938,13 @@ contextual-memory-r1-rehearsal: contextual-memory-r1-internal-profile-check
 	@cd $(PROJECT_ROOT) && $(DART) run \
 		tool/terminal_note_r1_rehearsal.dart
 
+contextual-memory-r1-automated-qualification:
+	@$(MAKE) -j1 RUNTIME_ARCH=$(RUNTIME_ARCH) \
+		$(TERMINAL_NOTE_R1_AUTOMATED_GATES)
+	@cd $(PROJECT_ROOT) && $(DART) run \
+		tool/terminal_note_r1_qualification.dart \
+		--source-root=$(PROJECT_ROOT)
+
 product-performance-comparator-check: dependencies
 	@cd $(PROJECT_ROOT) && $(DART) run test/product_performance_comparator_test.dart
 	@cd $(PROJECT_ROOT) && $(DART) run test/ghostty_performance_capture_test.dart
@@ -1050,6 +1064,10 @@ developer-jit-note-s1: developer-jit-build
 developer-jit-note-s2: developer-jit-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=developer-jit \
 		--suite=note-s2 $(DEVELOPER_JIT_BUNDLE)
+
+developer-jit-note-r1: developer-jit-build
+	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=developer-jit \
+		--suite=note-r1 $(DEVELOPER_JIT_BUNDLE)
 
 developer-jit-clipboard: developer-jit-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=developer-jit \
@@ -1312,6 +1330,10 @@ release-aot-note-s2: release-aot-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
 		--suite=note-s2 $(RELEASE_AOT_BUNDLE)
 
+release-aot-note-r1: release-aot-build
+	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
+		--suite=note-r1 $(RELEASE_AOT_BUNDLE)
+
 release-aot-clipboard: release-aot-build
 	@cd $(PROJECT_ROOT) && $(INTEGRATION_TOOL) --mode=release-aot \
 		--suite=clipboard $(RELEASE_AOT_BUNDLE)
@@ -1397,6 +1419,8 @@ contextual-memory-s1-acceptance: terminal-notes-capability-audit \
 	@echo "CONTEXTUAL_MEMORY_S1_ACCEPTANCE_PASS runtimes=2 sanitizer=true bundle=true privacy=true restoration=true shell=true diagnostics=true dart_appkit=generic"
 
 runtime-note-s2-integration: developer-jit-note-s2 release-aot-note-s2
+
+runtime-note-r1-integration: developer-jit-note-r1 release-aot-note-r1
 
 contextual-memory-s2-acceptance: terminal-notes-capability-audit \
 	product-native-sanitizer runtime-bundle-audit \

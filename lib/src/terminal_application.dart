@@ -71,6 +71,7 @@ import 'terminal_native_content.dart';
 import 'terminal_native_hierarchy.dart';
 import 'terminal_note_application_coordinator.dart';
 import 'terminal_note_authority.dart';
+import 'terminal_note_composition.dart';
 import 'terminal_note_context_restoration.dart';
 import 'terminal_note_export_panel.dart';
 import 'terminal_note_model.dart';
@@ -2958,6 +2959,19 @@ final class TerminalApplication {
     TerminalOsc52ClipboardPort? osc52Clipboard,
   }) async {
     const String acceptancePrompt = '__DT_USER_ACTIONS_PROMPT__ ';
+    final bool r1InternalProfileAcceptance =
+        (runNoteS1Acceptance || runNoteS2Acceptance) &&
+        productConfiguration.notes;
+    final int r1CompositionBaseline =
+        TerminalNoteCompositionRoot.debugLiveSubsystemCount;
+    final int r1AuthorityBaseline =
+        TerminalNoteAuthority.debugLiveAuthorityCount;
+    final int r1ProductBaseline =
+        TerminalNoteProductSubsystem.debugLiveProductSubsystemCount;
+    final int r1InteractionBaseline =
+        TerminalNoteApplicationCoordinator.debugLiveInteractionAdapterCount;
+    final int r1StorePortBaseline =
+        TerminalNoteProcessStoreFactory.debugLivePortCount;
     final Rect initialWindowFrame = Rect.fromLTWH(
       100,
       90,
@@ -3036,6 +3050,7 @@ final class TerminalApplication {
     TerminalWindowInteractionRouter? windowInteractionRouter;
     TerminalWindowSystemSurfaceCoordinator? windowSystemSurfaceCoordinator;
     TerminalNoteApplicationCoordinator? noteApplicationCoordinator;
+    TerminalNoteApplicationCoordinator? r1AcceptanceCoordinator;
     final Object commandPaletteSystemSurface = Object();
     final Object settingsSystemSurface = Object();
     final Object diagnosticsSystemSurface = Object();
@@ -5197,7 +5212,47 @@ final class TerminalApplication {
             noteIdGenerator: noteIdGenerator,
           );
       noteApplicationCoordinator = createdNoteCoordinator;
+      if (r1InternalProfileAcceptance) {
+        r1AcceptanceCoordinator = createdNoteCoordinator;
+      }
       noteConfigurationObserver = createdNoteCoordinator.applyLiveConfiguration;
+
+      Future<void> verifyR1InternalRuntimeProfile() async {
+        if (!r1InternalProfileAcceptance) return;
+        final Stopwatch deadline = Stopwatch()..start();
+        while (createdNoteCoordinator.liveSurfaceCount != 1 &&
+            deadline.elapsed < const Duration(seconds: 3)) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+        final TerminalNoteFeatureConfiguration configuration =
+            configurationAuthority.noteConfiguration;
+        _expectLifecycle(
+          configuration.surfaceEnabled &&
+              configuration.onReturnEnabled &&
+              !configuration.nextPromptEnabled &&
+              createdNoteCoordinator.capability ==
+                  TerminalNoteApplicationCapability.available &&
+              createdNoteCoordinator.ownsRuntime &&
+              createdNoteCoordinator.liveBindingCount == 1 &&
+              createdNoteCoordinator.liveSurfaceCount == 1 &&
+              createdNoteCoordinator.liveInteractionAdapterCount == 1,
+          'R1 internal profile did not start one real Note surface: '
+          'notes=${configuration.surfaceEnabled} '
+          'onReturn=${configuration.onReturnEnabled} '
+          'nextPrompt=${configuration.nextPromptEnabled} '
+          'capability=${createdNoteCoordinator.capability.name} '
+          'bindings=${createdNoteCoordinator.liveBindingCount} '
+          'surfaces=${createdNoteCoordinator.liveSurfaceCount} '
+          'interactions=${createdNoteCoordinator.liveInteractionAdapterCount}',
+        );
+        stdout.writeln(
+          'TERMINAL_NOTE_R1_RUNTIME_PROFILE '
+          'slice=${runNoteS1Acceptance ? 's1' : 's2'} '
+          'notes=true on_return=true next_prompt=false '
+          'capability=available bindings=1 surfaces=1 interactions=1 '
+          'content_free=true',
+        );
+      }
 
       final TerminalContextDockState createdContextDockState =
           TerminalContextDockState(
@@ -6893,6 +6948,7 @@ final class TerminalApplication {
       if (runNoteS2Acceptance) {
         final TerminalSession initialSession = sessions[initialPane.id]!;
         await _waitForAsciiMarker(initialSession, acceptancePrompt.trimRight());
+        await verifyR1InternalRuntimeProfile();
         initialPane.insertText(
           "stty raw -echo; printf '\\033[?1049h\\033[?1h\\033[?2004h"
           "\\033[?1004h\\033[?1000h\\033[?1006h\\r\\n"
@@ -6984,6 +7040,7 @@ final class TerminalApplication {
       } else if (runNoteS1Acceptance) {
         final TerminalSession initialSession = sessions[initialPane.id]!;
         await _waitForAsciiMarker(initialSession, acceptancePrompt.trimRight());
+        await verifyR1InternalRuntimeProfile();
         TerminalNoteS1SentinelSnapshot protectedState() {
           final TerminalScreen screen =
               initialSession.terminalScreenSet.activeScreen;
@@ -7366,6 +7423,45 @@ final class TerminalApplication {
         stdout.writeln(
           'TERMINAL_NOTE_S2_CLEANUP sessions=1 metal=1 '
           'text_clients=0 native_handles=0',
+        );
+      }
+      if (r1InternalProfileAcceptance) {
+        final TerminalNoteApplicationCoordinator? coordinator =
+            r1AcceptanceCoordinator;
+        final int ownerCount =
+            (TerminalNoteCompositionRoot.debugLiveSubsystemCount -
+                    r1CompositionBaseline)
+                .abs() +
+            (TerminalNoteAuthority.debugLiveAuthorityCount -
+                    r1AuthorityBaseline)
+                .abs() +
+            (TerminalNoteProductSubsystem.debugLiveProductSubsystemCount -
+                    r1ProductBaseline)
+                .abs() +
+            (TerminalNoteApplicationCoordinator
+                        .debugLiveInteractionAdapterCount -
+                    r1InteractionBaseline)
+                .abs() +
+            (TerminalNoteProcessStoreFactory.debugLivePortCount -
+                    r1StorePortBaseline)
+                .abs();
+        _expectLifecycle(
+          coordinator != null &&
+              coordinator.liveBindingCount == 0 &&
+              coordinator.liveSurfaceCount == 0 &&
+              coordinator.liveInteractionAdapterCount == 0 &&
+              ownerCount == 0,
+          'R1 internal profile did not release every Note owner: '
+          'bindings=${coordinator?.liveBindingCount} '
+          'surfaces=${coordinator?.liveSurfaceCount} '
+          'interactions=${coordinator?.liveInteractionAdapterCount} '
+          'owners=$ownerCount',
+        );
+        stdout.writeln(
+          'TERMINAL_NOTE_R1_RUNTIME_CLEANUP '
+          'slice=${runNoteS1Acceptance ? 's1' : 's2'} '
+          'bindings=0 surfaces=0 interactions=0 owners=0 '
+          'content_free=true',
         );
       }
       desktopSignalCoordinator.dispose();
@@ -11963,9 +12059,12 @@ final class TerminalApplication {
         'query, or wrote PTY bytes',
       );
 
-      initialPane.insertText("printf '\\r\\nNATIVE%s\\r\\n' 'CONTENTLOOKUP'");
+      initialPane.insertText(
+        "PS1='__DT_QL_''PROMPT__ '; "
+        "printf '\\r\\nNATIVE%s\\r\\n' 'CONTENTLOOKUP'",
+      );
       await initialPane.submit();
-      await _waitForAsciiMarker(initialSession, lookupWord);
+      await _waitForAsciiMarker(initialSession, '__DT_QL_PROMPT__');
 
       final TerminalAppKitContextMenuProjection contextMenu =
           initialOwner.contextMenu!;

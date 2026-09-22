@@ -8,6 +8,8 @@ import 'package:dart_terminal/dart_terminal.dart'
     show TerminalActionCatalog, TerminalActionMenu;
 
 import 'runtime_product_performance_result.dart';
+import 'terminal_note_r1_internal_profile.dart'
+    show terminalNoteR1InternalArguments;
 
 final class _SmokeException implements Exception {
   const _SmokeException(this.message);
@@ -50,6 +52,7 @@ enum _Suite {
   restoration,
   noteS1,
   noteS2,
+  noteR1,
   clipboard,
   lifecycle,
   traffic,
@@ -69,6 +72,7 @@ enum _Suite {
     _Suite.secureKeyboardEntry => 'secure-keyboard-entry',
     _Suite.noteS1 => 'note-s1',
     _Suite.noteS2 => 'note-s2',
+    _Suite.noteR1 => 'note-r1',
     _ => name,
   };
 }
@@ -189,7 +193,7 @@ _Options _parseOptions(List<String> arguments) {
       if (selected == null) {
         throw const _SmokeException(
           '--suite must be smoke, display, hierarchy, actions, restoration, '
-          'note-s1, note-s2, '
+          'note-s1, note-s2, note-r1, '
           'configuration, theme, shell-integration, desktop-signals, '
           'osc52, native-content, window-interaction, applescript, '
           'system-automation, quick-terminal, '
@@ -3586,18 +3590,28 @@ Future<void> _runRestoration(_Options options, _Invocation invocation) async {
   }
 }
 
-Future<void> _runNoteS1(_Options options, _Invocation invocation) async {
-  final Directory directory = await Directory.systemTemp.createTemp(
-    'dart-terminal-note-s1-',
+Future<void> _runNoteS1(
+  _Options options,
+  _Invocation invocation, {
+  bool internalProfile = false,
+}) async {
+  final Directory directory = Directory(
+    await (await Directory.systemTemp.createTemp('dart-terminal-note-s1-'))
+        .resolveSymbolicLinks(),
   );
   try {
     final _ProcessObservation observation = await _launch(
       options,
       invocation,
-      const <String>['--runtime-note-s1-test'],
+      <String>[
+        if (internalProfile) ...terminalNoteR1InternalArguments,
+        '--runtime-note-s1-test',
+      ],
       environment: <String, String>{
         'DT_RUNTIME_NOTE_S1_TEST': '1',
         'DT_RUNTIME_NOTE_S1_DIRECTORY': directory.path,
+        if (internalProfile)
+          'XDG_STATE_HOME': '${directory.path}/product-state',
       },
       timeout: const Duration(seconds: 90),
       throughLaunchServices: true,
@@ -3671,6 +3685,14 @@ Future<void> _runNoteS1(_Options options, _Invocation invocation) async {
       scenario: 'normal',
       expectedCount: 1,
     );
+    if (internalProfile) {
+      _expectR1RuntimeProfile(observation, slice: 's1');
+      _expect(
+        await Directory('${directory.path}/product-state/dart-terminal/notes')
+            .exists(),
+        'Note S1 R1 profile did not open its isolated production store',
+      );
+    }
     stdout.writeln(
       'RUNTIME_NOTE_S1_PASS mode=${options.mode.name} '
       'launch_architecture=${options.launchArchitecture ?? 'native'} '
@@ -3682,18 +3704,28 @@ Future<void> _runNoteS1(_Options options, _Invocation invocation) async {
   }
 }
 
-Future<void> _runNoteS2(_Options options, _Invocation invocation) async {
-  final Directory directory = await Directory.systemTemp.createTemp(
-    'dart-terminal-note-s2-',
+Future<void> _runNoteS2(
+  _Options options,
+  _Invocation invocation, {
+  bool internalProfile = false,
+}) async {
+  final Directory directory = Directory(
+    await (await Directory.systemTemp.createTemp('dart-terminal-note-s2-'))
+        .resolveSymbolicLinks(),
   );
   try {
     final _ProcessObservation observation = await _launch(
       options,
       invocation,
-      const <String>['--runtime-note-s2-test'],
+      <String>[
+        if (internalProfile) ...terminalNoteR1InternalArguments,
+        '--runtime-note-s2-test',
+      ],
       environment: <String, String>{
         'DT_RUNTIME_NOTE_S2_TEST': '1',
         'DT_RUNTIME_NOTE_S2_DIRECTORY': directory.path,
+        if (internalProfile)
+          'XDG_STATE_HOME': '${directory.path}/product-state',
       },
       timeout: const Duration(seconds: 120),
       throughLaunchServices: true,
@@ -3767,6 +3799,14 @@ Future<void> _runNoteS2(_Options options, _Invocation invocation) async {
       scenario: 'normal',
       expectedCount: 1,
     );
+    if (internalProfile) {
+      _expectR1RuntimeProfile(observation, slice: 's2');
+      _expect(
+        await Directory('${directory.path}/product-state/dart-terminal/notes')
+            .exists(),
+        'Note S2 R1 profile did not open its isolated production store',
+      );
+    }
     stdout.writeln(
       'RUNTIME_NOTE_S2_PASS mode=${options.mode.name} '
       'launch_architecture=${options.launchArchitecture ?? 'native'} '
@@ -3776,6 +3816,44 @@ Future<void> _runNoteS2(_Options options, _Invocation invocation) async {
   } finally {
     if (await directory.exists()) await directory.delete(recursive: true);
   }
+}
+
+void _expectR1RuntimeProfile(
+  _ProcessObservation observation, {
+  required String slice,
+}) {
+  _expect(
+    RegExp(
+          '^TERMINAL_NOTE_R1_RUNTIME_PROFILE slice=$slice '
+          r'notes=true on_return=true next_prompt=false '
+          r'capability=available bindings=1 surfaces=1 interactions=1 '
+          r'content_free=true$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'R1 $slice runtime profile marker is missing or malformed',
+  );
+  _expect(
+    RegExp(
+          '^TERMINAL_NOTE_R1_RUNTIME_CLEANUP slice=$slice '
+          r'bindings=0 surfaces=0 interactions=0 owners=0 '
+          r'content_free=true$',
+          multiLine: true,
+        ).allMatches(observation.stdoutText).length ==
+        1,
+    'R1 $slice runtime cleanup marker is missing or malformed',
+  );
+}
+
+Future<void> _runNoteR1(_Options options, _Invocation invocation) async {
+  await _runNoteS1(options, invocation, internalProfile: true);
+  await _runNoteS2(options, invocation, internalProfile: true);
+  stdout.writeln(
+    'RUNTIME_NOTE_R1_PASS mode=${options.mode.name} '
+    'launch_architecture=${options.launchArchitecture ?? 'native'} '
+    'slices=2 typed_profile=true s3=false isolated_store=true owners=0 '
+    'content_free=true',
+  );
 }
 
 Future<void> _runShellExitPolicySmoke(
@@ -4776,6 +4854,9 @@ Future<void> main(List<String> arguments) async {
     }
     if (options.suite == _Suite.noteS2 || options.suite == _Suite.all) {
       await _runNoteS2(options, invocation);
+    }
+    if (options.suite == _Suite.noteR1) {
+      await _runNoteR1(options, invocation);
     }
     if (options.suite == _Suite.clipboard || options.suite == _Suite.all) {
       await _runClipboardProduct(options, invocation);

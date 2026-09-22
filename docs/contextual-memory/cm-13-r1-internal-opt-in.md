@@ -1,7 +1,7 @@
 # CM-13 R1 internal S1/S2 opt-in
 
 日付: 2026-09-22<br>
-状態: 第2サブタスク完了。次はR1両runtime、64-pane、manual aggregateとstage decision。
+状態: R1 automated subtask完了。次はpersistent store manual checklistとR1 stage decision。manual／stageへは未着手。
 
 ## 目的
 
@@ -175,6 +175,26 @@ data-preserving rollback/recoveryを成立させる。
 - Recovery-required状態のraw-file保全は既存UIに専用actionがないため、R1 runbookでは安全なmanual copyを正本とするか、
   product actionがR1の必須成果物か。Gate 3とCM-13文言を照合して第2サブタスク着手時に決定する。
 
+### 2026-09-22 — runtime／manualサブタスク着手
+
+- **目的:** Exact typed internal profileをfresh Developer JIT／Release AOTのordinary product compositionへ通し、S1／S2、実store、
+  64-pane hard bound、IME／TUI／accessibility、全resource回収を一つのR1 stage evidenceとして確定する。
+- **背景:** 既存S1／S2 runtime suiteは両modeのproduct vectorを実行するが、integration-only flagだけで起動するためordinary applicationの
+  Note coordinatorはdefault-offである。R1では同じsuiteへexact typed profileと隔離したproduction store locationを注入し、actual coordinatorが
+  available、surface attached、shutdown後owner 0であることを追加確認する必要がある。
+- **対象範囲:** R1専用runtime suite、Developer JIT／Release AOT、S1／S2、shared production store boundary、R0 64-pane budget evidence、
+  architecture／privacy／sanitizer／fault／distribution回帰、persistent store manual checklist、stage decision。
+- **対象外:** Public option／Settings／guide、default-on、S3、telemetry、別binary variant、`dart_appkit`変更、performance thresholdの再調整。
+- **依存関係:** 第1サブタスクのexact profile、第2サブタスクのrehearsal／runbook、fresh R0 8-gate aggregate、既存S1／S2 runtime suite。
+- **完了条件:** 両runtimeでexact profileがS1／S2 enabled・S3 disabledのactual product coordinatorを起動し、native surface 1以上、isolated
+  production store、clean teardown／owner 0を証明する。Fresh automated aggregateはR0 64 pane／64 surface evidenceを含み、manual claimを
+  偽らない。両runtimeのpersistent-store manual matrixがpassし、hard invariant violation 0でR1 pass／failを明示する。
+- **検証方針:** まずR1 runtime suiteとfail-closed aggregate checkerをfocused testし、fresh serial aggregateを完走する。次に同じmanual storeを
+  Developer JITからRelease AOTへ引き継ぎ、create／persist／On Return／IME／keyboard／VoiceOver／appearance／TUI／kill switchを実AppKitで確認する。
+  System settingを変更する場合は開始値を記録し、各case後に復元する。結果は本文、identity、path、timestampを含めない。
+- **分割:** 独立したautomated evidenceとmanual／stage decisionを上記2 subtaskへ分けた。前者を検証・commitするまで後者へ進まず、
+  個別bug修正項目はROADMAPへ追加しない。
+
 ### 2026-09-22 — recovery／rollbackサブタスク着手
 
 - 既存transaction engineは、current破損かつbackup正常時のpayload-preserving recovery preview、明示的な
@@ -243,3 +263,87 @@ data-preserving rollback/recoveryを成立させる。
   接続し、R0 hard gateを再利用してから実internal storeでmanual matrixを実施する。
 - `recovery-required`／`upgrade-required`はR1 stageを停止する運用条件のままである。自動resetやpublic recovery UIは次サブタスクへ
   持ち越さない。
+
+### 2026-09-22 — R1 automated qualification実装・両runtime確認
+
+- `runtime_integration_smoke.dart`へR1専用suiteを追加した。既存S1／S2 product vectorを順番どおり再利用し、各起動へexact
+  `terminalNoteR1InternalArguments`と隔離した`XDG_STATE_HOME`を注入する。Application本体は通常のproduction coordinatorを起動し、
+  S1／S2 enabled、S3 disabled、native surface 1、binding 1、interaction owner 1を確認後、shutdownで全て0へ戻す。
+- `developer-jit-note-r1`、`release-aot-note-r1`、`runtime-note-r1-integration`を追加した。両modeともfresh buildを使い、R1 suiteは
+  本文、identity、store pathを出力せず、typed profile、slice数、isolated store、owner 0だけを報告する。
+- `contextual-memory-r1-automated-qualification`はprofile、rehearsal、R0 8-gate qualification、R1両runtimeをexact順序で直列実行する。
+  Final checkerはMake inventory／recipe、profile、R0 budget／architecture evidenceをfail closedで再検証し、idleの64 pane、64 surface、
+  worker 1、projection／notification／layout／frame／store change／owner 0を明示検証する。Manual passやstage promotionは主張しない。
+- 最初のJIT試行ではtyped configは有効だったがproduction coordinatorが`unavailable`になった。原因はmacOSのsystem temporary pathが
+  `/var` symlink表現のまま`XDG_STATE_HOME`へ渡され、durable storeのcanonical path境界を満たさなかったことである。既存acceptanceと同じく
+  temporary rootを`resolveSymbolicLinks()`した後で注入するよう修正した。Store安全制約を緩める案は不採用とし、ROADMAPへ個別bug項目は
+  追加していない。
+- 修正後の`make runtime-note-r1-integration`はDeveloper JIT／Release AOTの各modeでS1とS2を完走し、各modeの
+  `RUNTIME_NOTE_R1_PASS ... typed_profile=true s3=false isolated_store=true owners=0 content_free=true`を確認した。
+- Focused formatter、変更5 fileのanalyzer、`terminal_note_r1_qualification_test.dart`はpassした。次はfresh named aggregateを完走し、
+  evidence／full regressionを確認してautomated subtaskをcommitする。
+- Fresh aggregateの最初の試行はPhase 7の生成済みsource hashが旧値で停止した。`phase7-appkit-acceptance`、
+  `ghostty-p0-p1-gap-inventory`、`release-candidate-daily-use-matrix`をこの順で正規再生成し、再試行ではPhase 7、
+  Ghostty gap、daily-useを含むroot全回帰までpassした。
+- 次の停止はR0の既存`developer-jit-native-content`で、外部の個人用DartTerminalがSecure Keyboard Entryを所有していたため
+  test appがmanual leaseを取得できなかった。個人用アプリのmanual toggleは開始時off、確認操作後offに戻し、個人config fileは
+  一切変更していない。Finderを前面にして個人用アプリのautomatic leaseを解放後、同gateのSecure Keyboard Entry境界は通過した。
+  同再試行ではProcess Inspectorのargv非表示assertionが一度停止したが、単独再実行で
+  `RUNTIME_NATIVE_CONTENT_INTEGRATION_PASS ... process_inspector=true`を確認した。Privacy invariantを緩める変更はしていない。
+  Fresh aggregateを最初から再実行して最終判定する。
+- そのfresh aggregateはprofile／rehearsal／budget／architecture／sanitizer／fault／S1／S2／Phase 7／compatibility／daily-use／
+  root全回帰、両runtimeのdisplay・hierarchy・reliability・actions・AppleScript・system automationまで通過したが、
+  `developer-jit-native-content`のProcess Inspector manual Secure Keyboard Entry所有確認で停止した。失敗時の診断は
+  `manual_requested=true`、`application_active=true`、`owned=false`、`system_enabled=true`であり、別プロセスのSecure Input
+  所有が残っている。`ioreg`のread-only確認ではSecure Input PIDが65157で、Finderを前面にしても変化しない。これはNotes
+  固有の失敗ではなく、他アプリと排他的なOS資源を使う既存gateの実行環境競合である。安全assertionを弱めず再試行する。
+- `lsof -p 65157 -a -d cwd`はSecure Input所有PIDがCodexを実行する`ChatGPT`プロセスであることを確認した。
+  Finder前面でもleaseは解放されず、`make developer-jit-native-content`を単独で再実行しても同じ`owned=false`で停止した。
+  試した別経路の直接`dart run`はサンドボックス外のclang module cacheへ書けず、OS test本体には到達しなかった。
+- 選択肢は(1)同じOS gateを再試行、(2)外部所有時に`system_enabled`だけで合格、(3)mock leaseへ置換、
+  (4)ChatGPTがSecure Inputを所有しない別GUI sessionでfresh aggregateを実行すること。(1)は単独再試行でも失敗、
+  (2)はleaseの排他的ownership保証を失い、(3)はこのOS統合gateの意味を弱めるため採用しない。
+  (4)が安全な残経路である。今回のtaskは完了扱いにせず、ROADMAPの未完了状態と実装差分を維持し、
+  fresh named aggregate／最終checker／commit／manual stageは次の実行環境で行う。
+- 別GUI環境から共有されたfresh aggregateの停止位置は前回から進み、Secure Keyboard Entryはautomatic／manualとも
+  `owned=true`で通過した。一方、同じ既存`developer-jit-native-content`の後段で、menu-open時にはenabledだったcontext Quick Lookが
+  dispatch時に`unavailable`になった。ログ上、pressure Quick Look、選択保持、Secure Input、Process Inspectorまでは成立しており、
+  crashやNote側の失敗ではない。
+- 調査で、context menuのenabled確認後、routeは`onWillRoute`でpaneをfocus/reconcileしてからdispatcherのavailabilityを再評価する。
+  availabilityは保存されたcellまたはcursor cellを現在viewportのwordで再検証する。既存fixtureは`NATIVECONTENTLOOKUP`が画面へ出た
+  瞬間に進み、後続のshell promptが出終わることを待たずにcell座標を保存していた。行scrollがmenu-openとdispatch間に入ると
+  保存cellがstaleになり`unavailable`は正しいfail-closed結果になる。
+- 選択肢は、(1)stale cellでもactionを実行する、(2)menu dispatchでavailability再確認を外す、(3)fixtureをshell prompt完了まで
+  安定させること。(1)(2)はQuick Lookのstale-cell安全契約を弱めるため不採用。まず(3)として出力末尾に短いready markerを置き、
+  同じ行へ続く一意のpromptを観測してからcellを求める。実AppKit gateを再実行し、なお失敗すればmenu focus/reconcile前後の
+  content-free cell／viewport診断で原因をさらに絞る。
+- 最初の安定化試行は`ready marker + prompt`を同一行の連続文字列として待ったが、その連続文字列は観測されず
+  5秒でtimeoutした。改行やprompt redrawを許容しない条件だった。Secure Inputはautomatic／manualとも`owned=true`で
+  通過しており、失敗は待機条件の誤りである。
+  既存display受け入れと同じく、ready markerを観測した後、現在cursor行のprompt末尾とcursor位置が一致する
+  `idle prompt`条件へ修正した。再実行で検証する。
+- 2回目もidle判定で停止した。Ready markerがecho／scrollで失われた可能性と、既存promptのcursor column比較がzshの
+  prompt描画に合っていない可能性を、この時点のcontent-freeログだけでは区別できない。追加の時間待ちで隠す案は不採用。
+  対象shellの`PS1`をfixture内だけ一意の文字列に変える。コマンドechoにはその文字列が連続して現れないようquoteを分割し、
+  実行後の新しいpromptが描画された時だけ`_waitForAsciiMarker`が成立するようにした。これは既存productのQuick Look
+  safety checkを変えず、初期pane fixture内だけの同期である。
+- `make developer-jit-native-content`はこの変更でpassした。`RUNTIME_NATIVE_CONTENT_INTEGRATION_PASS`は
+  `process_inspector=true`、`exact_pty=true`、4 sessionのclean teardownを報告した。Quick Lookのmenu availability、
+  shared action dispatch、definition提示を含む既存`TERMINAL_NATIVE_CONTENT_TEST`を変更せず完走している。
+- 同じfixtureの`make release-aot-native-content`もpassした。Developer JITとRelease AOTの両方でQuick Lookから
+  4 session shutdownまで通過し、実OS Secure Inputのmanual ownershipは維持している。
+
+### 2026-09-22 — R1 automated qualification完了
+
+- `make phase7-appkit-acceptance ghostty-p0-p1-gap-inventory release-candidate-daily-use-matrix`で、変更したapplication／
+  runtime fixture／testに依存するversioned source hashを正規再生成した。生成物はsource hashとfresh R0 budget実測のみ変更した。
+- `CI=true DART_SUPPRESS_ANALYTICS=true dart format --output=none --set-exit-if-changed`（変更5 Dart file）、同じ環境での
+  focused `dart analyze`、`git diff --check`はpassした。単独`dart run`の一試行はsandbox外のclang module cacheに書けず、
+  test本体に到達しなかったが、後続の正式Make aggregate内ではroot全テスト、400 file formatter、全体analyzerがpassした。
+- Fresh `make contextual-memory-r1-automated-qualification`は終了コード0で完走した。Profile、rehearsal、R0の8-gate
+  aggregate、R1両runtimeが順にpassし、final markerは`TERMINAL_NOTE_R1_AUTOMATED_QUALIFICATION_PASS version=1`
+  `gates=4 base_gates=8 runtime_modes=2 slices=2 panes=64 surfaces=64 worker=1 idle_changes=0 owners=0`
+  `manual_claim=false stage_claim=false content_free=true`だった。JIT／AOTともS1/S2 enabled、S3 disabled、isolated store、
+  owner 0を確認した。R0側のarchitecture／privacy／sanitizer／fault／distribution／全runtime matrixもpassした。
+- Quick Lookの修正はtest fixtureのshell完了同期だけで、menu、dispatcher、stale-cell判定、OS Secure Inputの受け入れ条件を
+  変更していない。`dart_appkit`には変更を加えていない。Manual store matrixは未実施であり、stage promotionは主張しない。

@@ -103,6 +103,7 @@ import 'terminal_note_r0_hidden_qualification_test.dart'
     as terminal_note_r0_hidden_qualification_test;
 import 'terminal_note_r0_qualification_test.dart';
 import 'terminal_note_r1_internal_profile_test.dart';
+import 'terminal_note_r1_qualification_test.dart';
 import 'terminal_note_r1_rehearsal_test.dart';
 import 'terminal_note_s1_product_acceptance_test.dart'
     as terminal_note_s1_product_acceptance_test;
@@ -242,6 +243,7 @@ Future<void> main() async {
   runTerminalNoteR0QualificationTests();
   runTerminalNoteR1InternalProfileTests();
   await runTerminalNoteR1RehearsalTests();
+  runTerminalNoteR1QualificationTests();
   await terminal_note_s1_product_acceptance_test.main();
   await terminal_note_s2_product_acceptance_test.main();
   await runTerminalNoteCompositionTests();

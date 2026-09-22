@@ -163,6 +163,8 @@ S1/S2、次にS3だけを以下の順で実装する。S4は延期、S5/S6は不
   - [x] typed internal launch profileと実データstore preview境界を固定する
   - [x] data recovery/export、kill switch、rollback rehearsalとinternal runbookを完了する
   - [ ] R1両runtime、64-pane、manual aggregateとstage decisionを完了する
+    - [x] exact internal profileの両runtime end-to-endと64-pane named automated aggregateを完了する
+    - [ ] persistent store manual checklistとR1 stage decisionを完了する
 - [ ] CM-14 R2 public S1/S2 opt-inを完了する
 - [ ] CM-15 R3 S1/S2 default-on promotionを完了する
 - [ ] CM-16 shell integration version 3 lifecycle protocolを実装する

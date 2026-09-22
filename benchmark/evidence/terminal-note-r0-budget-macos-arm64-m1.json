@@ -11,10 +11,10 @@
     "build_mode": "release-aot"
   },
   "input_integrity": {
-    "dart_budget_sha256": "f97ab8f5a426bc8d69a54e94c96331ab6fd093fae60a030a336a6246d81a5de3",
-    "native_budget_sha256": "922e0f973836c99a3584d493db0056903624291d581ed2dcc5033303c893c485",
-    "disabled_input_sha256": "5c47803936af84e1d98aa0fa70fa750ad961ae2bad24a5fd3c64b157bc5fad16",
-    "store_acceptance_sha256": "bc2a1e99d8b92458fba84de89fdfa8fdeac4e19eeea7c63ad33127f7e403e2e5"
+    "dart_budget_sha256": "324f59a1d6d95f1b7f74b884e225dfb54ce7604274f801b2db4912d518cda130",
+    "native_budget_sha256": "a3133d4d076e6a33a12307e3d32cae5e9d1751ae8f51cb6593dda26e00c5ca7b",
+    "disabled_input_sha256": "0cecf35a33f5cc163ca21e8c8128c78ccb226334dafcf12c0eb50ce6b60b0ebb",
+    "store_acceptance_sha256": "5998112e4d9937d36bd0ccf5df0135c3458f356b2c4583262e13c95fc84ed117"
   },
   "source_integrity": {
     "dart_budget_benchmark_sha256": "69f5648258d830d61fc2c7f2b1dcbe84f470d05296ae3cc773a732dc129f288e",
@@ -39,7 +39,7 @@
       "panes": 64,
       "surfaces": 64,
       "worker": 1,
-      "rss_delta_bytes": 3260416,
+      "rss_delta_bytes": 3211264,
       "rss_budget_bytes": 16777216,
       "idle_window_ms": 250,
       "projection_delta": 0,
@@ -52,7 +52,7 @@
     "model_transition": {
       "samples": 64,
       "p95_us": 4,
-      "max_us": 14,
+      "max_us": 11,
       "p95_budget_us": 1000,
       "max_budget_us": 4000,
       "store_commit_delta": 0,
@@ -65,7 +65,7 @@
       "notes": 128,
       "cards": 64,
       "body_bytes": 262144,
-      "p95_us": 4619,
+      "p95_us": 4879,
       "budget_us": 100000,
       "store_commit_delta": 0,
       "owners": 0
@@ -76,16 +76,16 @@
       "cards": 64,
       "materialized": 32,
       "body_bytes": 262144,
-      "apply_p95_us": 5398,
+      "apply_p95_us": 5447,
       "apply_budget_us": 8000,
-      "first_visible_p95_us": 14750,
+      "first_visible_p95_us": 15149,
       "first_visible_budget_us": 100000,
       "stalls": 0,
       "stall_threshold_us": 16670,
       "owners": 0
     },
     "combined_first_visible": {
-      "p95_us": 19369,
+      "p95_us": 20028,
       "budget_us": 100000
     },
     "hard_cap": {
@@ -95,9 +95,9 @@
       "deliveries": 2048,
       "body_bytes": 8388608,
       "file_bytes": 9698603,
-      "steady_delta_bytes": 44875776,
+      "steady_delta_bytes": 43778048,
       "steady_budget_bytes": 67108864,
-      "peak_delta_bytes": 90193920,
+      "peak_delta_bytes": 93192192,
       "peak_budget_bytes": 100663296,
       "owners": 0
     },
@@ -105,15 +105,15 @@
       "rounds": 21,
       "events_per_route": 1050000,
       "factory_calls": 0,
-      "baseline_p95_ns": 265,
-      "disabled_p95_ns": 281,
-      "median_ratio_ppm": 999068,
+      "baseline_p95_ns": 270,
+      "disabled_p95_ns": 277,
+      "median_ratio_ppm": 1014429,
       "maximum_ratio_ppm": 1050000
     },
     "durable_store": {
       "runs": 20,
-      "commit_p95_us": 42080,
-      "primitive_p95_us": 18135,
+      "commit_p95_us": 44317,
+      "primitive_p95_us": 15151,
       "commit_budget_us": 250000,
       "primitive_budget_us": 1500000
     }
